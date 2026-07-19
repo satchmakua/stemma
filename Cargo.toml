@@ -13,7 +13,8 @@ members = [
 [workspace.package]
 version = "0.1.0"
 edition = "2024"
-rust-version = "1.85"
+# 1.88 for let-chains, which `stem_io/src/project.rs` already uses.
+rust-version = "1.88"
 license = "MIT"
 authors = ["Satchel Hamilton"]
 repository = "https://github.com/satchelhamilton/stemma"
@@ -33,6 +34,23 @@ ron = "0.12.2"
 thiserror = "2.0.19"
 anyhow = "1.0.104"
 clap = { version = "4.6.2", features = ["derive"] }
+
+# --- Randomness: pinned exactly, on purpose (see docs/adr/0005). ---
+#
+# `=` rather than caret: rand 0.9.0's changelog reads "Optimize distribution
+# `Uniform` … (breaks value stability)", and `WeightedIndex` samples `Uniform`
+# internally. A caret range would have shipped that silently, rewriting every
+# generated language on an unrelated `cargo update`.
+#
+# `default-features = false` drops `std_rng` and `thread_rng`, so `StdRng` and
+# `ThreadRng` are not in the API at all — nobody can reach for the documented
+# non-portable generator even by accident. `chacha` re-exports `ChaCha20Rng`,
+# whose keystream is a published algorithm with public test vectors and cannot
+# drift. This is the real enforcement of DESIGN.md §9.4, not a lint.
+rand = { version = "=0.10.2", default-features = false, features = ["std", "chacha"] }
+# SHA-256 is frozen by FIPS 180-4, which moves seed expansion entirely outside
+# the dependency-stability question. See `stem_core::rng`.
+sha2 = "=0.11.0"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

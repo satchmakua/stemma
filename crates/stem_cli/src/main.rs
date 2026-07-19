@@ -10,8 +10,16 @@ use std::process::ExitCode;
 
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
-use stem_core::{Severity, Validate, ValidationReport};
+use stem_core::{RngDomain, Severity, Validate, ValidationReport, rng_for};
 use stem_genome::LanguageGenome;
+use stem_phonology::RootGenerator;
+
+/// The most roots one invocation will generate.
+///
+/// Ten million is far past any real lexicon and comfortably inside what a `Vec`
+/// can reserve. The bound exists so that a fat-fingered `--count` is a message
+/// rather than a capacity-overflow panic or an OOM abort.
+const MAX_ROOTS: u64 = 10_000_000;
 
 /// Grow, evolve, fork, and trace fictional languages.
 #[derive(Debug, Parser)]
@@ -42,6 +50,36 @@ enum Command {
         /// The file to write; its extension selects the output format.
         output: PathBuf,
     },
+
+    /// Generate root words from the language's inventory and phonotactics.
+    GenerateRoots {
+        /// Path to a language file (`.ron` or `.json`).
+        path: PathBuf,
+        /// How many roots to generate.
+        ///
+        /// Bounded: the result is collected into a `Vec`, which pre-reserves from
+        /// the iterator's size hint, so an unbounded value aborts the process on
+        /// allocation before drawing anything. A named error beats a capacity
+        /// overflow panic.
+        #[arg(long, default_value_t = 100, value_parser = clap::value_parser!(u64).range(1..=MAX_ROOTS))]
+        count: u64,
+        /// Override the language's own seed. Omitted, the file's seed is used, so
+        /// a language always reproduces itself.
+        #[arg(long)]
+        seed: Option<u64>,
+        /// Print IPA forms instead of the romanisation.
+        #[arg(long)]
+        ipa: bool,
+    },
+
+    /// Show each phoneme's resolved feature matrix.
+    Features {
+        /// Path to a language file (`.ron` or `.json`).
+        path: PathBuf,
+        /// Show only the segment with this IPA form.
+        #[arg(long)]
+        ipa: Option<String>,
+    },
 }
 
 fn main() -> ExitCode {
@@ -63,6 +101,13 @@ fn run() -> Result<ExitCode> {
         Command::Validate { path } => validate(&path),
         Command::Info { path } => info(&path),
         Command::Convert { input, output } => convert(&input, &output),
+        Command::GenerateRoots {
+            path,
+            count,
+            seed,
+            ipa,
+        } => generate_roots(&path, count, seed, ipa),
+        Command::Features { path, ipa } => features(&path, ipa.as_deref()),
     }
 }
 
@@ -104,6 +149,9 @@ fn info(path: &std::path::Path) -> Result<ExitCode> {
     println!("seed          {}", genome.seed);
     println!();
 
+    println!("phonotactics  {}", genome.phonotactics.summary());
+    println!();
+
     println!("Phoneme inventory ({} total)", genome.phonemes.len());
     print_segments("  consonants  ", genome.phonemes.consonants());
     print_segments("  vowels      ", genome.phonemes.vowels());
@@ -124,6 +172,109 @@ fn convert(input: &std::path::Path, output: &std::path::Path) -> Result<ExitCode
     stem_io::save(output, &genome)
         .with_context(|| format!("writing language to `{}`", output.display()))?;
     println!("{} -> {}", input.display(), output.display());
+    Ok(ExitCode::SUCCESS)
+}
+
+fn generate_roots(
+    path: &std::path::Path,
+    count: u64,
+    seed_override: Option<u64>,
+    as_ipa: bool,
+) -> Result<ExitCode> {
+    let genome = load_genome(path)?;
+
+    // Seed precedence, pinned: `--seed` wins when given, otherwise the genome's own
+    // seed. A file with no flag therefore always reproduces itself, which is what
+    // `LanguageGenome::seed` promises — reproducible from the file alone.
+    let (seed, provenance) = match seed_override {
+        Some(seed) => (seed, "from --seed"),
+        None => (genome.seed, "from the genome"),
+    };
+
+    let generator = RootGenerator::new(&genome.phonemes, &genome.phonotactics)
+        .with_context(|| format!("generating roots for `{}`", genome.name))?;
+
+    let mut rng = rng_for(seed, RngDomain::Roots);
+    // `MAX_ROOTS` keeps this inside `usize` on every target this builds for.
+    let roots = generator.generate(&mut rng, count as usize);
+
+    // Everything explanatory goes to stderr so that stdout is exactly the roots,
+    // one per line. That is what makes `diff <(run) <(run)` an honest determinism
+    // check and the golden digest unambiguous.
+    eprintln!("{} — seed {seed} ({provenance})", genome.name);
+    eprintln!("phonotactics: {}", genome.phonotactics.summary());
+
+    let mut lines = Vec::with_capacity(roots.len());
+    for root in &roots {
+        let form = if as_ipa {
+            root.ipa(&genome.phonemes)
+        } else {
+            root.written(&genome.phonemes)
+        }?;
+        lines.push(form);
+    }
+
+    let unique: std::collections::BTreeSet<&String> = lines.iter().collect();
+    if unique.len() < lines.len() {
+        eprintln!(
+            "note: {} of {} roots are duplicates (homophony is real; --unique lands in M2)",
+            lines.len() - unique.len(),
+            lines.len()
+        );
+    }
+
+    for line in lines {
+        println!("{line}");
+    }
+
+    Ok(ExitCode::SUCCESS)
+}
+
+fn features(path: &std::path::Path, only_ipa: Option<&str>) -> Result<ExitCode> {
+    let genome = load_genome(path)?;
+
+    let mut shown = 0usize;
+    for phoneme in genome.phonemes.iter() {
+        if let Some(wanted) = only_ipa
+            && phoneme.ipa != wanted
+        {
+            continue;
+        }
+        shown += 1;
+
+        // Romanisation is a column, not a follow-on line, so every segment is one
+        // self-contained record — greppable, and diffable against another language.
+        let romanization = match &phoneme.romanization {
+            Some(r) => format!("\"{r}\""),
+            None => String::new(),
+        };
+        let rendered = if phoneme.features.is_empty() {
+            "(no features declared)".to_owned()
+        } else {
+            phoneme.features.render()
+        };
+        println!(
+            "/{}/{:pad$}  {:<10} {:<5} {}  w{:<4} {}",
+            phoneme.ipa,
+            "",
+            phoneme.id.as_str(),
+            romanization,
+            phoneme.kind.template_symbol(),
+            phoneme.frequency_weight,
+            rendered,
+            // Pad by character count, not byte length: IPA symbols are multi-byte
+            // and `{:<n}` counts bytes, so the columns would drift without this.
+            pad = 4usize.saturating_sub(phoneme.ipa.chars().count()),
+        );
+    }
+
+    if shown == 0 {
+        match only_ipa {
+            Some(wanted) => anyhow::bail!("no phoneme with IPA form `{wanted}` in this language"),
+            None => println!("(the inventory is empty)"),
+        }
+    }
+
     Ok(ExitCode::SUCCESS)
 }
 

@@ -1,0 +1,3 @@
+# Pin the formatting style edition so `cargo fmt --check` in CI cannot start
+# disagreeing with a local `cargo fmt` after a toolchain upgrade.
+style_edition = "2024"

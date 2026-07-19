@@ -6,9 +6,34 @@
 // A plain starting point makes the *changes* legible — the interesting part of
 // this program is what happens to a language, not how exotic it began.
 //
-// Frequency weights are relative, not probabilities. They are shaped so that
-// /a/ and the coronal stops carry most of the lexicon and /j/ is marginal, which
-// is what keeps generated roots from looking like uniform noise.
+// FEATURES (§7.1). Every segment states its features literally. There is no class
+// library and nothing is inherited, so what you read here is exactly what the
+// engine sees. Twelve features are required of every segment (syllabic,
+// consonantal, sonorant, approximant, continuant, nasal, lateral, trill, voice,
+// labial, coronal, dorsal); height, backness and rounding are additionally
+// required of every [+dorsal] segment, and rounding of every [+labial] one.
+// Anything else omitted means "not specified", NOT "minus" — a plain alveolar
+// like /t/ has no rounding value because the question does not arise for it.
+// Features are listed in the engine's canonical order, so `stemma convert`
+// round-trips this file without reordering anything. Run
+// `stemma features fixtures/proto_asterian.ron` to read the inventory as a table.
+//
+// `kind:` is a PHONOTACTIC SLOT, not a phonetic claim: it says which template slot
+// a segment may fill. /w/ and /j/ fill C slots and are [-consonantal]. Both of
+// those statements are true and they are not in conflict.
+//
+// Three calls worth knowing about. /a/ is [+low, +back]: IPA <a> is strictly open
+// front, but the low vowel of a five-vowel system is central, and if it were
+// [-back] then "front vowels palatalize a preceding velar" (§7.1's own example
+// rule) would wrongly fire before it. /l/ and /r/ are [+continuant], which is the
+// airflow-based definition rather than the SPE one. Rounded vowels are [+labial],
+// because rounding is a labial gesture — that is what makes rounding harmony and
+// labialization one class rather than two.
+//
+// WEIGHTS are relative integers, not probabilities or floats (§9.4 — integer
+// prefix sums are exact and cannot be perturbed by summation order). They are
+// shaped so /a/ and the coronal stops carry most of the lexicon and /j/ is
+// marginal, which is what keeps generated roots from looking like uniform noise.
 (
     id: "proto_asterian",
     name: "Proto-Asterian",
@@ -17,32 +42,78 @@
 
     phonemes: [
         // --- Stops ---
-        (id: "ph_p", ipa: "p", kind: consonant, frequency_weight: 3.0),
-        (id: "ph_t", ipa: "t", kind: consonant, frequency_weight: 5.0),
-        (id: "ph_k", ipa: "k", kind: consonant, frequency_weight: 4.5),
+        (id: "ph_p", ipa: "p", kind: consonant, frequency_weight: 30,
+         features: ["-syllabic", "+consonantal", "-sonorant", "-approximant", "-continuant", "-nasal", "-lateral", "-trill", "-voice", "+labial", "-coronal", "-dorsal", "-round"]),
+        (id: "ph_t", ipa: "t", kind: consonant, frequency_weight: 50,
+         features: ["-syllabic", "+consonantal", "-sonorant", "-approximant", "-continuant", "-nasal", "-lateral", "-trill", "-voice", "-labial", "+coronal", "-dorsal"]),
+        (id: "ph_k", ipa: "k", kind: consonant, frequency_weight: 45,
+         features: ["-syllabic", "+consonantal", "-sonorant", "-approximant", "-continuant", "-nasal", "-lateral", "-trill", "-voice", "-labial", "-coronal", "+dorsal", "+high", "-low", "+back", "-round"]),
 
-        // --- Nasals ---
-        (id: "ph_m", ipa: "m", kind: consonant, frequency_weight: 3.5),
-        (id: "ph_n", ipa: "n", kind: consonant, frequency_weight: 4.0),
+        // --- Nasals: [-continuant], because the oral cavity is closed and the air
+        //     escapes nasally. This is the standard treatment and it is what lets
+        //     "stops" be [-sonorant, -continuant] without also catching /m n/.
+        (id: "ph_m", ipa: "m", kind: consonant, frequency_weight: 35,
+         features: ["-syllabic", "+consonantal", "+sonorant", "-approximant", "-continuant", "+nasal", "-lateral", "-trill", "+voice", "+labial", "-coronal", "-dorsal", "-round"]),
+        (id: "ph_n", ipa: "n", kind: consonant, frequency_weight: 40,
+         features: ["-syllabic", "+consonantal", "+sonorant", "-approximant", "-continuant", "+nasal", "-lateral", "-trill", "+voice", "-labial", "+coronal", "-dorsal"]),
 
         // --- Fricative ---
-        (id: "ph_s", ipa: "s", kind: consonant, frequency_weight: 3.5),
+        (id: "ph_s", ipa: "s", kind: consonant, frequency_weight: 35,
+         features: ["-syllabic", "+consonantal", "-sonorant", "-approximant", "+continuant", "-nasal", "-lateral", "-trill", "-voice", "-labial", "+coronal", "-dorsal"]),
 
-        // --- Liquids ---
-        (id: "ph_l", ipa: "l", kind: consonant, frequency_weight: 3.0),
-        (id: "ph_r", ipa: "r", kind: consonant, frequency_weight: 2.5),
+        // --- Liquids: /l/ is a lateral approximant, /r/ an alveolar trill. Note
+        //     /r/ says "-approximant, +trill" outright rather than leaving
+        //     approximant unvalued — absence must never be used to encode a
+        //     positive property, or a rule targeting [-approximant] would miss it.
+        (id: "ph_l", ipa: "l", kind: consonant, frequency_weight: 30,
+         features: ["-syllabic", "+consonantal", "+sonorant", "+approximant", "+continuant", "-nasal", "+lateral", "-trill", "+voice", "-labial", "+coronal", "-dorsal"]),
+        (id: "ph_r", ipa: "r", kind: consonant, frequency_weight: 25,
+         features: ["-syllabic", "+consonantal", "+sonorant", "-approximant", "+continuant", "-nasal", "-lateral", "+trill", "+voice", "-labial", "+coronal", "-dorsal"]),
 
-        // --- Glides ---
-        (id: "ph_w", ipa: "w", kind: consonant, frequency_weight: 2.0),
-        (id: "ph_j", ipa: "j", romanization: "y", kind: consonant, frequency_weight: 1.0),
+        // --- Glides: [-consonantal], filling C slots. See the header note.
+        //     /w/ is the non-syllabic counterpart of /u/ and /j/ of /i/ — each pair
+        //     differs in exactly one feature, [syllabic], which is what makes glide
+        //     formation and vocalization single-feature rules in M3.
+        (id: "ph_w", ipa: "w", kind: consonant, frequency_weight: 20,
+         features: ["-syllabic", "-consonantal", "+sonorant", "+approximant", "+continuant", "-nasal", "-lateral", "-trill", "+voice", "+labial", "-coronal", "+dorsal", "+high", "-low", "+back", "+round"]),
+        (id: "ph_j", ipa: "j", romanization: "y", kind: consonant, frequency_weight: 10,
+         features: ["-syllabic", "-consonantal", "+sonorant", "+approximant", "+continuant", "-nasal", "-lateral", "-trill", "+voice", "-labial", "-coronal", "+dorsal", "+high", "-low", "-back", "-round"]),
 
-        // --- Vowels ---
-        (id: "ph_a", ipa: "a", kind: vowel, frequency_weight: 6.0),
-        (id: "ph_e", ipa: "e", kind: vowel, frequency_weight: 3.5),
-        (id: "ph_i", ipa: "i", kind: vowel, frequency_weight: 4.0),
-        (id: "ph_o", ipa: "o", kind: vowel, frequency_weight: 3.0),
-        (id: "ph_u", ipa: "u", kind: vowel, frequency_weight: 3.5),
+        // --- Vowels: three heights over {high, low}. /i u/ are +high, /e o/ are
+        //     -high -low, /a/ is +low. All vowels are [+dorsal] — they are
+        //     articulated with the tongue body, and without that [+dorsal] is not a
+        //     class any rule can use.
+        (id: "ph_a", ipa: "a", kind: vowel, frequency_weight: 60,
+         features: ["+syllabic", "-consonantal", "+sonorant", "+approximant", "+continuant", "-nasal", "-lateral", "-trill", "+voice", "-labial", "-coronal", "+dorsal", "-high", "+low", "+back", "-round"]),
+        (id: "ph_e", ipa: "e", kind: vowel, frequency_weight: 35,
+         features: ["+syllabic", "-consonantal", "+sonorant", "+approximant", "+continuant", "-nasal", "-lateral", "-trill", "+voice", "-labial", "-coronal", "+dorsal", "-high", "-low", "-back", "-round"]),
+        (id: "ph_i", ipa: "i", kind: vowel, frequency_weight: 40,
+         features: ["+syllabic", "-consonantal", "+sonorant", "+approximant", "+continuant", "-nasal", "-lateral", "-trill", "+voice", "-labial", "-coronal", "+dorsal", "+high", "-low", "-back", "-round"]),
+        (id: "ph_o", ipa: "o", kind: vowel, frequency_weight: 30,
+         features: ["+syllabic", "-consonantal", "+sonorant", "+approximant", "+continuant", "-nasal", "-lateral", "-trill", "+voice", "+labial", "-coronal", "+dorsal", "-high", "-low", "+back", "+round"]),
+        (id: "ph_u", ipa: "u", kind: vowel, frequency_weight: 35,
+         features: ["+syllabic", "-consonantal", "+sonorant", "+approximant", "+continuant", "-nasal", "-lateral", "-trill", "+voice", "+labial", "-coronal", "+dorsal", "+high", "-low", "+back", "+round"]),
     ],
+
+    // PHONOTACTICS. This is the (C)V(C) system ROADMAP M1 names, written as the
+    // four concrete shapes it stands for with their probabilities made explicit
+    // rather than hidden behind an unspecified optional-slot rate. Templates hold
+    // `C` and `V` only — parentheses are rejected with a message pointing here.
+    // Weights are relative. Roots are one to three syllables, most often two,
+    // which is what makes *takala, *sawel, *akwa, *rekan look like one family.
+    phonotactics: (
+        templates: [
+            (pattern: "CV",  weight: 45),
+            (pattern: "CVC", weight: 35),
+            (pattern: "V",   weight: 12),
+            (pattern: "VC",  weight: 8),
+        ],
+        syllables_per_root: [
+            (count: 1, weight: 25),
+            (count: 2, weight: 55),
+            (count: 3, weight: 20),
+        ],
+    ),
 
     notes: [
         "Reference proto-language for the Asterian family (Coastal, Highland, Riverine).",
