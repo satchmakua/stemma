@@ -1,0 +1,16 @@
+[package]
+name = "stem_phonology"
+description = "Phoneme inventories and phonological structure for Stemma."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[dependencies]
+stem_core.workspace = true
+serde.workspace = true
+
+[lints]
+workspace = true

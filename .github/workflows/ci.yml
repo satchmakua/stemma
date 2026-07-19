@@ -1,0 +1,45 @@
+# CI — format, lint, and test on every push / PR.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+  # Warnings are errors in CI but not locally, so a work-in-progress build stays
+  # comfortable while `main` stays clean.
+  RUSTFLAGS: -D warnings
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Format
+        run: cargo fmt --all --check
+
+      - name: Lint
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: Test
+        run: cargo test --workspace
+
+      # Determinism is a hard constraint of the design (§9.4), so it is checked
+      # rather than assumed: the same input must produce byte-identical output.
+      # Extend this as generating commands land in M1 and after.
+      - name: Determinism check
+        run: |
+          cargo run -q -p stem_cli -- convert fixtures/proto_asterian.ron /tmp/a.json
+          cargo run -q -p stem_cli -- convert fixtures/proto_asterian.ron /tmp/b.json
+          diff /tmp/a.json /tmp/b.json

@@ -1,0 +1,47 @@
+[workspace]
+resolver = "3"
+members = [
+    "crates/stem_core",
+    "crates/stem_phonology",
+    "crates/stem_lexicon",
+    "crates/stem_soundchange",
+    "crates/stem_genome",
+    "crates/stem_io",
+    "crates/stem_cli",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+license = "MIT"
+authors = ["Satchel Hamilton"]
+repository = "https://github.com/satchelhamilton/stemma"
+
+# Pinned once here; every crate inherits with `dep.workspace = true`.
+[workspace.dependencies]
+stem_core = { path = "crates/stem_core", version = "0.1.0" }
+stem_phonology = { path = "crates/stem_phonology", version = "0.1.0" }
+stem_lexicon = { path = "crates/stem_lexicon", version = "0.1.0" }
+stem_soundchange = { path = "crates/stem_soundchange", version = "0.1.0" }
+stem_genome = { path = "crates/stem_genome", version = "0.1.0" }
+stem_io = { path = "crates/stem_io", version = "0.1.0" }
+
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.150"
+ron = "0.12.2"
+thiserror = "2.0.19"
+anyhow = "1.0.104"
+clap = { version = "4.6.2", features = ["derive"] }
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+missing_debug_implementations = "warn"
+
+[workspace.lints.clippy]
+# The engine is full of linguistics domain logic; keep it honest but not noisy.
+todo = "warn"
+dbg_macro = "warn"
+
+[profile.release]
+lto = "thin"

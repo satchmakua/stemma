@@ -1,0 +1,21 @@
+// A deliberately broken language, kept as a fixture so the validation path is
+// exercised as thoroughly as the happy path.
+//
+// It packs three distinct faults into one file:
+//   1. no vowel, so no syllable can be formed  -> error phonology.no_nucleus
+//   2. /t/ declared twice under different ids  -> error phonology.duplicate_ipa
+//   3. a negative frequency weight             -> error phonology.bad_weight
+//
+// `stemma validate` should report all three in a single pass. A validator that
+// stops at the first fault makes the user fix a file one error at a time.
+(
+    id: "broken_example",
+    name: "Broken Example",
+    seed: 1,
+
+    phonemes: [
+        (id: "ph_t", ipa: "t", kind: consonant, frequency_weight: 1.0),
+        (id: "ph_t_again", ipa: "t", kind: consonant, frequency_weight: 1.0),
+        (id: "ph_k", ipa: "k", kind: consonant, frequency_weight: -2.0),
+    ],
+)
