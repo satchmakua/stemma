@@ -63,8 +63,18 @@ const SEED_DOMAIN_VERSION: &[u8] = b"stemma/v1\0";
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[non_exhaustive]
 pub enum RngDomain {
-    /// Root generation (M1).
+    /// Root generation (M1) — `stemma generate-roots`.
     Roots,
+    /// Proto-lexicon seeding (M2) — `stemma new-lexicon`.
+    ///
+    /// Deliberately a *separate* stream from [`Self::Roots`], so the Nth word of a
+    /// lexicon is not the Nth root of `generate-roots` at the same seed. Sharing
+    /// one would freeze the lexicon builder's draw budget to the root generator's
+    /// forever: the first time lexicon seeding wants one extra draw per entry,
+    /// either every stored lexicon shifts or the change is refused. `generate-roots`
+    /// is a scratchpad run at varying `--count` while auditioning phonotactics;
+    /// `new-lexicon` produces an artifact. They share a subroutine, not a contract.
+    Lexicon,
 }
 
 impl RngDomain {
@@ -75,6 +85,7 @@ impl RngDomain {
     pub fn tag(self) -> &'static str {
         match self {
             Self::Roots => "roots",
+            Self::Lexicon => "lexicon",
         }
     }
 }
@@ -182,5 +193,18 @@ mod tests {
     #[test]
     fn every_rng_domain_tag_is_frozen() {
         assert_eq!(RngDomain::Roots.tag(), "roots");
+        assert_eq!(RngDomain::Lexicon.tag(), "lexicon");
+    }
+
+    /// The whole reason domains exist: adding one must not perturb another. The
+    /// `Roots` digests above are untouched by `Lexicon`'s arrival, and these two
+    /// streams share no prefix.
+    #[test]
+    fn different_domains_from_one_seed_do_not_share_a_stream() {
+        let draw = |domain| -> Vec<u64> {
+            let mut rng = rng_for(42, domain);
+            (0..16).map(|_| rng.random::<u64>()).collect()
+        };
+        assert_ne!(draw(RngDomain::Roots), draw(RngDomain::Lexicon));
     }
 }

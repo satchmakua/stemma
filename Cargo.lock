@@ -353,8 +353,10 @@ dependencies = [
  "clap",
  "sha2",
  "stem_core",
+ "stem_export",
  "stem_genome",
  "stem_io",
+ "stem_lexicon",
  "stem_phonology",
 ]
 
@@ -370,11 +372,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "stem_export"
+version = "0.1.0"
+dependencies = [
+ "stem_core",
+ "stem_genome",
+ "stem_io",
+ "stem_lexicon",
+ "stem_phonology",
+]
+
+[[package]]
 name = "stem_genome"
 version = "0.1.0"
 dependencies = [
  "serde",
  "stem_core",
+ "stem_lexicon",
  "stem_phonology",
 ]
 
@@ -394,7 +408,9 @@ dependencies = [
 name = "stem_lexicon"
 version = "0.1.0"
 dependencies = [
+ "ron",
  "serde",
+ "serde_json",
  "stem_core",
  "stem_phonology",
 ]

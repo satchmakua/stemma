@@ -1,6 +1,6 @@
 [package]
 name = "stem_lexicon"
-description = "Words, morphemes, cognate sets, and etymology for Stemma. (Populated in M2.)"
+description = "Words, cognate sets, and the built-in concept list for Stemma."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -12,6 +12,10 @@ repository.workspace = true
 stem_core.workspace = true
 stem_phonology.workspace = true
 serde.workspace = true
+
+[dev-dependencies]
+ron.workspace = true
+serde_json.workspace = true
 
 [lints]
 workspace = true

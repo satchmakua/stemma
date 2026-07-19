@@ -42,13 +42,15 @@ outside this phase matters until it works end to end._
   declared template; run twice → byte-identical; different seed → different output;
   `--count 20` is a byte-prefix of `--count 100`.
 
-- [ ] **M2 — Lexicon.** `WordEntry`, `Lexicon`, glosses, part of speech, and
-  cognate-set IDs (`DESIGN.md` §8.3). Seed a proto-lexicon from a built-in
-  Swadesh-style concept list so generated languages have comparable meanings.
-  Export to Markdown and CSV.
-  **Test:** `stemma new-lexicon` produces a lexicon where every entry has a stable
-  `WordId` and `CognateSetId`; `stemma export-md` writes a readable dictionary;
-  reloading the saved project yields an identical lexicon.
+- [x] **M2 — Lexicon.** `WordEntry`, `Lexicon`, glosses, part of speech, and
+  cognate-set IDs (`DESIGN.md` §8.3), plus a `concept` key the design's list omits
+  — the join meaning §10.3's cognate table needs. A built-in 103-concept list
+  (Swadesh 1955 + three the Phase-1 tests name). Markdown and CSV export from a new
+  `stem_export` crate (`docs/adr/0006`).
+  **Test:** `cargo run -p stem_cli -- new-lexicon fixtures/proto_asterian.ron --out
+  out/proto.ron` → 103 entries, each with a stable `WordId` and `CognateSetId`;
+  reloading yields an identical lexicon; `export-md` writes a readable dictionary
+  and `export-csv` a CLDF-shaped table; both are byte-identical across runs.
 
 - [ ] **M3 — Sound-change engine.** The heart of the program (`DESIGN.md` §7.2,
   §8.4, §11). Rules as Rust structs — **no DSL parser yet** (§20.4: start with
