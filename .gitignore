@@ -1,0 +1,41 @@
+# --- Base ignores (stack-agnostic) ---
+
+# Secrets / local env — never commit real ones
+.env
+.env.*
+!.env.example
+*.local
+
+# AI assistant build instructions — kept local, never committed
+CLAUDE.md
+CLAUDE.local.md
+
+# Editor / OS cruft
+.vscode/*
+!.vscode/extensions.json
+!.vscode/launch.json
+.idea/
+.DS_Store
+Thumbs.db
+*.log
+
+# Generic build / cache output
+dist/
+build/
+out/
+coverage/
+.cache/
+tmp/
+*.tmp
+
+# --- Rust ---
+/target/
+**/*.rs.bk
+*.pdb
+
+# Cargo.lock IS committed: this workspace ships a binary (`stemma`), and a
+# committed lockfile is what makes a build reproducible — which matters more here
+# than usual, since determinism is a hard constraint of the design (§9.4).
+
+# Generated exports and demo output
+/output/

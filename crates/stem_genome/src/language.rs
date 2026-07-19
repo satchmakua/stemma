@@ -1,0 +1,211 @@
+//! The genome itself.
+
+use serde::{Deserialize, Serialize};
+use stem_core::{LanguageId, Validate, ValidationReport};
+use stem_phonology::PhonemeInventory;
+
+/// Everything that defines one language at one point in its history.
+///
+/// At M0 a genome carries identity, lineage position, its RNG seed, and a
+/// phoneme inventory. The remaining components of `DESIGN.md` §8.1 attach as
+/// their milestones land: phonotactics and prosody (M1), lexicon (M2), rule
+/// history (M3), morphology (M7), semantics (M8), writing systems (M9).
+///
+/// New fields must be `#[serde(default)]` so that fixtures and saved projects
+/// written by an earlier milestone keep loading. A project file is a user's work;
+/// a schema change must not strand it.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct LanguageGenome {
+    /// Stable identity within the lineage graph.
+    pub id: LanguageId,
+
+    /// Display name, e.g. `"Proto-Asterian"`.
+    pub name: String,
+
+    /// The language this one descends from, or `None` for a proto-language.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parent: Option<LanguageId>,
+
+    /// Simulated years elapsed since the root of the lineage.
+    ///
+    /// This is narrative time, not wall-clock time — it orders the sound-change
+    /// timeline (§10.4) and gives plausibility checks something to reason about
+    /// ("this much irregularity after only 100 years is a lot").
+    #[serde(default)]
+    pub lineage_depth_years: i32,
+
+    /// The RNG seed for every stochastic step taken from this genome.
+    ///
+    /// Determinism is a hard requirement (`DESIGN.md` §9.4): re-running a pipeline
+    /// with the same seed must reproduce the same language, byte for byte.
+    /// The seed is stored *with* the language so a result is always reproducible
+    /// from the file alone, not from whatever the CLI happened to be invoked with.
+    #[serde(default)]
+    pub seed: u64,
+
+    /// The contrastive sounds of the language.
+    #[serde(default)]
+    pub phonemes: PhonemeInventory,
+
+    /// Free-form authorial notes. Not interpreted by the engine.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub notes: Vec<String>,
+}
+
+impl LanguageGenome {
+    /// Builds a proto-language: no parent, zero lineage depth.
+    pub fn proto(id: impl Into<LanguageId>, name: impl Into<String>) -> Self {
+        Self {
+            id: id.into(),
+            name: name.into(),
+            parent: None,
+            lineage_depth_years: 0,
+            seed: 0,
+            phonemes: PhonemeInventory::new(),
+            notes: Vec::new(),
+        }
+    }
+
+    /// Sets the RNG seed.
+    #[must_use]
+    pub fn with_seed(mut self, seed: u64) -> Self {
+        self.seed = seed;
+        self
+    }
+
+    /// Sets the phoneme inventory.
+    #[must_use]
+    pub fn with_phonemes(mut self, phonemes: PhonemeInventory) -> Self {
+        self.phonemes = phonemes;
+        self
+    }
+
+    /// True when this language has no ancestor in the project.
+    pub fn is_proto(&self) -> bool {
+        self.parent.is_none()
+    }
+
+    /// A one-line summary for CLI output.
+    pub fn summary(&self) -> String {
+        let lineage = match &self.parent {
+            Some(parent) => format!("< {parent}, +{}y", self.lineage_depth_years),
+            None => "proto".to_owned(),
+        };
+        format!(
+            "{} ({}) — {} phonemes ({}C/{}V), {lineage}, seed {}",
+            self.name,
+            self.id,
+            self.phonemes.len(),
+            self.phonemes.consonants().count(),
+            self.phonemes.vowels().count(),
+            self.seed,
+        )
+    }
+}
+
+impl Validate for LanguageGenome {
+    fn validate(&self) -> ValidationReport {
+        let mut report = ValidationReport::new();
+
+        if self.id.is_empty() {
+            report.error("empty_id", "the language has an empty id");
+        }
+        if self.name.trim().is_empty() {
+            report.error("empty_name", "the language has an empty name");
+        }
+
+        // A language descending from itself would make the lineage graph cyclic
+        // and every ancestor walk non-terminating.
+        if self.parent.as_ref() == Some(&self.id) {
+            report.error("self_parent", "the language is its own parent");
+        }
+
+        if self.lineage_depth_years < 0 {
+            report.error(
+                "negative_lineage_depth",
+                format!(
+                    "lineage depth is {} years; time runs forwards",
+                    self.lineage_depth_years
+                ),
+            );
+        }
+
+        // A daughter at depth 0 has had no time to diverge from its parent.
+        if self.parent.is_some() && self.lineage_depth_years == 0 {
+            report.warn(
+                "no_elapsed_time",
+                "this language has a parent but zero elapsed years, so no change could have \
+                 accumulated",
+            );
+        }
+
+        report.absorb("phonology", self.phonemes.validate());
+        report
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use stem_phonology::{Phoneme, SegmentKind};
+
+    fn asterian() -> LanguageGenome {
+        LanguageGenome::proto("proto_asterian", "Proto-Asterian")
+            .with_seed(42)
+            .with_phonemes(PhonemeInventory::from_phonemes([
+                Phoneme::new("ph_t", "t", SegmentKind::Consonant),
+                Phoneme::new("ph_k", "k", SegmentKind::Consonant),
+                Phoneme::new("ph_a", "a", SegmentKind::Vowel),
+            ]))
+    }
+
+    #[test]
+    fn a_well_formed_proto_language_validates() {
+        let report = asterian().validate();
+        assert!(report.is_ok(), "unexpected errors: {report}");
+    }
+
+    #[test]
+    fn a_proto_language_has_no_parent() {
+        assert!(asterian().is_proto());
+    }
+
+    #[test]
+    fn phonology_issues_surface_namespaced_on_the_genome() {
+        let broken = LanguageGenome::proto("l", "Broken");
+        let report = broken.validate();
+        assert!(
+            report.errors().any(|i| i.code == "phonology.empty"),
+            "inventory errors must reach the genome report: {report}"
+        );
+    }
+
+    #[test]
+    fn a_language_cannot_be_its_own_parent() {
+        let mut genome = asterian();
+        genome.parent = Some(genome.id.clone());
+        let report = genome.validate();
+        assert!(report.errors().any(|i| i.code == "self_parent"), "{report}");
+    }
+
+    #[test]
+    fn a_daughter_with_no_elapsed_time_warns_but_stays_valid() {
+        let mut genome = asterian();
+        genome.parent = Some("proto_asterian_older".into());
+        genome.lineage_depth_years = 0;
+        let report = genome.validate();
+        assert!(report.is_ok(), "{report}");
+        assert!(
+            report.warnings().any(|i| i.code == "no_elapsed_time"),
+            "{report}"
+        );
+    }
+
+    #[test]
+    fn summary_reports_the_inventory_split() {
+        let summary = asterian().summary();
+        assert!(summary.contains("2C/1V"), "{summary}");
+        assert!(summary.contains("seed 42"), "{summary}");
+        assert!(summary.contains("proto"), "{summary}");
+    }
+}

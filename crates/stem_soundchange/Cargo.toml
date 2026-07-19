@@ -1,0 +1,18 @@
+[package]
+name = "stem_soundchange"
+description = "Ordered, traceable sound-change rules for Stemma. (Populated in M3.)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[dependencies]
+stem_core.workspace = true
+stem_lexicon.workspace = true
+stem_phonology.workspace = true
+serde.workspace = true
+
+[lints]
+workspace = true

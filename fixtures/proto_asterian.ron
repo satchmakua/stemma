@@ -1,0 +1,52 @@
+// Proto-Asterian — the reference proto-language used by the docs, the demo, and
+// the golden tests (`DESIGN.md` §21).
+//
+// The inventory is deliberately ordinary: a five-vowel system and a modest
+// consonant set, of the kind that shows up across unrelated language families.
+// A plain starting point makes the *changes* legible — the interesting part of
+// this program is what happens to a language, not how exotic it began.
+//
+// Frequency weights are relative, not probabilities. They are shaped so that
+// /a/ and the coronal stops carry most of the lexicon and /j/ is marginal, which
+// is what keeps generated roots from looking like uniform noise.
+(
+    id: "proto_asterian",
+    name: "Proto-Asterian",
+    lineage_depth_years: 0,
+    seed: 42,
+
+    phonemes: [
+        // --- Stops ---
+        (id: "ph_p", ipa: "p", kind: consonant, frequency_weight: 3.0),
+        (id: "ph_t", ipa: "t", kind: consonant, frequency_weight: 5.0),
+        (id: "ph_k", ipa: "k", kind: consonant, frequency_weight: 4.5),
+
+        // --- Nasals ---
+        (id: "ph_m", ipa: "m", kind: consonant, frequency_weight: 3.5),
+        (id: "ph_n", ipa: "n", kind: consonant, frequency_weight: 4.0),
+
+        // --- Fricative ---
+        (id: "ph_s", ipa: "s", kind: consonant, frequency_weight: 3.5),
+
+        // --- Liquids ---
+        (id: "ph_l", ipa: "l", kind: consonant, frequency_weight: 3.0),
+        (id: "ph_r", ipa: "r", kind: consonant, frequency_weight: 2.5),
+
+        // --- Glides ---
+        (id: "ph_w", ipa: "w", kind: consonant, frequency_weight: 2.0),
+        (id: "ph_j", ipa: "j", romanization: "y", kind: consonant, frequency_weight: 1.0),
+
+        // --- Vowels ---
+        (id: "ph_a", ipa: "a", kind: vowel, frequency_weight: 6.0),
+        (id: "ph_e", ipa: "e", kind: vowel, frequency_weight: 3.5),
+        (id: "ph_i", ipa: "i", kind: vowel, frequency_weight: 4.0),
+        (id: "ph_o", ipa: "o", kind: vowel, frequency_weight: 3.0),
+        (id: "ph_u", ipa: "u", kind: vowel, frequency_weight: 3.5),
+    ],
+
+    notes: [
+        "Reference proto-language for the Asterian family (Coastal, Highland, Riverine).",
+        "Attested example roots from the design doc: *takala 'star', *sawel 'sun', *akwa 'water', *rekan 'king'.",
+        "Every phoneme in those roots is present in this inventory.",
+    ],
+)

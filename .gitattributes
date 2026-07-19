@@ -1,2 +1,14 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+
+# Rust sources and project files are always text with LF endings.
+*.rs      text eol=lf diff=rust
+*.toml    text eol=lf
+*.ron     text eol=lf
+*.json    text eol=lf
+*.md      text eol=lf
+*.csv     text eol=lf
+*.yml     text eol=lf
+
+# The lockfile is committed but generated; keep it out of diff noise.
+Cargo.lock  text eol=lf linguist-generated=true -diff
