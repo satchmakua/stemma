@@ -32,20 +32,15 @@ DESIGN wins.
 _This is the MVP of DESIGN §12: a deterministic diachronic lexicon engine. Nothing
 outside this phase matters until it works end to end._
 
-- [ ] **M1 — Feature bundles & root generation.** Give phonemes real phonological
-  features (`DESIGN.md` §7.1) — place, manner, voicing, height, backness,
-  rounding — replacing the placeholder `SegmentKind`-only model. Add phonotactic
-  syllable templates (`(C)V(C)`) and seeded, weighted root generation.
-
-  The feature model is load-bearing: M3's rules match on features, so getting this
-  shape right matters more than getting it quickly. Model features as a sparse,
-  typed bundle, not a fixed struct of `Option<bool>` — new features get added for
-  decades (tone, phonation, and the alien channels of §7.7 all want in).
-
-  **Test:** `stemma generate-roots fixtures/proto_asterian.ron --count 100 --seed 42`
-  → 100 roots, every segment drawn from the inventory, every root matching the
-  template. Run twice with the same seed → byte-identical output. Run with a
-  different seed → different output.
+- [x] **M1 — Feature bundles & root generation.** 16 binary distinctive features
+  with ternary storage (`+`/`−`/absent), a closed enum rather than a registry
+  (`docs/adr/0004`); phonotactic templates and weighted root lengths; seeded
+  generation on ChaCha20 with SHA-256 seed expansion (`docs/adr/0005`).
+  `stemma generate-roots` and `stemma features`.
+  **Test:** `cargo run -p stem_cli -- generate-roots fixtures/proto_asterian.ron
+  --count 100 --seed 42` → 100 roots, all from the inventory, all matching a
+  declared template; run twice → byte-identical; different seed → different output;
+  `--count 20` is a byte-prefix of `--count 100`.
 
 - [ ] **M2 — Lexicon.** `WordEntry`, `Lexicon`, glosses, part of speech, and
   cognate-set IDs (`DESIGN.md` §8.3). Seed a proto-lexicon from a built-in

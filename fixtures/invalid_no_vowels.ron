@@ -4,18 +4,22 @@
 // It packs three distinct faults into one file:
 //   1. no vowel, so no syllable can be formed  -> error phonology.no_nucleus
 //   2. /t/ declared twice under different ids  -> error phonology.duplicate_ipa
-//   3. a negative frequency weight             -> error phonology.bad_weight
+//   3. a zero frequency weight                 -> error phonology.bad_weight
 //
 // `stemma validate` should report all three in a single pass. A validator that
 // stops at the first fault makes the user fix a file one error at a time.
+//
+// The phonemes deliberately carry no `features:` block: a pre-M1 file must keep
+// loading (`CLAUDE.md`), and this fixture is what proves that path — it warns
+// with `phonology.features_unspecified` rather than failing.
 (
     id: "broken_example",
     name: "Broken Example",
     seed: 1,
 
     phonemes: [
-        (id: "ph_t", ipa: "t", kind: consonant, frequency_weight: 1.0),
-        (id: "ph_t_again", ipa: "t", kind: consonant, frequency_weight: 1.0),
-        (id: "ph_k", ipa: "k", kind: consonant, frequency_weight: -2.0),
+        (id: "ph_t", ipa: "t", kind: consonant, frequency_weight: 10),
+        (id: "ph_t_again", ipa: "t", kind: consonant, frequency_weight: 10),
+        (id: "ph_k", ipa: "k", kind: consonant, frequency_weight: 0),
     ],
 )

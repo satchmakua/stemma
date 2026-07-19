@@ -14,7 +14,15 @@ env:
 
 jobs:
   check:
-    runs-on: ubuntu-latest
+    # Byte-for-byte reproducibility (DESIGN.md §9.4) includes *across platforms*.
+    # A matrix turns that from an assertion into evidence — the frozen RNG and
+    # weighted-index canaries run on all three.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+
     steps:
       - uses: actions/checkout@v4
 
@@ -35,11 +43,60 @@ jobs:
       - name: Test
         run: cargo test --workspace
 
-      # Determinism is a hard constraint of the design (§9.4), so it is checked
-      # rather than assumed: the same input must produce byte-identical output.
-      # Extend this as generating commands land in M1 and after.
-      - name: Determinism check
+  determinism:
+    # Guards that are about the dependency graph rather than the code, so they only
+    # need to run once.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      # NOTE on the shape of both guards below. The obvious form
+      #     ! some-command | grep -q pattern
+      # FAILS OPEN: `!` inverts only the *last* command's status, and `set -e` does
+      # not apply to a negated pipeline — so if `some-command` errors (wrong
+      # directory, ambiguous package spec), the step reports success and the guard
+      # silently stops guarding. Each check therefore runs the command in its own
+      # statement, where `-e` can see it fail, and negates only the grep.
+
+      - name: No non-portable generator
+        # The real enforcement is `default-features = false` in Cargo.toml, which
+        # removes StdRng and ThreadRng from the API entirely (docs/adr/0005). This
+        # is belt-and-braces. It matches only *call* forms, so module docs that name
+        # the types in prose — which they must, to explain why they are banned — do
+        # not trip it.
         run: |
+          set -euo pipefail
+          test -d crates
+          if grep -rnE 'StdRng::|SmallRng::|rand::rng\(\)|thread_rng\(\)' crates/ --include='*.rs'; then
+            echo "::error::a non-portable RNG is referenced above; see docs/adr/0005"
+            exit 1
+          fi
+
+      - name: rand/unbiased is not enabled anywhere in the graph
+        # rand ships a feature whose own manifest comment says enabling it is
+        # expected to affect reproducibility of results. Cargo unifies features
+        # across the whole graph, so a transitive dependency could enable it with no
+        # version bump anyone would notice — and no frozen canary would catch it,
+        # because the feature does not perturb the draws this project currently
+        # makes. This guard is the only defense against that class.
+        run: |
+          set -euo pipefail
+          tree=$(cargo tree -e features -i rand@0.10.2)
+          if grep -q 'unbiased' <<<"$tree"; then
+            echo "::error::rand/unbiased was enabled somewhere in the dependency graph"
+            echo "$tree"
+            exit 1
+          fi
+
+      - name: The same seed produces the same language
+        # The end-to-end form of DESIGN.md §9.4, run against the real binary rather
+        # than in-process.
+        run: |
+          cargo run -q -p stem_cli -- generate-roots fixtures/proto_asterian.ron --count 500 --seed 0 > /tmp/a.txt
+          cargo run -q -p stem_cli -- generate-roots fixtures/proto_asterian.ron --count 500 --seed 0 > /tmp/b.txt
+          diff /tmp/a.txt /tmp/b.txt
           cargo run -q -p stem_cli -- convert fixtures/proto_asterian.ron /tmp/a.json
           cargo run -q -p stem_cli -- convert fixtures/proto_asterian.ron /tmp/b.json
           diff /tmp/a.json /tmp/b.json

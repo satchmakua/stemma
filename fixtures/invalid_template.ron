@@ -1,0 +1,23 @@
+// A language whose syllable template uses the parenthesis notation the design doc
+// writes prose in — `(C)V(C)` — which the engine does not accept.
+//
+// This file is asserted to LOAD SUCCESSFULLY and then fail validation with
+// `phonotactics.bad_template`. That is the point of it: `inventory.rs` states the
+// convention that construction always succeeds and `validate` explains, so a
+// template typo must be a *reportable issue* alongside everything else wrong with
+// the file — not a parse error that aborts the load and hides the rest.
+(
+    id: "parenthesised",
+    name: "Parenthesised",
+    seed: 1,
+
+    phonemes: [
+        (id: "ph_t", ipa: "t", kind: consonant, frequency_weight: 10),
+        (id: "ph_a", ipa: "a", kind: vowel, frequency_weight: 10),
+    ],
+
+    phonotactics: (
+        templates: [(pattern: "(C)V(C)", weight: 10)],
+        syllables_per_root: [(count: 2, weight: 10)],
+    ),
+)

@@ -1,0 +1,21 @@
+// Feature-authoring mistakes, kept so the error messages stay good.
+//
+// This file is asserted NOT to load. Unlike the validation faults in
+// `invalid_no_vowels.ron`, a malformed feature list is a *parse* error: there is
+// no bundle to report about, so there is nothing for `validate` to explain. The
+// error carries the position in the file, which is what turns a typo into a
+// one-line fix.
+//
+// Swap which phoneme is uncommented to exercise each message:
+//
+//   ["+voicee"]           unknown feature, with a suggestion  -> "did you mean `voice`?"
+//   ["voice"]             unsigned name                       -> "needs a leading `+` or `-`"
+//   ["\u{2212}voice"]     U+2212 MINUS SIGN instead of ASCII  -> "signed with a non-ASCII character"
+//   ["+voice", "-voice"]  the same feature valued twice       -> "given a value twice"
+(
+    id: "bad_features",
+    name: "Bad Features",
+    phonemes: [
+        (id: "ph_p", ipa: "p", kind: consonant, features: ["+voicee"]),
+    ],
+)

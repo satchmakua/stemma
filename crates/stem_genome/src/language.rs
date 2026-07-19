@@ -2,7 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 use stem_core::{LanguageId, Validate, ValidationReport};
-use stem_phonology::PhonemeInventory;
+use stem_phonology::{PhonemeInventory, Phonotactics};
 
 /// Everything that defines one language at one point in its history.
 ///
@@ -14,7 +14,14 @@ use stem_phonology::PhonemeInventory;
 /// New fields must be `#[serde(default)]` so that fixtures and saved projects
 /// written by an earlier milestone keep loading. A project file is a user's work;
 /// a schema change must not strand it.
+///
+/// `deny_unknown_fields` does not conflict with that rule — `#[serde(default)]` is
+/// what makes an *old* file load in *new* code, and that is the direction the rule
+/// is about. What it buys is that a misspelled `sed:` cannot silently take the
+/// default seed of 0 and hand back a completely different language with no
+/// diagnostic (`DESIGN.md` §9.4). The same reasoning as [`stem_phonology::Phoneme`].
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct LanguageGenome {
     /// Stable identity within the lineage graph.
     pub id: LanguageId,
@@ -47,6 +54,17 @@ pub struct LanguageGenome {
     #[serde(default)]
     pub phonemes: PhonemeInventory,
 
+    /// What shapes a root of this language may take (ROADMAP M1).
+    ///
+    /// `#[serde(default)]` per this type's own contract, and the default is
+    /// **empty** — see [`Phonotactics`]. A pre-M1 file loads unchanged and simply
+    /// reports that it has no root shape yet, rather than silently inheriting a
+    /// table from whatever version of Stemma happens to be running. That matters
+    /// because a compiled-in default would make generation depend on the binary
+    /// rather than on the file, which is exactly what `seed`'s contract forbids.
+    #[serde(default)]
+    pub phonotactics: Phonotactics,
+
     /// Free-form authorial notes. Not interpreted by the engine.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub notes: Vec<String>,
@@ -62,6 +80,7 @@ impl LanguageGenome {
             lineage_depth_years: 0,
             seed: 0,
             phonemes: PhonemeInventory::new(),
+            phonotactics: Phonotactics::new(),
             notes: Vec::new(),
         }
     }
@@ -77,6 +96,13 @@ impl LanguageGenome {
     #[must_use]
     pub fn with_phonemes(mut self, phonemes: PhonemeInventory) -> Self {
         self.phonemes = phonemes;
+        self
+    }
+
+    /// Sets the phonotactic system.
+    #[must_use]
+    pub fn with_phonotactics(mut self, phonotactics: Phonotactics) -> Self {
+        self.phonotactics = phonotactics;
         self
     }
 
@@ -140,6 +166,16 @@ impl Validate for LanguageGenome {
         }
 
         report.absorb("phonology", self.phonemes.validate());
+        report.absorb("phonotactics", self.phonotactics.validate());
+        // Needs both halves of the language, so it cannot live in either type's
+        // own `validate` — `Validate::validate(&self)` takes no context.
+        report.absorb(
+            "phonotactics",
+            stem_phonology::phonotactics::check_against_inventory(
+                &self.phonotactics,
+                &self.phonemes,
+            ),
+        );
         report
     }
 }

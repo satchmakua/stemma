@@ -11,6 +11,7 @@ repository.workspace = true
 [dependencies]
 stem_core.workspace = true
 serde.workspace = true
+rand.workspace = true
 
 [lints]
 workspace = true

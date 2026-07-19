@@ -158,7 +158,7 @@ mod tests {
             .with_seed(42)
             .with_phonemes(PhonemeInventory::from_phonemes([
                 Phoneme::new("ph_t", "t", SegmentKind::Consonant),
-                Phoneme::new("ph_a", "a", SegmentKind::Vowel).with_weight(2.5),
+                Phoneme::new("ph_a", "a", SegmentKind::Vowel).with_weight(25),
                 Phoneme::new("ph_sh", "ʃ", SegmentKind::Consonant).with_romanization("sh"),
             ]))
     }
