@@ -11,6 +11,7 @@ repository.workspace = true
 [dependencies]
 stem_core.workspace = true
 stem_phonology.workspace = true
+stem_lexicon.workspace = true
 serde.workspace = true
 
 [lints]

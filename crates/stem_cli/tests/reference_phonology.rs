@@ -39,13 +39,20 @@ fn matching(inventory: &PhonemeInventory, pattern: &[&str]) -> Vec<String> {
         .collect()
 }
 
+/// The reference fixture is the worked example, so its phonology must stay
+/// pristine. Since M2 it also carries one Note — it is a proto *definition*, the
+/// thing `new-lexicon` is run against, so it legitimately has no lexicon yet.
+/// Asserted exactly rather than loosely, so a real issue cannot hide behind it.
 #[test]
-fn the_reference_language_validates_with_no_issues_at_all() {
+fn the_reference_language_reports_nothing_but_its_missing_lexicon() {
     let report = asterian().validate();
-    assert!(
-        report.is_empty(),
-        "the reference fixture is the worked example; it must stay pristine:\n{report}"
+    let codes: Vec<&str> = report.issues.iter().map(|i| i.code.as_str()).collect();
+    assert_eq!(
+        codes,
+        ["lexicon.empty"],
+        "the fixture must stay pristine apart from having no lexicon:\n{report}"
     );
+    assert!(report.is_ok(), "{report}");
 }
 
 /// Golden. Every segment's full resolved matrix, in canonical order.

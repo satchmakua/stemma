@@ -384,36 +384,17 @@ fn split_sign(token: &str) -> Result<(Sign, &str), FeatureParseError> {
     }
 }
 
-/// The closest feature name within two edits, for diagnostics.
+/// The closest feature name to a typo, for diagnostics.
 ///
 /// A typo is the overwhelmingly likely cause of an unknown feature name, and "did
-/// you mean `voice`?" costs fifteen lines and saves an hour. Hand-rolled rather
-/// than pulling `strsim` into the workspace: the candidate set is a closed list of
-/// at most 64 short strings, so this is a small need and `CLAUDE.md` says not to
-/// reach for a dependency for one.
+/// you mean `voice`?" is what makes a closed feature set a help rather than merely
+/// a restriction (`docs/adr/0004`).
+///
+/// Delegates to [`stem_core::suggest`], which M2 moved this logic into so that
+/// `stem_lexicon`'s concept keys — the workspace's second closed namespace — get
+/// the identical behaviour rather than a second copy that drifts.
 fn nearest_feature_name(name: &str) -> Option<&'static str> {
-    Feature::ALL
-        .iter()
-        .map(|f| (levenshtein(name, f.name()), f.name()))
-        .filter(|&(distance, _)| distance <= 2)
-        .min_by_key(|&(distance, candidate)| (distance, candidate))
-        .map(|(_, candidate)| candidate)
-}
-
-/// Edit distance, two rows, no allocation beyond them.
-fn levenshtein(a: &str, b: &str) -> usize {
-    let b_chars: Vec<char> = b.chars().collect();
-    let mut previous: Vec<usize> = (0..=b_chars.len()).collect();
-    let mut current = vec![0usize; b_chars.len() + 1];
-    for (i, a_char) in a.chars().enumerate() {
-        current[0] = i + 1;
-        for (j, &b_char) in b_chars.iter().enumerate() {
-            let substitution = previous[j] + usize::from(a_char != b_char);
-            current[j + 1] = substitution.min(previous[j + 1] + 1).min(current[j] + 1);
-        }
-        std::mem::swap(&mut previous, &mut current);
-    }
-    previous[b_chars.len()]
+    stem_core::suggest::nearest(name, Feature::ALL.iter().map(|f| f.name()))
 }
 
 /// Emits in frozen [`Feature::ALL`] order, whatever order the file authored them

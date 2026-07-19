@@ -12,6 +12,7 @@ use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use stem_core::{RngDomain, Severity, Validate, ValidationReport, rng_for};
 use stem_genome::LanguageGenome;
+use stem_lexicon::{CONCEPT_COUNT, CONCEPTS, build_proto_lexicon};
 use stem_phonology::RootGenerator;
 
 /// The most roots one invocation will generate.
@@ -80,6 +81,39 @@ enum Command {
         #[arg(long)]
         ipa: Option<String>,
     },
+
+    /// Seed a proto-lexicon: one word per concept on the built-in list.
+    NewLexicon {
+        /// Path to a language file (`.ron` or `.json`).
+        path: PathBuf,
+        /// Override the language's own seed.
+        #[arg(long)]
+        seed: Option<u64>,
+        /// How many concepts to coin words for, from the top of the list.
+        #[arg(long, value_parser = clap::value_parser!(u16).range(1..=CONCEPT_COUNT as i64))]
+        concepts: Option<u16>,
+        /// Write the language back out with its new lexicon, instead of printing.
+        #[arg(long)]
+        out: Option<PathBuf>,
+    },
+
+    /// Write the lexicon as a Markdown dictionary.
+    ExportMd {
+        /// Path to a language file (`.ron` or `.json`).
+        path: PathBuf,
+        /// Write to this file instead of stdout.
+        #[arg(long)]
+        out: Option<PathBuf>,
+    },
+
+    /// Write the lexicon as CLDF-shaped CSV.
+    ExportCsv {
+        /// Path to a language file (`.ron` or `.json`).
+        path: PathBuf,
+        /// Write to this file instead of stdout.
+        #[arg(long)]
+        out: Option<PathBuf>,
+    },
 }
 
 fn main() -> ExitCode {
@@ -108,6 +142,14 @@ fn run() -> Result<ExitCode> {
             ipa,
         } => generate_roots(&path, count, seed, ipa),
         Command::Features { path, ipa } => features(&path, ipa.as_deref()),
+        Command::NewLexicon {
+            path,
+            seed,
+            concepts,
+            out,
+        } => new_lexicon(&path, seed, concepts, out.as_deref()),
+        Command::ExportMd { path, out } => export(&path, out.as_deref(), Rendering::Markdown),
+        Command::ExportCsv { path, out } => export(&path, out.as_deref(), Rendering::Csv),
     }
 }
 
@@ -217,7 +259,7 @@ fn generate_roots(
     let unique: std::collections::BTreeSet<&String> = lines.iter().collect();
     if unique.len() < lines.len() {
         eprintln!(
-            "note: {} of {} roots are duplicates (homophony is real; --unique lands in M2)",
+            "note: {} of {} roots are duplicates (homophony is real; `stemma new-lexicon` reports it in the lexicon too)",
             lines.len() - unique.len(),
             lines.len()
         );
@@ -273,6 +315,125 @@ fn features(path: &std::path::Path, only_ipa: Option<&str>) -> Result<ExitCode> 
             Some(wanted) => anyhow::bail!("no phoneme with IPA form `{wanted}` in this language"),
             None => println!("(the inventory is empty)"),
         }
+    }
+
+    Ok(ExitCode::SUCCESS)
+}
+
+fn new_lexicon(
+    path: &std::path::Path,
+    seed_override: Option<u64>,
+    concepts: Option<u16>,
+    out: Option<&std::path::Path>,
+) -> Result<ExitCode> {
+    let mut genome = load_genome(path)?;
+
+    // `generate-roots`' precedence, verbatim: the flag wins when given, otherwise
+    // the file's own seed, so a language always reproduces itself.
+    let (seed, provenance) = match seed_override {
+        Some(seed) => (seed, "from --seed"),
+        None => (genome.seed, "from the genome"),
+    };
+    let count = concepts.map_or(CONCEPT_COUNT, |n| n as usize);
+
+    let lexicon = build_proto_lexicon(
+        &genome.id,
+        &genome.phonemes,
+        &genome.phonotactics,
+        &CONCEPTS[..count],
+        seed,
+    )
+    .with_context(|| format!("seeding a lexicon for `{}`", genome.name))?;
+
+    eprintln!(
+        "{} — seed {seed} ({provenance}), stream `lexicon`",
+        genome.name
+    );
+    if !genome.lexicon.is_empty() {
+        eprintln!(
+            "note: replacing the existing lexicon of {}",
+            genome.lexicon.summary()
+        );
+    }
+
+    // Replace, never append. Appending is undefined and would produce a file the
+    // validator immediately calls broken — duplicate word ids and duplicate
+    // concepts — from a command that just reported success.
+    genome.lexicon = lexicon;
+
+    let homophones = stem_lexicon::check_against_inventory(&genome.lexicon, &genome.phonemes);
+    for issue in homophones.issues.iter().filter(|i| i.code == "homophones") {
+        eprintln!("note: {}", issue.message);
+    }
+
+    match out {
+        Some(destination) => {
+            // Not optional. `--seed 7 --out f.ron` must not write a file that says
+            // `seed: 42` and holds a lexicon drawn from stream 7 — the genome's
+            // seed promises reproducibility *from the file alone*, and this is the
+            // first command in the project that persists a stochastic result.
+            if genome.seed != seed {
+                eprintln!(
+                    "note: writing seed {seed} into the saved language, so it regenerates \
+                     this lexicon from its own file"
+                );
+                genome.seed = seed;
+            }
+            stem_io::save(destination, &genome)
+                .with_context(|| format!("writing `{}`", destination.display()))?;
+            eprintln!("{} -> {}", genome.lexicon.summary(), destination.display());
+        }
+        None => {
+            for entry in genome.lexicon.iter() {
+                println!(
+                    "{}\t{}\t{}",
+                    entry.written(&genome.phonemes)?,
+                    entry.display_gloss().unwrap_or("?"),
+                    entry.concept.as_ref().map_or("", |k| k.as_str()),
+                );
+            }
+        }
+    }
+
+    Ok(ExitCode::SUCCESS)
+}
+
+/// Which document to render.
+#[derive(Debug, Clone, Copy)]
+enum Rendering {
+    Markdown,
+    Csv,
+}
+
+fn export(
+    path: &std::path::Path,
+    out: Option<&std::path::Path>,
+    rendering: Rendering,
+) -> Result<ExitCode> {
+    let genome = load_genome(path)?;
+
+    let mut document = String::new();
+    match rendering {
+        Rendering::Markdown => stem_export::write_lexicon_markdown(&mut document, &genome),
+        Rendering::Csv => stem_export::write_lexicon_csv(&mut document, &genome),
+    }
+    .with_context(|| format!("rendering `{}`", genome.name))?;
+
+    match out {
+        Some(destination) => {
+            if let Some(parent) = destination.parent()
+                && !parent.as_os_str().is_empty()
+            {
+                std::fs::create_dir_all(parent)
+                    .with_context(|| format!("creating `{}`", parent.display()))?;
+            }
+            std::fs::write(destination, &document)
+                .with_context(|| format!("writing `{}`", destination.display()))?;
+            eprintln!("{} bytes -> {}", document.len(), destination.display());
+        }
+        // `print!`, not `println!`: the renderers already end with a newline, and
+        // an extra one would make stdout differ from the file byte for byte.
+        None => print!("{document}"),
     }
 
     Ok(ExitCode::SUCCESS)

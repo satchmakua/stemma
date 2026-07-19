@@ -12,9 +12,9 @@ The name comes from textual criticism: a *stemma* is the reconstructed family tr
 showing how surviving manuscripts descend from a lost original. That is exactly
 this program's core data structure.
 
-**Status:** early — **M1 complete**. Phonemes carry real distinctive features,
-languages declare their syllable shapes, and the CLI generates reproducible root
-words. 157 tests pass. Sound change, forking and tracing are still ahead. See
+**Status:** early — **M2 complete**. Languages have phonemes with real distinctive
+features, syllable shapes, and a lexicon: one word per meaning, exportable as a
+dictionary. 232 tests pass. Sound change, forking and tracing are still ahead. See
 [ROADMAP.md](ROADMAP.md) for the plan and [PROGRESS.md](PROGRESS.md) for what has
 shipped.
 
@@ -95,6 +95,32 @@ fills consonant slots in a syllable, but phonologically it has no radical
 constriction. Keeping those two questions apart is what lets you write what is
 actually the case instead of what the data model can express.
 
+### Give it a vocabulary
+
+```bash
+cargo run -p stem_cli -- new-lexicon fixtures/proto_asterian.ron --out out/proto.ron
+cargo run -p stem_cli -- export-md out/proto.ron
+```
+
+```markdown
+| Form | IPA | Gloss | POS | Concept | Word | Cognate set |
+| --- | --- | --- | --- | --- | --- | --- |
+| aop | /aop/ | all | determiner | `ALL` | `w_0001` | `cog_proto_asterian_0001` |
+| nuko | /nuko/ | ashes | noun | `ASH` | `w_0002` | `cog_proto_asterian_0002` |
+| nak | /nak/ | bark | noun | `BARK` | `w_0003` | `cog_proto_asterian_0003` |
+```
+
+One word per meaning, drawn from a built-in list of 103 concepts — the Swadesh 1955
+hundred, with their Concepticon anchors, plus three the design's own worked examples
+need. `export-csv` writes the same data as a [CLDF](https://cldf.clld.org/)-shaped
+table, including a `Segments` column of space-separated IPA that a field linguist
+would normally have to reconstruct by hand.
+
+The **cognate set** is the column that matters later. It is the thread that will
+survive forking: when Proto-Asterian splits into Coastal and Highland and their
+words drift apart, `cog_proto_asterian_0003` is what still says those two words are
+the same word.
+
 ### Commands
 
 | Command | What it does |
@@ -103,6 +129,9 @@ actually the case instead of what the data model can express.
 | `stemma info <file>` | Print a language's inventory, lineage, and root shapes |
 | `stemma features <file>` | Show each phoneme's resolved feature matrix |
 | `stemma generate-roots <file>` | Generate root words (`--count`, `--seed`, `--ipa`) |
+| `stemma new-lexicon <file>` | Coin one word per concept (`--seed`, `--concepts`, `--out`) |
+| `stemma export-md <file>` | Write the lexicon as a Markdown dictionary |
+| `stemma export-csv <file>` | Write the lexicon as CLDF-shaped CSV |
 | `stemma convert <in> <out>` | Convert a project between RON and JSON |
 
 | Task | Command |
@@ -181,9 +210,10 @@ off.
 
 ## Tech stack
 
-Rust (edition 2024) workspace of seven small crates — `stem_core` (IDs, errors,
+Rust (edition 2024) workspace of eight small crates — `stem_core` (IDs, errors,
 validation, seeded RNG), `stem_phonology` (features, inventory, phonotactics,
-generation), `stem_lexicon`, `stem_soundchange`, `stem_genome`, `stem_io`, and the
+generation), `stem_lexicon` (words, concepts, cognate sets), `stem_soundchange`,
+`stem_genome`, `stem_io` (persistence), `stem_export` (rendering), and the
 `stemma` CLI. Serialisation via serde with RON as the authored project format and
 JSON for interchange. Randomness is ChaCha20 with SHA-256 seed expansion and exact
 dependency pins, because reproducibility here is measured in years. No database: a

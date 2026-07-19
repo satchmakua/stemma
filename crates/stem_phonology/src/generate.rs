@@ -71,11 +71,34 @@ fn generation_blocking(report: ValidationReport) -> ValidationReport {
 }
 
 /// One syllable of a generated root.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+///
+/// # `pattern` is provenance, never semantics
+///
+/// Normative, and new at M2 because M2 is what makes this type *deserializable* —
+/// a [`stem_lexicon::WordEntry`] stores a [`Root`], so a hand-edited file can now
+/// state a pattern.
+///
+/// `pattern` records **the template this syllable was drawn to at generation
+/// time**. Nothing in the engine may read it to decide anything: rules match
+/// `segments` (`CLAUDE.md`: rules match features, not letters), and rendering
+/// walks `segments`. It exists so that a human — and the CSV `Template` column —
+/// can see what shape the generator chose.
+///
+/// Two consequences follow, both deliberate. A hand-edited file can state a
+/// `pattern` that disagrees with its `segments`; that is reported at *Warning*
+/// severity (`lexicon.syllable_shape_mismatch`) rather than Error, because nothing
+/// reads it and so nothing is broken. And M3's final-vowel loss will leave a `CV`
+/// pattern over what is now a `V`-shaped syllable until a resyllabifier exists —
+/// that is honest history rather than corruption, and the same warning says so.
+#[derive(
+    Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize,
+)]
+#[serde(deny_unknown_fields)]
 pub struct Syllable {
-    /// The template this syllable was built to, e.g. `"CVC"`.
+    /// The template this syllable was built to, e.g. `"CVC"`. See the type docs:
+    /// provenance only, never read for semantics.
     pub pattern: String,
-    /// Its segments, in order.
+    /// Its segments, in order. **This is the data.**
     pub segments: Vec<PhonemeId>,
 }
 
@@ -93,7 +116,15 @@ pub struct Syllable {
 /// `Ord` and `Hash` are derived so M2 can key a set of roots for deduplication
 /// without a breaking change. They order by syllable structure, not by rendered
 /// form — rendering needs an inventory, which a derive cannot have.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+///
+/// Serialisable from M2, because a [`stem_lexicon::WordEntry`] stores one.
+/// Deliberately *not* `#[serde(transparent)]` over `syllables`: three saved
+/// characters are not worth blocking a future field on this type, and the extra
+/// nesting is one line in a file nobody hand-writes a hundred of.
+#[derive(
+    Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize,
+)]
+#[serde(deny_unknown_fields)]
 pub struct Root {
     /// The syllables, in order.
     pub syllables: Vec<Syllable>,

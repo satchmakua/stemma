@@ -1,0 +1,23 @@
+[package]
+name = "stem_export"
+description = "Rendering a Stemma language as a document: Markdown dictionaries and CLDF-shaped CSV."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[dependencies]
+stem_core.workspace = true
+stem_genome.workspace = true
+stem_lexicon.workspace = true
+stem_phonology.workspace = true
+
+[dev-dependencies]
+# Only the golden tests need to load a fixture. The library itself never touches
+# the filesystem — see the crate docs on why rendering writes into a `String`.
+stem_io.workspace = true
+
+[lints]
+workspace = true

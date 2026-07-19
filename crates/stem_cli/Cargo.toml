@@ -19,6 +19,8 @@ stem_io.workspace = true
 stem_phonology.workspace = true
 anyhow.workspace = true
 clap.workspace = true
+stem_lexicon.workspace = true
+stem_export.workspace = true
 
 [dev-dependencies]
 sha2.workspace = true

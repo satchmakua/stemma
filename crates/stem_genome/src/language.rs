@@ -1,7 +1,8 @@
 //! The genome itself.
 
 use serde::{Deserialize, Serialize};
-use stem_core::{LanguageId, Validate, ValidationReport};
+use stem_core::{LanguageId, Severity, Validate, ValidationReport};
+use stem_lexicon::Lexicon;
 use stem_phonology::{PhonemeInventory, Phonotactics};
 
 /// Everything that defines one language at one point in its history.
@@ -65,6 +66,16 @@ pub struct LanguageGenome {
     #[serde(default)]
     pub phonotactics: Phonotactics,
 
+    /// This language's words (ROADMAP M2).
+    ///
+    /// `#[serde(default)]` per this type's contract, and the default is **empty** —
+    /// a pre-M2 file, the reference fixture included, loads unchanged and reports
+    /// that it has no lexicon yet. `skip_serializing_if` keeps `stemma convert`
+    /// from adding an empty `lexicon: []` to a file that never had one, so a round
+    /// trip of `proto_asterian.ron` stays byte-identical.
+    #[serde(default, skip_serializing_if = "Lexicon::is_empty")]
+    pub lexicon: Lexicon,
+
     /// Free-form authorial notes. Not interpreted by the engine.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub notes: Vec<String>,
@@ -81,6 +92,7 @@ impl LanguageGenome {
             seed: 0,
             phonemes: PhonemeInventory::new(),
             phonotactics: Phonotactics::new(),
+            lexicon: Lexicon::new(),
             notes: Vec::new(),
         }
     }
@@ -103,6 +115,13 @@ impl LanguageGenome {
     #[must_use]
     pub fn with_phonotactics(mut self, phonotactics: Phonotactics) -> Self {
         self.phonotactics = phonotactics;
+        self
+    }
+
+    /// Sets the lexicon, replacing any existing one.
+    #[must_use]
+    pub fn with_lexicon(mut self, lexicon: Lexicon) -> Self {
+        self.lexicon = lexicon;
         self
     }
 
@@ -165,6 +184,22 @@ impl Validate for LanguageGenome {
             );
         }
 
+        // A `LanguageId` reaches every minted `CognateSetId` verbatim and every CSV
+        // cell. A non-portable id does not break Stemma — only interchange — so it
+        // warns rather than erroring (§17).
+        if !self.id.is_empty() && !stem_lexicon::is_portable_id(self.id.as_str()) {
+            report.push(
+                stem_core::Issue::new(
+                    Severity::Warning,
+                    "id_not_portable",
+                    "this language id contains characters outside [A-Za-z0-9_-]; it reaches \
+                     every cognate-set id and every exported row, where a CLDF consumer \
+                     would reject it",
+                )
+                .about(&self.id),
+            );
+        }
+
         report.absorb("phonology", self.phonemes.validate());
         report.absorb("phonotactics", self.phonotactics.validate());
         // Needs both halves of the language, so it cannot live in either type's
@@ -176,6 +211,16 @@ impl Validate for LanguageGenome {
                 &self.phonemes,
             ),
         );
+
+        report.absorb("lexicon", self.lexicon.validate());
+        // Same shape as the phonotactics cross-check above, and for the same
+        // reason: it needs both halves of the language, and `Validate::validate`
+        // takes no context.
+        report.absorb(
+            "lexicon",
+            stem_lexicon::check_against_inventory(&self.lexicon, &self.phonemes),
+        );
+
         report
     }
 }

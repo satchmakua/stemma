@@ -18,6 +18,7 @@
 pub mod errors;
 pub mod ids;
 pub mod rng;
+pub mod suggest;
 pub mod validate;
 
 pub use errors::{Result, StemmaError};

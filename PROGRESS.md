@@ -5,20 +5,109 @@ A build log of what shipped and the notable decisions behind it. **Keep it hones
 acceptance tests live in [ROADMAP.md](ROADMAP.md); this is the backward-looking
 "what got done and why" companion.
 
-**Current phase:** Phase 1 — the diachronic kernel. Next milestone: **M2 —
-lexicon**.
+**Current phase:** Phase 1 — the diachronic kernel. Next milestone: **M3 —
+sound-change engine**.
 
 ## State of the tree
 
 | Crate | Holds | Status |
 |---|---|---|
-| `stem_core` | typed IDs, `StemmaError`, `Validate` / `ValidationReport`, `rng` | working |
+| `stem_core` | typed IDs, `StemmaError`, `Validate` / `ValidationReport`, `rng`, `suggest` | working |
 | `stem_phonology` | features, `Phoneme`, inventory, phonotactics, root generation | working |
-| `stem_lexicon` | words, cognate sets, etymology | empty — M2 |
+| `stem_lexicon` | `WordEntry`, `Lexicon`, the 103-concept list, cognate-set minting | working |
 | `stem_soundchange` | rules, matching, traces | empty — M3 |
 | `stem_genome` | `LanguageGenome` | grows a field per milestone |
-| `stem_io` | RON/JSON load & save | working |
-| `stem_cli` | the `stemma` binary | `validate`, `info`, `convert`, `generate-roots`, `features` |
+| `stem_io` | RON/JSON load & save | working — **untouched since M0** |
+| `stem_export` | Markdown dictionaries, CLDF-shaped CSV | working |
+| `stem_cli` | the `stemma` binary | `validate`, `info`, `convert`, `generate-roots`, `features`, `new-lexicon`, `export-md`, `export-csv` |
+
+---
+
+## M2 — Lexicon · built 2026-07-19 · ✓ verified
+
+Languages now have words. `stemma new-lexicon` coins one root per concept from a
+built-in 103-item list, `export-md` writes a dictionary and `export-csv` a
+CLDF-shaped table. **232 tests pass**; clippy clean under `-D warnings`.
+
+Verified by running it: `new-lexicon fixtures/proto_asterian.ron --out
+out/proto.ron` produces 103 entries — `aop` "all", `nuko` "ashes", `nak` "bark",
+`sa` "big" — each with a stable `WordId` and `CognateSetId`; reloading yields an
+identical lexicon; the dictionary and the CSV are byte-identical across runs. The
+homophone check found 5 real collisions (`a`, `ni`, `nim`, `wa`) and reported them
+as a Note without making the language invalid.
+
+### Decisions worth knowing
+
+**Export is a new crate, not a relaxation of `stem_io`.** `DESIGN.md` §9.2 puts
+`markdown.rs` inside `stem_io`, but `stem_io`'s own module docs say it is generic
+over serde and must not know the domain — and a Markdown dictionary cannot be
+written that way, since a word's rendered form needs the phoneme inventory. The
+distinction the split encodes: **persistence is total, reversible and domain-blind;
+rendering is lossy, opinionated and domain-specific.** `stem_io/src/` was not
+touched by this milestone, not one line. [ADR-0006](docs/adr/0006-export-is-a-separate-crate.md).
+
+**A `concept` field that §8.3 does not list.** §8.3 offers `glosses` (free strings
+that drift) and `semantic_nodes` (M9, and `SemanticNodeId` does not exist yet).
+Neither can be the cross-language join key §10.3's cognate table needs, so
+`ConceptKey` was added. It is deliberately **not** the cognate set: a concept is
+shared *meaning*, a cognate set is shared *ancestry*, and Latin *caput* "head" →
+French *chef* "chief" have one and not the other. At M2 they are in exact bijection
+and a future reader will want to delete one — a test exists to stop that.
+[ADR-0007](docs/adr/0007-word-identity-and-cognate-sets.md).
+
+**Swadesh-100 does not contain `king` or `mother`** — and ROADMAP M5's own
+acceptance command is `stemma cognates --meanings water sun star king mother`. The
+design panel caught this. Three concepts (`MOTHER`, `KING`, `STORM`) are appended
+after the hundred, under an explicit rule: *a meaning named by a Phase-1 acceptance
+test or a DESIGN worked example must be representable*. Appending rather than
+interleaving is what preserves the draw contract's prefix property. Without them,
+M5 could not run its own test, and reopening the concept schema at M5 is exactly
+the deferred cost this milestone exists to avoid.
+
+**Concepticon anchors were fetched, not remembered.** Each Swadesh concept carries
+its Concepticon id. Two values that circulate in secondary sources are wrong and
+the fetched ones are used: `hair` is 1036 (not 1040) and `root` is 668 (not 670).
+`KING` and `STORM` could not be verified, so their `concepticon_id` is `None` — a
+plausible-looking integer under a column bearing an external authority's name would
+be a false provenance claim in a program whose premise is provenance.
+
+**`phonemic_form` is a `Root`, never a `String`.** A rendered form stored beside
+the segments is a second source of truth that desynchronises the first time M3
+mutates a segment, undetectably. `written()` and `ipa()` are views.
+
+**The lexicon draws on its own RNG stream.** `RngDomain::Lexicon`, so the Nth word
+of `new-lexicon --seed 42` is deliberately *not* the Nth root of `generate-roots
+--seed 42`. Sharing would freeze the lexicon builder's draw budget to the root
+generator's forever. `generate-roots` is a scratchpad; `new-lexicon` is an artifact.
+
+### Gotchas for the next session
+
+- **`build_proto_lexicon` must not call `inventory.validate()`.** `RootGenerator::new`
+  deliberately filters feature-only codes out of its gate so a half-featured file
+  still generates; re-validating would make `new-lexicon` refuse a language
+  `generate-roots` accepts — M1's validator/engine defect reopened one axis over.
+  `a_language_that_can_generate_roots_can_seed_a_lexicon` guards it.
+- **Edit distance is Damerau-Levenshtein, not plain Levenshtein, and that was a
+  bug fix.** Under plain Levenshtein a transposition costs 2, so `NOES` tied with
+  `NOSE`, `NEW` and `NOT` — and the deterministic tie-break returned `NEW`. Since
+  transposition is the most common typing error, counting it as one edit makes the
+  right word win. The suggester moved to `stem_core::suggest` so features and
+  concepts share one implementation.
+- **`--out` rewrites the stored seed.** `--seed 7 --out f.ron` must not write a file
+  saying `seed: 42` while holding words drawn from stream 7; the genome's seed
+  promises reproducibility *from the file alone*, and this is the first command
+  that persists a stochastic result.
+- **Two golden tiers again.** The data-free canary in `stem_export` (a hand-built
+  4-phoneme genome) cannot be moved by any fixture edit; the fixture goldens and
+  the `d16ba861…` lexicon digest legitimately move when fixture content changes.
+  Keep them distinguishable.
+- **The reference fixture is unchanged and stays lexicon-less.** It is a proto
+  *definition*, the thing `new-lexicon` is run against. `skip_serializing_if` keeps
+  `convert` from adding an empty `lexicon: []`, so its round trip is still
+  byte-identical — a test asserts it.
+- **M4's whole cognate obligation is one line:** copy `cognate_set` verbatim, never
+  mint. `scoped_cognate_set` is the only minting site in the workspace and a
+  source-scanning test enforces it.
 
 ---
 
