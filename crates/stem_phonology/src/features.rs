@@ -227,6 +227,84 @@ impl FeatureBundle {
         self
     }
 
+    /// Removes `feature`'s value entirely, returning the previous one.
+    ///
+    /// The inverse of [`Self::set`], and it exists for exactly one reason:
+    /// assimilation is a *copy*, so when the donor leaves a cell absent the
+    /// recipient's cell must become absent too. On this project's own reference
+    /// inventory that is load-bearing rather than theoretical — /m/ taking /t/'s
+    /// place must land byte-identically on /n/, and /t/ has no rounding value
+    /// while /m/ has `-round`. A copy that could only ever *add* would leave
+    /// `-round` behind, and the result would then match no phoneme and no
+    /// reference row.
+    ///
+    /// Preserves the `pos & !spec == 0` invariant.
+    pub fn unset(&mut self, feature: Feature) -> Option<Sign> {
+        let previous = self.get(feature);
+        self.spec &= !feature.bit();
+        self.pos &= !feature.bit();
+        previous
+    }
+
+    /// Builder form of [`Self::unset`].
+    #[must_use]
+    pub fn without(mut self, feature: Feature) -> Self {
+        self.unset(feature);
+        self
+    }
+
+    /// Overwrites every valued cell of `delta` onto `self`, leaving the rest
+    /// alone. `DESIGN.md` §11.1's `voice = true`.
+    ///
+    /// Purely additive over valued cells — it can never *remove* one. That
+    /// asymmetry with [`Self::copy_node`] is deliberate: a literal change states
+    /// what the segment becomes, while a copy states where the segment's values
+    /// come from, and only the second can legitimately transfer absence.
+    #[must_use]
+    pub fn overlay(mut self, delta: FeatureBundle) -> Self {
+        for (feature, sign) in delta.iter() {
+            self.set(feature, sign);
+        }
+        self
+    }
+
+    /// Transfers every cell of `node` from `donor`, **absence included**.
+    ///
+    /// Returns `None` — meaning the copy does not apply — when `donor` values none
+    /// of `node.articulators()`. Lexurgy documents the opposite behaviour as a
+    /// trap: a matrix of bare feature variables copies the absent value too and
+    /// yields "a nasal with no place of articulation". Since `docs/adr/0004` has
+    /// already committed that absent is not minus, the correct semantics here is
+    /// stricter — a donor with no place has no place to give, so the site simply
+    /// does not apply and says so in the trace.
+    ///
+    /// Note the distinction that matters: copying an *individual* absence within a
+    /// node is correct and required (/m/ taking /t/'s place must lose its rounding
+    /// value); copying a *wholly unvalued* node is a no-op that would strand the
+    /// target with no place at all.
+    #[must_use]
+    pub fn copy_node(self, donor: FeatureBundle, node: FeatureNode) -> Option<Self> {
+        if !node
+            .articulators()
+            .iter()
+            .any(|&f| donor.is_specified(f))
+        {
+            return None;
+        }
+        let mut out = self;
+        for &feature in node.features() {
+            match donor.get(feature) {
+                Some(sign) => {
+                    out.set(feature, sign);
+                }
+                None => {
+                    out.unset(feature);
+                }
+            }
+        }
+        Some(out)
+    }
+
     /// Every valued feature, in frozen [`Feature::ALL`] order.
     ///
     /// Iteration order is a fixed compiled-in sequence, never a map's. This is what
@@ -274,6 +352,73 @@ impl FeatureBundle {
     /// arise" and never "the author forgot".
     pub fn subsumes(self, pattern: FeatureBundle) -> bool {
         (self.spec & pattern.spec) == pattern.spec && ((self.pos ^ pattern.pos) & pattern.spec) == 0
+    }
+}
+
+/// A closed group of features that move together under assimilation (§7.1's
+/// feature geometry).
+///
+/// Copying an arbitrary `Vec<Feature>` is the wrong primitive, and the reference
+/// fixture proves it: copying only `[labial, coronal, dorsal]` from /p/ onto /n/
+/// yields a `[+labial]` segment with no rounding value, which resolves to no
+/// symbol *and* trips `phonology.missing_required_feature` — an **Error**. The
+/// dependents are not extras; they are what makes the node well-formed. Making the
+/// node the unit of copy makes the ill-formed case unrepresentable rather than
+/// merely diagnosed.
+///
+/// Closed for `docs/adr/0004`'s reason: an open node registry cannot tell `plaec`
+/// from `place`, and a misspelled node would copy nothing, forever, silently.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum FeatureNode {
+    /// Place of articulation: the articulators **and their dependents**.
+    Place,
+    /// The laryngeal node. One feature today; it is here so that a voicing
+    /// assimilation rule ("obstruents agree in voicing with a following
+    /// obstruent") is expressible without a second mechanism.
+    Laryngeal,
+}
+
+impl FeatureNode {
+    /// Every cell this node carries, in frozen [`Feature::ALL`] order.
+    ///
+    /// **Derived from the inventory validator's own requirement tables rather than
+    /// restated.** `REQUIRED_OF_DORSAL` makes `{high, low, back, round}` mandatory
+    /// given `+dorsal`, and `REQUIRED_OF_LABIAL` makes `{round}` mandatory given
+    /// `+labial`, so the place node is exactly the articulators plus their union.
+    /// One table, so the node and the validator cannot drift apart.
+    pub fn features(self) -> &'static [Feature] {
+        match self {
+            Self::Place => &[
+                Feature::Labial,
+                Feature::Coronal,
+                Feature::Dorsal,
+                Feature::High,
+                Feature::Low,
+                Feature::Back,
+                Feature::Round,
+            ],
+            Self::Laryngeal => &[Feature::Voice],
+        }
+    }
+
+    /// The cells the donor must value for a copy to mean anything.
+    ///
+    /// Dependents may legitimately be absent on the donor — a plain alveolar has
+    /// no rounding — and their absence is transferred faithfully.
+    pub fn articulators(self) -> &'static [Feature] {
+        match self {
+            Self::Place => &[Feature::Labial, Feature::Coronal, Feature::Dorsal],
+            Self::Laryngeal => &[Feature::Voice],
+        }
+    }
+
+    /// The `snake_case` name, for diagnostics.
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Place => "place",
+            Self::Laryngeal => "laryngeal",
+        }
     }
 }
 
@@ -599,5 +744,119 @@ mod tests {
         assert_eq!(FeatureBundle::EMPTY.render(), "");
         assert!(FeatureBundle::EMPTY.is_empty());
         assert_eq!(FeatureBundle::EMPTY.len(), 0);
+    }
+}
+
+#[cfg(test)]
+mod m3_tests {
+    use super::*;
+
+    fn bundle(tokens: &[&str]) -> FeatureBundle {
+        FeatureBundle::try_from(tokens.iter().map(|s| (*s).to_owned()).collect::<Vec<_>>())
+            .expect("valid feature list")
+    }
+
+    #[test]
+    fn unset_removes_a_cell_rather_than_setting_it_minus() {
+        let mut b = bundle(&["+voice", "-round"]);
+        assert_eq!(b.unset(Feature::Round), Some(Sign::Minus));
+        assert_eq!(b.get(Feature::Round), None, "absent, not minus");
+        assert!(!b.is_specified(Feature::Round));
+        // Removing a cell that was never there is a no-op.
+        assert_eq!(b.unset(Feature::Round), None);
+    }
+
+    #[test]
+    fn unset_preserves_the_bitset_invariant() {
+        let mut b = bundle(&["+voice", "+labial", "+round"]);
+        for feature in Feature::ALL {
+            b.unset(*feature);
+            assert_eq!(b.pos & !b.spec, 0, "invariant broken by {}", feature.name());
+        }
+        assert!(b.is_empty());
+    }
+
+    #[test]
+    fn overlay_adds_and_overwrites_but_never_removes() {
+        let base = bundle(&["-voice", "-round", "+labial"]);
+        let after = base.overlay(bundle(&["+voice"]));
+        assert_eq!(after.get(Feature::Voice), Some(Sign::Plus), "overwritten");
+        assert_eq!(after.get(Feature::Round), Some(Sign::Minus), "untouched");
+        assert_eq!(after.get(Feature::Labial), Some(Sign::Plus), "untouched");
+    }
+
+    /// The exact case the reference fixture produces: /n/ takes /p/'s place and
+    /// must land byte-identically on /m/.
+    #[test]
+    fn copying_a_place_node_transfers_absence_as_well_as_values() {
+        // /m/ is [+labial -coronal -dorsal -round]; /n/ is [-labial +coronal
+        // -dorsal] with no rounding value at all.
+        let n_place = bundle(&["-labial", "+coronal", "-dorsal"]);
+        let p_place = bundle(&["+labial", "-coronal", "-dorsal", "-round"]);
+        let t_place = bundle(&["-labial", "+coronal", "-dorsal"]);
+
+        // n + p's place -> gains -round.
+        let assimilated = n_place.copy_node(p_place, FeatureNode::Place).expect("p has place");
+        assert_eq!(assimilated.get(Feature::Labial), Some(Sign::Plus));
+        assert_eq!(assimilated.get(Feature::Round), Some(Sign::Minus));
+
+        // m + t's place -> LOSES its rounding value, because /t/ has none.
+        let m_place = p_place;
+        let back = m_place.copy_node(t_place, FeatureNode::Place).expect("t has place");
+        assert_eq!(back.get(Feature::Coronal), Some(Sign::Plus));
+        assert_eq!(
+            back.get(Feature::Round),
+            None,
+            "a copy must be able to remove a cell, or the result matches no phoneme"
+        );
+        assert_eq!(back, t_place, "the result is byte-identical to /t/'s place");
+    }
+
+    #[test]
+    fn a_donor_with_no_place_does_not_bind() {
+        let target = bundle(&["-labial", "+coronal", "-dorsal"]);
+        let placeless = bundle(&["+voice"]);
+        assert_eq!(
+            target.copy_node(placeless, FeatureNode::Place),
+            None,
+            "a donor with no place has no place to give"
+        );
+    }
+
+    /// The distinction that matters: an individual absence inside a valued node is
+    /// copied; a wholly unvalued node refuses.
+    #[test]
+    fn a_donor_valuing_one_articulator_binds_even_if_dependents_are_absent() {
+        let target = bundle(&["+labial", "-coronal", "-dorsal", "-round"]);
+        let donor = bundle(&["-labial", "+coronal", "-dorsal"]);
+        assert!(target.copy_node(donor, FeatureNode::Place).is_some());
+    }
+
+    #[test]
+    fn the_place_node_covers_its_articulators_and_their_dependents() {
+        let place = FeatureNode::Place.features();
+        for required in [
+            Feature::Labial,
+            Feature::Coronal,
+            Feature::Dorsal,
+            Feature::High,
+            Feature::Low,
+            Feature::Back,
+            Feature::Round,
+        ] {
+            assert!(place.contains(&required), "{} missing", required.name());
+        }
+        assert_eq!(FeatureNode::Laryngeal.features(), &[Feature::Voice]);
+        assert_eq!(FeatureNode::Place.name(), "place");
+    }
+
+    #[test]
+    fn a_feature_node_round_trips_in_snake_case() {
+        let text = ron::ser::to_string(&FeatureNode::Place).expect("serialise");
+        assert_eq!(text, "place");
+        assert_eq!(
+            ron::from_str::<FeatureNode>(&text).expect("deserialise"),
+            FeatureNode::Place
+        );
     }
 }

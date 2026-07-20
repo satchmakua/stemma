@@ -1,6 +1,6 @@
 [package]
 name = "stem_phonology"
-description = "Phoneme inventories and phonological structure for Stemma."
+description = "Phoneme inventories, distinctive features, phonotactics, and prosody for Stemma."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -12,6 +12,9 @@ repository.workspace = true
 stem_core.workspace = true
 serde.workspace = true
 rand.workspace = true
+
+[dev-dependencies]
+ron.workspace = true
 
 [lints]
 workspace = true
