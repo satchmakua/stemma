@@ -100,6 +100,20 @@ pub struct Syllable {
     pub pattern: String,
     /// Its segments, in order. **This is the data.**
     pub segments: Vec<PhonemeId>,
+    /// This syllable's prominence, or `None` when no prosodic analysis has run.
+    ///
+    /// Appended **last** so the derived `Ord` keeps `(pattern, segments)` as the
+    /// primary key. (`Hash` does change for every `Syllable`, unmarked ones
+    /// included, because a derived `Hash` feeds every field to the hasher. That is
+    /// inert: Rust's default hasher is not stable across runs anyway, and
+    /// `docs/adr/0006` already forbids `stem_export` from sorting. Recorded because
+    /// the opposite claim is easy to make and wrong.)
+    ///
+    /// `skip_serializing_if` keeps every M1/M2 lexicon byte-identical on a round
+    /// trip, and `#[serde(default)]` keeps every saved file loading —
+    /// `deny_unknown_fields` rejects *unknown* fields, never missing ones.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stress: Option<crate::prosody::Stress>,
 }
 
 /// One generated root.
@@ -172,6 +186,66 @@ impl Root {
             out.push_str(part(inventory.require(id)?));
         }
         Ok(out)
+    }
+
+    /// The segment at a flat index in [`Self::segments`] order.
+    ///
+    /// Flat because environments are flat: adjacency crosses syllable boundaries,
+    /// and the acceptance test depends on it — the /k/ of `ta.ka.la` is
+    /// intervocalic *across* two boundaries, and the /n/ of `san.ka` sees a /k/ in
+    /// the next syllable.
+    pub fn segment_at(&self, flat: usize) -> Option<&PhonemeId> {
+        self.segments().nth(flat)
+    }
+
+    /// The `(syllable, offset)` coordinates of a flat index.
+    pub fn locate(&self, flat: usize) -> Option<(usize, usize)> {
+        let mut seen = 0;
+        for (s, syllable) in self.syllables.iter().enumerate() {
+            let len = syllable.segments.len();
+            if flat < seen + len {
+                return Some((s, flat - seen));
+            }
+            seen += len;
+        }
+        None
+    }
+
+    /// The syllable containing a flat index — the prosodic domain a rule's
+    /// `stress` condition reads.
+    pub fn syllable_at(&self, flat: usize) -> Option<&Syllable> {
+        self.locate(flat).map(|(s, _)| &self.syllables[s])
+    }
+
+    /// Replaces the segment at a flat index. `false` if out of range.
+    pub fn replace_at(&mut self, flat: usize, id: PhonemeId) -> bool {
+        match self.locate(flat) {
+            Some((s, offset)) => {
+                self.syllables[s].segments[offset] = id;
+                true
+            }
+            None => false,
+        }
+    }
+
+    /// Removes the segment at a flat index, dropping the enclosing syllable if it
+    /// becomes empty, and returning what was removed.
+    ///
+    /// An empty syllable is not a phonological object; it is a husk whose only
+    /// content is history, and history belongs in the derivation rather than in a
+    /// corpse in the data. Keeping it would make `syllables.len()` lie about
+    /// syllable count — the only thing `Root` carries a syllabification for — and
+    /// would hand the prosody assigner a phantom syllable to stress.
+    ///
+    /// The `pattern` of a syllable that merely *shrinks* is left alone: that is
+    /// provenance, and going stale is honest history (see [`Syllable`]'s docs).
+    pub fn remove_at(&mut self, flat: usize) -> Option<PhonemeId> {
+        let (s, offset) = self.locate(flat)?;
+        let removed = self.syllables[s].segments.remove(offset);
+        if self.syllables[s].segments.is_empty() {
+            self.syllables.remove(s);
+        }
+        Some(removed)
     }
 
     /// The slot classes of each syllable, for checking against
@@ -374,6 +448,10 @@ impl<'a> RootGenerator<'a> {
             syllables.push(Syllable {
                 pattern: pattern.clone(),
                 segments,
+                // Generation is prosody-free: `Prosody::assign` marks a word when
+                // rules are applied to it, not when it is coined. A root drawn and
+                // never evolved is honestly unanalysed.
+                stress: None,
             });
         }
 
@@ -660,6 +738,7 @@ mod tests {
             syllables: vec![Syllable {
                 pattern: "CV".to_owned(),
                 segments: vec![PhonemeId::new("ph_j"), PhonemeId::new("ph_a")],
+            stress: None,
             }],
         };
         assert_eq!(root.written(&inventory).unwrap(), "ya");
@@ -673,6 +752,7 @@ mod tests {
             syllables: vec![Syllable {
                 pattern: "V".to_owned(),
                 segments: vec![PhonemeId::new("ph_a")],
+            stress: None,
             }],
         };
         assert!(root.written(&empty).is_err());

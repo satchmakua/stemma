@@ -31,6 +31,9 @@ fn syllable(pattern: &str, segments: &[&str]) -> Syllable {
     Syllable {
         pattern: pattern.to_owned(),
         segments: segments.iter().map(|s| PhonemeId::new(*s)).collect(),
+        // The canary is a hand-built genome that never went through a rule, so it
+        // is honestly unanalysed for stress.
+        stress: None,
     }
 }
 

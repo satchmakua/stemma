@@ -420,6 +420,7 @@ name = "stem_phonology"
 version = "0.1.0"
 dependencies = [
  "rand",
+ "ron",
  "serde",
  "stem_core",
 ]
