@@ -126,6 +126,24 @@ pub struct WordEntry {
     /// How this entry came to exist.
     #[serde(default)]
     pub source: WordSource,
+
+    /// This word's recorded derivation (`docs/adr/0007`'s deferred `trace`,
+    /// arriving in exactly the shape that ADR promised).
+    ///
+    /// `None` means this word has never been passed through a rule. ADR-0007: "a
+    /// proto-word has no derivation, so an empty trace on one is not a missing
+    /// trace, it is a category error." An `Option` says that; a bare `Vec` erases
+    /// it.
+    ///
+    /// `Some(Derivation { steps: [], .. })` is the genuinely different third
+    /// state: exposed to the whole rule sequence and changed by none of it. The
+    /// acceptance fixture's `*sawel` is exactly that, and only this encoding can
+    /// say both.
+    ///
+    /// No proto file changes a byte: `skip_serializing_if` keeps the field out of
+    /// every file that never evolved.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub trace: Option<crate::trace::Derivation>,
 }
 
 impl WordEntry {

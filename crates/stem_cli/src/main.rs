@@ -114,6 +114,41 @@ enum Command {
         #[arg(long)]
         out: Option<PathBuf>,
     },
+
+    /// Apply an ordered rule set, producing the next stage of the lineage.
+    ApplyRules {
+        /// Path to a language file (`.ron` or `.json`).
+        path: PathBuf,
+        /// Path to a rule-set file (`.ron` or `.json`).
+        #[arg(long)]
+        rules: PathBuf,
+        /// The evolved language's id.
+        #[arg(long)]
+        id: String,
+        /// The evolved language's display name.
+        #[arg(long)]
+        name: String,
+        /// Simulated years the changes span.
+        #[arg(long, default_value_t = 0)]
+        years: i32,
+        /// Write the evolved language here; omitted, print a summary only.
+        #[arg(long)]
+        out: Option<PathBuf>,
+    },
+
+    /// Print one word's recorded derivation, rule by rule.
+    Trace {
+        /// Path to a language file (`.ron` or `.json`).
+        path: PathBuf,
+        /// The word to trace, by id (`w_0001`).
+        word: String,
+    },
+
+    /// Validate and summarise a rule-set file.
+    Rules {
+        /// Path to a rule-set file (`.ron` or `.json`).
+        path: PathBuf,
+    },
 }
 
 fn main() -> ExitCode {
@@ -150,6 +185,16 @@ fn run() -> Result<ExitCode> {
         } => new_lexicon(&path, seed, concepts, out.as_deref()),
         Command::ExportMd { path, out } => export(&path, out.as_deref(), Rendering::Markdown),
         Command::ExportCsv { path, out } => export(&path, out.as_deref(), Rendering::Csv),
+        Command::ApplyRules {
+            path,
+            rules,
+            id,
+            name,
+            years,
+            out,
+        } => apply_rules(&path, &rules, &id, &name, years, out.as_deref()),
+        Command::Trace { path, word } => trace(&path, &word),
+        Command::Rules { path } => rules_summary(&path),
     }
 }
 
@@ -396,6 +441,106 @@ fn new_lexicon(
     }
 
     Ok(ExitCode::SUCCESS)
+}
+
+fn apply_rules(
+    path: &std::path::Path,
+    rules_path: &std::path::Path,
+    id: &str,
+    name: &str,
+    years: i32,
+    out: Option<&std::path::Path>,
+) -> Result<ExitCode> {
+    let genome = load_genome(path)?;
+    let rule_set: stem_soundchange::RuleSet = stem_io::load(rules_path)
+        .with_context(|| format!("loading rules from `{}`", rules_path.display()))?;
+
+    let (evolved, report) = genome
+        .evolve(id, name, &rule_set, years)
+        .with_context(|| format!("evolving `{}` under `{}`", genome.name, rule_set.name))?;
+
+    eprintln!(
+        "{} -> {} — {} rules applied over {} words",
+        genome.name,
+        evolved.name,
+        rule_set.rules.len(),
+        evolved.lexicon.len()
+    );
+    for issue in &report.issues {
+        eprintln!("  {issue}");
+    }
+
+    match out {
+        Some(destination) => {
+            // Gating lives here and only here: `apply_rules` always completes and
+            // always reports, but a file that fails its own validation is not
+            // written — that would persist a language `stemma validate` rejects.
+            let verdict = evolved.validate();
+            if !verdict.is_ok() {
+                eprintln!("refusing to write `{}`:", destination.display());
+                print_report(&verdict);
+                return Ok(ExitCode::FAILURE);
+            }
+            stem_io::save(destination, &evolved)
+                .with_context(|| format!("writing `{}`", destination.display()))?;
+            eprintln!("-> {}", destination.display());
+        }
+        None => {
+            for entry in evolved.lexicon.iter() {
+                println!(
+                    "{}\t{}\t{}",
+                    entry.written(&evolved.phonemes)?,
+                    entry.display_gloss().unwrap_or("?"),
+                    entry.id,
+                );
+            }
+        }
+    }
+
+    Ok(ExitCode::SUCCESS)
+}
+
+fn trace(path: &std::path::Path, word: &str) -> Result<ExitCode> {
+    let genome = load_genome(path)?;
+    let entry = genome
+        .lexicon
+        .require(&stem_core::WordId::new(word))
+        .with_context(|| format!("looking up `{word}` in `{}`", genome.name))?;
+
+    // The whole string is built by the library, so the M11 UI renders the same
+    // text through the same function. The CLI contributes parsing and printing.
+    let rendered =
+        stem_soundchange::render_derivation(entry, &genome.applied_rules, &genome.phonemes)
+            .with_context(|| format!("rendering the derivation of `{word}`"))?;
+    print!("{rendered}");
+
+    Ok(ExitCode::SUCCESS)
+}
+
+fn rules_summary(path: &std::path::Path) -> Result<ExitCode> {
+    let rule_set: stem_soundchange::RuleSet =
+        stem_io::load(path).with_context(|| format!("loading rules from `{}`", path.display()))?;
+
+    println!("{} ({})", rule_set.name, rule_set.id);
+    if !rule_set.description.is_empty() {
+        println!("{}", rule_set.description);
+    }
+    println!();
+    for (i, rule) in rule_set.rules.iter().enumerate() {
+        println!(
+            "  {i}  {}  {}  ({} years)",
+            rule.id, rule.name, rule.chronology_years
+        );
+    }
+    println!();
+
+    let report = rule_set.validate();
+    print_report(&report);
+    Ok(if report.is_ok() {
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::FAILURE
+    })
 }
 
 /// Which document to render.

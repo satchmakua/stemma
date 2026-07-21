@@ -320,8 +320,11 @@ impl<'a> RootGenerator<'a> {
         // are deliberately excluded: M1's generator reads `kind` and
         // `frequency_weight` and nothing else, so blocking generation on a feature
         // it never consults would refuse a working pre-M1 file for a fault that
-        // cannot affect its output. `features_unspecified` is a Warning for the
-        // same reason (`inventory.rs`), and this keeps the two consistent.
+        // cannot affect its output. That is exactly what `generation_blocking`
+        // filters — `features_unspecified` has been an **Error** since M3, when a
+        // rule engine that gates on it (unfiltered) came to exist, but it stays
+        // filtered here because generation genuinely never reads a feature
+        // (`inventory.rs`, `M3-SPEC` §9.6).
         report.absorb("phonology", generation_blocking(inventory.validate()));
 
         // `validate` reports these as Notes — a language may legitimately not have
@@ -602,9 +605,65 @@ mod tests {
     /// do not reject. Generation must therefore work.
     #[test]
     fn a_vowel_only_language_can_still_generate() {
+        // Fully featured, because `features_unspecified` is an Error since M3 and
+        // this test's whole point is that a language `validate` merely WARNS about
+        // (`no_consonants`) must still generate.
+        let vowel = |id: &str, ipa: &str, weight: u32, tokens: &[&str]| {
+            let bundle = crate::FeatureBundle::try_from(
+                tokens.iter().map(|s| (*s).to_owned()).collect::<Vec<_>>(),
+            )
+            .expect("valid feature list");
+            Phoneme::new(id, ipa, SegmentKind::Vowel)
+                .with_weight(weight)
+                .with_features(bundle)
+        };
         let vowels = PhonemeInventory::from_phonemes([
-            Phoneme::new("ph_a", "a", SegmentKind::Vowel).with_weight(60),
-            Phoneme::new("ph_i", "i", SegmentKind::Vowel).with_weight(40),
+            vowel(
+                "ph_a",
+                "a",
+                60,
+                &[
+                    "+syllabic",
+                    "-consonantal",
+                    "+sonorant",
+                    "+approximant",
+                    "+continuant",
+                    "-nasal",
+                    "-lateral",
+                    "-trill",
+                    "+voice",
+                    "-labial",
+                    "-coronal",
+                    "+dorsal",
+                    "-high",
+                    "+low",
+                    "+back",
+                    "-round",
+                ],
+            ),
+            vowel(
+                "ph_i",
+                "i",
+                40,
+                &[
+                    "+syllabic",
+                    "-consonantal",
+                    "+sonorant",
+                    "+approximant",
+                    "+continuant",
+                    "-nasal",
+                    "-lateral",
+                    "-trill",
+                    "+voice",
+                    "-labial",
+                    "-coronal",
+                    "+dorsal",
+                    "+high",
+                    "-low",
+                    "-back",
+                    "-round",
+                ],
+            ),
         ]);
         let phonotactics = Phonotactics {
             templates: vec![
@@ -738,7 +797,7 @@ mod tests {
             syllables: vec![Syllable {
                 pattern: "CV".to_owned(),
                 segments: vec![PhonemeId::new("ph_j"), PhonemeId::new("ph_a")],
-            stress: None,
+                stress: None,
             }],
         };
         assert_eq!(root.written(&inventory).unwrap(), "ya");
@@ -752,7 +811,7 @@ mod tests {
             syllables: vec![Syllable {
                 pattern: "V".to_owned(),
                 segments: vec![PhonemeId::new("ph_a")],
-            stress: None,
+                stress: None,
             }],
         };
         assert!(root.written(&empty).is_err());

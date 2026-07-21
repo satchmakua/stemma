@@ -1,0 +1,55 @@
+[
+  {
+    "word_id": "w_0001",
+    "input": "takala",
+    "rule": "Intervocalic voicing",
+    "matches": [
+      {
+        "span": [
+          2,
+          3
+        ],
+        "before": "k",
+        "after": "g",
+        "environment": "a _ a",
+        "innovated": "ɡ"
+      }
+    ],
+    "output": "tagala"
+  },
+  {
+    "word_id": "w_0001",
+    "input": "tagala",
+    "rule": "Final unstressed vowel loss",
+    "matches": [
+      {
+        "span": [
+          5,
+          6
+        ],
+        "before": "a",
+        "after": "∅",
+        "environment": "l _ #"
+      }
+    ],
+    "output": "tagal"
+  },
+  {
+    "word_id": "w_0001",
+    "input": "tagal",
+    "rule": "Velar lenition",
+    "matches": [
+      {
+        "span": [
+          2,
+          3
+        ],
+        "before": "g",
+        "after": "ɣ",
+        "environment": "a _ a",
+        "innovated": "ɣ"
+      }
+    ],
+    "output": "taɣal"
+  }
+]

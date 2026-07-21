@@ -21,9 +21,11 @@ anyhow.workspace = true
 clap.workspace = true
 stem_lexicon.workspace = true
 stem_export.workspace = true
+stem_soundchange.workspace = true
 
 [dev-dependencies]
 sha2.workspace = true
+serde_json.workspace = true
 
 [lints]
 workspace = true

@@ -370,11 +370,16 @@ fn a_language_that_validate_only_warns_about_can_still_generate() {
     let path = dir.join("vowels.ron");
     std::fs::write(
         &path,
+        // Fully featured: `features_unspecified` is an Error since M3, and this
+        // test's point is that a language `validate` merely WARNS about
+        // (`no_consonants`) must still generate.
         r#"(
             id: "vowelish", name: "Vowelish", seed: 7,
             phonemes: [
-                (id: "ph_a", ipa: "a", kind: vowel, frequency_weight: 60),
-                (id: "ph_i", ipa: "i", kind: vowel, frequency_weight: 40),
+                (id: "ph_a", ipa: "a", kind: vowel, frequency_weight: 60,
+                 features: ["+syllabic", "-consonantal", "+sonorant", "+approximant", "+continuant", "-nasal", "-lateral", "-trill", "+voice", "-labial", "-coronal", "+dorsal", "-high", "+low", "+back", "-round"]),
+                (id: "ph_i", ipa: "i", kind: vowel, frequency_weight: 40,
+                 features: ["+syllabic", "-consonantal", "+sonorant", "+approximant", "+continuant", "-nasal", "-lateral", "-trill", "+voice", "-labial", "-coronal", "+dorsal", "+high", "-low", "-back", "-round"]),
             ],
             phonotactics: (
                 templates: [(pattern: "V", weight: 60), (pattern: "VV", weight: 40)],

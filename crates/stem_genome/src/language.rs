@@ -1,9 +1,10 @@
 //! The genome itself.
 
 use serde::{Deserialize, Serialize};
-use stem_core::{LanguageId, Severity, Validate, ValidationReport};
+use stem_core::{LanguageId, Result, Severity, StemmaError, Validate, ValidationReport};
 use stem_lexicon::Lexicon;
-use stem_phonology::{PhonemeInventory, Phonotactics};
+use stem_phonology::{PhonemeInventory, Phonotactics, Prosody};
+use stem_soundchange::{RuleSet, SoundChangeRule};
 
 /// Everything that defines one language at one point in its history.
 ///
@@ -76,6 +77,32 @@ pub struct LanguageGenome {
     #[serde(default, skip_serializing_if = "Lexicon::is_empty")]
     pub lexicon: Lexicon,
 
+    /// How this language places stress (`DESIGN.md` §8.1's `prosody`, ROADMAP M3).
+    ///
+    /// `skip_serializing_if` the default, so a language with no stress system —
+    /// every pre-M3 file — round-trips byte-identically.
+    #[serde(default, skip_serializing_if = "Prosody::is_unspecified")]
+    pub prosody: Prosody,
+
+    /// The sound changes that produced this language's current lexicon.
+    ///
+    /// **Past tense, and that is the whole design.** Not a queue: a `rules:` field
+    /// meaning "rules to apply" makes double application representable and needs
+    /// an applied-up-to cursor that can desynchronise from the forms. Applying is
+    /// an explicit operation over a separate [`RuleSet`] file; this is the record
+    /// of what already happened — the "rule history (M3)" this type's own docs
+    /// have promised since M0.
+    ///
+    /// An ordered `Vec` with stable indices — never a set, never a map, never
+    /// re-sorted. `RuleApplication::index` indexes into it. Ids may repeat: real
+    /// histories apply intervocalic voicing twice, in different strata.
+    ///
+    /// §8.5's `HistoricalEvent` is deferred to M4: of its five fields the only one
+    /// §10.4's timeline reads is the date, and that ships as `chronology_years` on
+    /// the rule. A union with one inhabited variant is scaffolding.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub applied_rules: Vec<SoundChangeRule>,
+
     /// Free-form authorial notes. Not interpreted by the engine.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub notes: Vec<String>,
@@ -93,8 +120,17 @@ impl LanguageGenome {
             phonemes: PhonemeInventory::new(),
             phonotactics: Phonotactics::new(),
             lexicon: Lexicon::new(),
+            prosody: Prosody::new(),
+            applied_rules: Vec::new(),
             notes: Vec::new(),
         }
+    }
+
+    /// Sets the prosodic system.
+    #[must_use]
+    pub fn with_prosody(mut self, prosody: Prosody) -> Self {
+        self.prosody = prosody;
+        self
     }
 
     /// Sets the RNG seed.
@@ -221,7 +257,91 @@ impl Validate for LanguageGenome {
             stem_lexicon::check_against_inventory(&self.lexicon, &self.phonemes),
         );
 
+        // Not optional: putting the rule checks only in a free function the gate
+        // never calls is how the validator and the engine disagree *from the
+        // validator side* — `rules.empty_target` is an Error and `stemma validate`
+        // must report it.
+        report.absorb(
+            "rules",
+            stem_soundchange::check_applied_log(
+                &self.applied_rules,
+                &self.phonemes,
+                &self.prosody,
+                &self.lexicon,
+            ),
+        );
+
         report
+    }
+}
+
+impl LanguageGenome {
+    /// Applies a rule set, producing the **next stage of this lineage**.
+    ///
+    /// A new genome with a new `id`, `parent: Some(self.id)`, and
+    /// `lineage_depth_years` advanced. It is emphatically not an in-place edit: in
+    /// a file-based project format there is no in-place, there are two files, and
+    /// two genomes sharing a `LanguageId` is exactly what `docs/adr/0003` says
+    /// must stay an Error. It is also not M4's fork, which produces *sisters* from
+    /// one parent and copies cognate sets across a split; this produces one
+    /// descendant and there is nothing to coordinate.
+    ///
+    /// `applied_rules` accumulates, so derivation indices stay meaningful across
+    /// strata and `stemma trace` on the output is self-contained. The returned
+    /// report carries the rule checks and the run report, bare-coded and already
+    /// absorbed under `rules` / `soundchange`.
+    pub fn evolve(
+        &self,
+        id: impl Into<LanguageId>,
+        name: impl Into<String>,
+        rules: &RuleSet,
+        elapsed_years: i32,
+    ) -> Result<(LanguageGenome, ValidationReport)> {
+        let mut report = ValidationReport::new();
+        report.absorb("rules", rules.validate());
+        report.absorb(
+            "rules",
+            stem_soundchange::check_against_language(
+                &rules.rules,
+                &self.phonemes,
+                &self.prosody,
+                &self.lexicon,
+            ),
+        );
+        if !report.is_ok() {
+            return Err(StemmaError::Invalid(
+                format!("the rule set `{}` cannot be applied", rules.id),
+                report,
+            ));
+        }
+
+        let evolution = stem_soundchange::apply_rules(
+            &rules.rules,
+            self.applied_rules.len() as u32,
+            &self.phonemes,
+            &self.prosody,
+            &self.lexicon,
+        )?;
+        report.absorb("soundchange", evolution.report);
+
+        let mut applied_rules = self.applied_rules.clone();
+        applied_rules.extend(rules.rules.iter().cloned());
+
+        let descendant = LanguageGenome {
+            id: id.into(),
+            name: name.into(),
+            parent: Some(self.id.clone()),
+            lineage_depth_years: self.lineage_depth_years + elapsed_years,
+            seed: self.seed,
+            phonemes: evolution.inventory,
+            phonotactics: self.phonotactics.clone(),
+            lexicon: evolution.lexicon,
+            prosody: self.prosody,
+            applied_rules,
+            notes: self.notes.clone(),
+        };
+
+        Ok((descendant, report))
     }
 }
 
@@ -230,13 +350,85 @@ mod tests {
     use super::*;
     use stem_phonology::{Phoneme, SegmentKind};
 
+    fn featured(id: &str, ipa: &str, kind: SegmentKind, tokens: &[&str]) -> Phoneme {
+        let bundle = stem_phonology::FeatureBundle::try_from(
+            tokens.iter().map(|s| (*s).to_owned()).collect::<Vec<_>>(),
+        )
+        .expect("valid feature list");
+        Phoneme::new(id, ipa, kind).with_features(bundle)
+    }
+
+    /// Fully featured since M3 — `features_unspecified` is an Error now, and this
+    /// helper serves tests whose point is that a well-formed language is clean.
     fn asterian() -> LanguageGenome {
         LanguageGenome::proto("proto_asterian", "Proto-Asterian")
             .with_seed(42)
             .with_phonemes(PhonemeInventory::from_phonemes([
-                Phoneme::new("ph_t", "t", SegmentKind::Consonant),
-                Phoneme::new("ph_k", "k", SegmentKind::Consonant),
-                Phoneme::new("ph_a", "a", SegmentKind::Vowel),
+                featured(
+                    "ph_t",
+                    "t",
+                    SegmentKind::Consonant,
+                    &[
+                        "-syllabic",
+                        "+consonantal",
+                        "-sonorant",
+                        "-approximant",
+                        "-continuant",
+                        "-nasal",
+                        "-lateral",
+                        "-trill",
+                        "-voice",
+                        "-labial",
+                        "+coronal",
+                        "-dorsal",
+                    ],
+                ),
+                featured(
+                    "ph_k",
+                    "k",
+                    SegmentKind::Consonant,
+                    &[
+                        "-syllabic",
+                        "+consonantal",
+                        "-sonorant",
+                        "-approximant",
+                        "-continuant",
+                        "-nasal",
+                        "-lateral",
+                        "-trill",
+                        "-voice",
+                        "-labial",
+                        "-coronal",
+                        "+dorsal",
+                        "+high",
+                        "-low",
+                        "+back",
+                        "-round",
+                    ],
+                ),
+                featured(
+                    "ph_a",
+                    "a",
+                    SegmentKind::Vowel,
+                    &[
+                        "+syllabic",
+                        "-consonantal",
+                        "+sonorant",
+                        "+approximant",
+                        "+continuant",
+                        "-nasal",
+                        "-lateral",
+                        "-trill",
+                        "+voice",
+                        "-labial",
+                        "-coronal",
+                        "+dorsal",
+                        "-high",
+                        "+low",
+                        "+back",
+                        "-round",
+                    ],
+                ),
             ]))
     }
 

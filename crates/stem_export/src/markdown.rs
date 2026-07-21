@@ -103,14 +103,20 @@ pub fn write_lexicon_markdown(out: &mut String, genome: &LanguageGenome) -> Resu
             .map_err(fmt_err)?;
         }
         Some(parent) => {
+            // The per-word derivation *view* is M5's; naming the recorded history
+            // and pointing at `stemma trace` is M3's honest boundary.
             writeln!(
                 out,
-                "{} descends from `{parent}`. Per-word derivations arrive with the sound-change",
-                escape(&genome.name)
+                "{} descends from `{parent}` through {} recorded sound change(s). Every",
+                escape(&genome.name),
+                genome.applied_rules.len()
             )
             .map_err(fmt_err)?;
-            writeln!(out, "engine; until then, cognate sets record the descent.")
-                .map_err(fmt_err)?;
+            writeln!(
+                out,
+                "entry carries its derivation; run `stemma trace <file> <word>` to read one."
+            )
+            .map_err(fmt_err)?;
         }
     }
 
