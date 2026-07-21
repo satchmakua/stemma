@@ -128,8 +128,11 @@ enum Command {
         /// The evolved language's display name.
         #[arg(long)]
         name: String,
-        /// Simulated years the changes span.
-        #[arg(long, default_value_t = 0)]
+        /// Simulated years the changes span. Absolute time runs from the lineage
+        /// root, so this is added to the parent's depth; negatives are rejected —
+        /// a stratum earlier than its parent would slip the genome gate
+        /// (`negative_lineage_depth` needs *total* < 0), matching `fork`.
+        #[arg(long, default_value_t = 0, value_parser = clap::value_parser!(i32).range(0..))]
         years: i32,
         /// Write the evolved language here; omitted, print a summary only.
         #[arg(long)]
@@ -148,6 +151,48 @@ enum Command {
     Rules {
         /// Path to a rule-set file (`.ron` or `.json`).
         path: PathBuf,
+    },
+
+    /// Fork a language into a daughter — a verbatim copy under a new identity,
+    /// or (with `--rules`) a daughter that has already undergone sound changes.
+    ///
+    /// Bare, this is `LanguageGenome::fork`: same phonology, lexicon, cognate
+    /// sets, and history as the parent, with a parent edge back. With `--rules`
+    /// it is exactly `apply-rules` under a verb that says "a sister branched
+    /// off" rather than "the language advanced a stage" — the file records no
+    /// verb, so the two are the same shape.
+    Fork {
+        /// Path to the parent language (`.ron` or `.json`).
+        parent: PathBuf,
+        /// The daughter's id.
+        #[arg(long)]
+        id: String,
+        /// The daughter's display name.
+        #[arg(long)]
+        name: String,
+        /// A rule set to apply as the daughter branches. Omitted, the daughter
+        /// is a verbatim copy at the split instant.
+        #[arg(long)]
+        rules: Option<PathBuf>,
+        /// Simulated years the split (and any changes) span. Absolute time is
+        /// measured from the lineage root, so this is added to the parent's
+        /// depth. Negatives are rejected — time runs forwards.
+        #[arg(long, default_value_t = 0, value_parser = clap::value_parser!(i32).range(0..))]
+        years: i32,
+        /// Write the daughter here; omitted, print its lexicon as a summary.
+        #[arg(long)]
+        out: Option<PathBuf>,
+    },
+
+    /// Assemble a family from several language files and report on its lineage.
+    ///
+    /// Descent is read from each genome's `parent` field; nothing about the
+    /// graph is stored. Prints the family tree and cognate coverage, then the
+    /// family-level validation report.
+    Family {
+        /// The language files to assemble, in the order they should appear.
+        #[arg(required = true)]
+        files: Vec<PathBuf>,
     },
 }
 
@@ -195,6 +240,15 @@ fn run() -> Result<ExitCode> {
         } => apply_rules(&path, &rules, &id, &name, years, out.as_deref()),
         Command::Trace { path, word } => trace(&path, &word),
         Command::Rules { path } => rules_summary(&path),
+        Command::Fork {
+            parent,
+            id,
+            name,
+            rules,
+            years,
+            out,
+        } => fork(&parent, &id, &name, rules.as_deref(), years, out.as_deref()),
+        Command::Family { files } => family(&files),
     }
 }
 
@@ -452,19 +506,44 @@ fn apply_rules(
     out: Option<&std::path::Path>,
 ) -> Result<ExitCode> {
     let genome = load_genome(path)?;
+    let (evolved, report) = evolve_with_rules(&genome, rules_path, id, name, years)?;
+    write_descendant(&genome, &evolved, &report, out)
+}
+
+/// Loads a rule set and evolves `parent` under it, reporting which files were
+/// involved if it fails. Shared by `apply-rules` and `fork --rules`, so the two
+/// verbs are the *same* operation on a language and cannot drift.
+fn evolve_with_rules(
+    parent: &LanguageGenome,
+    rules_path: &std::path::Path,
+    id: &str,
+    name: &str,
+    years: i32,
+) -> Result<(LanguageGenome, ValidationReport)> {
     let rule_set: stem_soundchange::RuleSet = stem_io::load(rules_path)
         .with_context(|| format!("loading rules from `{}`", rules_path.display()))?;
-
-    let (evolved, report) = genome
+    parent
         .evolve(id, name, &rule_set, years)
-        .with_context(|| format!("evolving `{}` under `{}`", genome.name, rule_set.name))?;
+        .with_context(|| format!("evolving `{}` under `{}`", parent.name, rule_set.name))
+}
 
+/// Prints the run summary and report, then either writes the descendant (gated
+/// on its own validation) or prints its lexicon as a TSV. **The write gate lives
+/// here and only here** (`docs/adr/0008`): the descendant always exists and is
+/// always reported, but a file that fails its own validation is never written —
+/// that would persist a language `stemma validate` rejects.
+fn write_descendant(
+    parent: &LanguageGenome,
+    descendant: &LanguageGenome,
+    report: &ValidationReport,
+    out: Option<&std::path::Path>,
+) -> Result<ExitCode> {
     eprintln!(
-        "{} -> {} — {} rules applied over {} words",
-        genome.name,
-        evolved.name,
-        rule_set.rules.len(),
-        evolved.lexicon.len()
+        "{} -> {} — {} words, {} rules in history",
+        parent.name,
+        descendant.name,
+        descendant.lexicon.len(),
+        descendant.applied_rules.len(),
     );
     for issue in &report.issues {
         eprintln!("  {issue}");
@@ -472,24 +551,21 @@ fn apply_rules(
 
     match out {
         Some(destination) => {
-            // Gating lives here and only here: `apply_rules` always completes and
-            // always reports, but a file that fails its own validation is not
-            // written — that would persist a language `stemma validate` rejects.
-            let verdict = evolved.validate();
+            let verdict = descendant.validate();
             if !verdict.is_ok() {
                 eprintln!("refusing to write `{}`:", destination.display());
                 print_report(&verdict);
                 return Ok(ExitCode::FAILURE);
             }
-            stem_io::save(destination, &evolved)
+            stem_io::save(destination, descendant)
                 .with_context(|| format!("writing `{}`", destination.display()))?;
             eprintln!("-> {}", destination.display());
         }
         None => {
-            for entry in evolved.lexicon.iter() {
+            for entry in descendant.lexicon.iter() {
                 println!(
                     "{}\t{}\t{}",
-                    entry.written(&evolved.phonemes)?,
+                    entry.written(&descendant.phonemes)?,
                     entry.display_gloss().unwrap_or("?"),
                     entry.id,
                 );
@@ -498,6 +574,56 @@ fn apply_rules(
     }
 
     Ok(ExitCode::SUCCESS)
+}
+
+fn fork(
+    parent_path: &std::path::Path,
+    id: &str,
+    name: &str,
+    rules: Option<&std::path::Path>,
+    years: i32,
+    out: Option<&std::path::Path>,
+) -> Result<ExitCode> {
+    let parent = load_genome(parent_path)?;
+
+    // With rules, a fork IS an evolve — the same code path apply-rules takes.
+    // Without, it is a verbatim relabelled copy; its report is just its own
+    // validation, so a bare fork of a depth-0 proto honestly shows
+    // `no_elapsed_time` before the gate.
+    let (daughter, report) = match rules {
+        Some(rules_path) => evolve_with_rules(&parent, rules_path, id, name, years)?,
+        None => {
+            let daughter = parent.fork(id, name, years);
+            let report = daughter.validate();
+            (daughter, report)
+        }
+    };
+
+    write_descendant(&parent, &daughter, &report, out)
+}
+
+fn family(files: &[PathBuf]) -> Result<ExitCode> {
+    let mut genomes = Vec::with_capacity(files.len());
+    for file in files {
+        genomes.push(load_genome(file)?);
+    }
+
+    let graph = stem_genome::LineageGraph::assemble(genomes);
+    // Rendering is the library's job (the `render_derivation` precedent): the
+    // M11 UI must produce identical text through this same function.
+    print!("{}", stem_genome::render_family(&graph));
+
+    // The report is printed separately from the rendering, so the snapshot test
+    // pins only the tree + coverage.
+    let report = graph.validate_family();
+    println!();
+    print_report(&report);
+
+    Ok(if report.is_ok() {
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::FAILURE
+    })
 }
 
 fn trace(path: &std::path::Path, word: &str) -> Result<ExitCode> {
@@ -648,5 +774,67 @@ mod tests {
             }
             other => panic!("expected convert, got {other:?}"),
         }
+
+        // M4's two verbs.
+        let cli = Cli::parse_from([
+            "stemma",
+            "fork",
+            "proto.ron",
+            "--id",
+            "coastal",
+            "--name",
+            "Coastal",
+            "--years",
+            "470",
+        ]);
+        match cli.command {
+            Command::Fork {
+                id, name, years, ..
+            } => {
+                assert_eq!(id, "coastal");
+                assert_eq!(name, "Coastal");
+                assert_eq!(years, 470);
+            }
+            other => panic!("expected fork, got {other:?}"),
+        }
+
+        let cli = Cli::parse_from(["stemma", "family", "a.ron", "b.ron", "c.ron"]);
+        match cli.command {
+            Command::Family { files } => assert_eq!(files.len(), 3),
+            other => panic!("expected family, got {other:?}"),
+        }
+    }
+
+    /// Both time-advancing verbs reject a negative `--years=` at parse time —
+    /// time runs forwards, and a negative elapsed value on a deep parent would
+    /// slip the genome gate (`negative_lineage_depth` needs *total* < 0), then
+    /// persist through the shared write gate. The two must agree.
+    #[test]
+    fn fork_and_apply_rules_reject_negative_years() {
+        let fork = Cli::try_parse_from([
+            "stemma",
+            "fork",
+            "proto.ron",
+            "--id",
+            "x",
+            "--name",
+            "X",
+            "--years=-5",
+        ]);
+        assert!(fork.is_err(), "fork must reject negative years");
+
+        let apply = Cli::try_parse_from([
+            "stemma",
+            "apply-rules",
+            "proto.ron",
+            "--rules",
+            "r.ron",
+            "--id",
+            "x",
+            "--name",
+            "X",
+            "--years=-5",
+        ]);
+        assert!(apply.is_err(), "apply-rules must reject negative years too");
     }
 }

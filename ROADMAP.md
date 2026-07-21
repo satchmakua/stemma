@@ -67,12 +67,18 @@ outside this phase matters until it works end to end._
   proves rule order is observable (`tag` vs `tak`); every word's trace replays to
   its stored form; two runs are byte-identical.
 
-- [ ] **M4 — Forking & lineage.** `LanguageLineageGraph`, `fork_language`, and
-  independent rule histories per daughter (`DESIGN.md` §8.6). Cognate-set IDs must
-  survive forking — that thread is what makes the comparative view possible.
-  **Test:** fork Proto-Asterian into Coastal, Highland, and Riverine; apply a
-  different rule history to each; all three lexicons differ; every cognate set is
-  present in all three; a trace walks unbroken from the modern form to the proto-form.
+- [x] **M4 — Forking & lineage.** `LanguageGenome::fork` (a verbatim copy under a
+  new identity, with a parent edge back — cognate sets copied, never minted), the
+  in-memory `LineageGraph` whose edges are *derived* from `parent` fields and never
+  stored, family-level validation, and `stemma fork` / `stemma family`
+  (`docs/adr/0008`). No `LineageEdgeKind` and no `WordEntry.ancestor` until a
+  producer needs them; the graph uses no map anywhere.
+  **Test:** `stemma fork fixtures/asterian_attested.ron --rules fixtures/rules_coastal.ron …`
+  (and Highland, Riverine) yields three sisters whose lexicons differ pairwise —
+  `takala` → **taal** / **tagal** / **tala**; `stemma family …` reports **8/8**
+  cognate sets present in all three; every daughter's trace replays to its stored
+  form and `stemma trace out/coastal.ron w_0001` walks unbroken back to `*takala`;
+  two fork runs are byte-identical.
 
 - [ ] **M5 — Cognate tables & word traces.** The two views that make the engine
   legible: the comparative table of §10.3 and the "trace this word" output of

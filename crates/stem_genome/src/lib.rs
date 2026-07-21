@@ -17,5 +17,7 @@
 //! DAG and keeps `stem_core` a true foundation. See `docs/adr/0002-crate-layering.md`.
 
 pub mod language;
+pub mod lineage;
 
 pub use language::LanguageGenome;
+pub use lineage::{CognateCoverage, LineageEdge, LineageGraph, render_family};
