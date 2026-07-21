@@ -284,11 +284,7 @@ impl FeatureBundle {
     /// target with no place at all.
     #[must_use]
     pub fn copy_node(self, donor: FeatureBundle, node: FeatureNode) -> Option<Self> {
-        if !node
-            .articulators()
-            .iter()
-            .any(|&f| donor.is_specified(f))
-        {
+        if !node.articulators().iter().any(|&f| donor.is_specified(f)) {
             return None;
         }
         let mut out = self;
@@ -796,13 +792,17 @@ mod m3_tests {
         let t_place = bundle(&["-labial", "+coronal", "-dorsal"]);
 
         // n + p's place -> gains -round.
-        let assimilated = n_place.copy_node(p_place, FeatureNode::Place).expect("p has place");
+        let assimilated = n_place
+            .copy_node(p_place, FeatureNode::Place)
+            .expect("p has place");
         assert_eq!(assimilated.get(Feature::Labial), Some(Sign::Plus));
         assert_eq!(assimilated.get(Feature::Round), Some(Sign::Minus));
 
         // m + t's place -> LOSES its rounding value, because /t/ has none.
         let m_place = p_place;
-        let back = m_place.copy_node(t_place, FeatureNode::Place).expect("t has place");
+        let back = m_place
+            .copy_node(t_place, FeatureNode::Place)
+            .expect("t has place");
         assert_eq!(back.get(Feature::Coronal), Some(Sign::Plus));
         assert_eq!(
             back.get(Feature::Round),

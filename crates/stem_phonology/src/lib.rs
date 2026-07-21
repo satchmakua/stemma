@@ -24,10 +24,11 @@ pub mod inventory;
 pub mod phoneme;
 pub mod phonotactics;
 pub mod prosody;
+pub mod reference;
 
 pub use features::{Feature, FeatureBundle, FeatureNode, FeatureParseError, Sign};
 pub use generate::{Root, RootGenerator, Syllable};
-pub use inventory::PhonemeInventory;
+pub use inventory::{PhonemeInventory, required_features_missing};
 pub use phoneme::{Phoneme, SegmentKind};
 pub use phonotactics::{Phonotactics, WeightedSyllableCount, WeightedTemplate};
 pub use prosody::{Prosody, Stress, StressPolicy, WordEdge};

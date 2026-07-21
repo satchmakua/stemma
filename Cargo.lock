@@ -351,6 +351,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "clap",
+ "serde_json",
  "sha2",
  "stem_core",
  "stem_export",
@@ -358,6 +359,7 @@ dependencies = [
  "stem_io",
  "stem_lexicon",
  "stem_phonology",
+ "stem_soundchange",
 ]
 
 [[package]]
@@ -390,6 +392,7 @@ dependencies = [
  "stem_core",
  "stem_lexicon",
  "stem_phonology",
+ "stem_soundchange",
 ]
 
 [[package]]
@@ -429,6 +432,7 @@ dependencies = [
 name = "stem_soundchange"
 version = "0.1.0"
 dependencies = [
+ "ron",
  "serde",
  "stem_core",
  "stem_lexicon",

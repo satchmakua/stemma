@@ -41,11 +41,15 @@
 pub mod build;
 pub mod concept;
 pub mod lexicon;
+pub mod trace;
 pub mod word;
 
 pub use build::{build_proto_lexicon, scoped_cognate_set};
 pub use concept::{CONCEPT_COUNT, CONCEPTS, Concept, ConceptKey, PartOfSpeech, SWADESH_COUNT};
 pub use lexicon::{Lexicon, check_against_inventory, is_portable_id};
+pub use trace::{
+    BlockReason, BlockedSite, Derivation, RuleApplication, SiteTrace, SymbolResolution,
+};
 pub use word::{WordEntry, WordSource};
 
 #[cfg(test)]
@@ -212,7 +216,7 @@ mod tests {
                         stem_core::PhonemeId::new("ph_t"),
                         stem_core::PhonemeId::new("ph_a"),
                     ],
-            stress: None,
+                    stress: None,
                 }],
             },
             glosses: Vec::new(),
@@ -220,6 +224,7 @@ mod tests {
             // Deliberately NOT STAR's ordinal.
             cognate_set: CognateSetId::new("cog_proto_asterian_0099"),
             source: WordSource::Authored,
+            trace: None,
         };
         let text = ron::ser::to_string(&entry).expect("serialise");
         let back: WordEntry = ron::from_str(&text).expect("deserialise");
@@ -281,13 +286,14 @@ mod tests {
                         stem_core::PhonemeId::new("ph_t"),
                         stem_core::PhonemeId::new("ph_a"),
                     ],
-            stress: None,
+                    stress: None,
                 }],
             },
             glosses,
             part_of_speech: PartOfSpeech::Noun,
             cognate_set: CognateSetId::new("cog_x_0001"),
             source: WordSource::Authored,
+            trace: None,
         }])
     }
 
@@ -360,13 +366,14 @@ mod tests {
                         stem_core::PhonemeId::new("ph_zzz"),
                         stem_core::PhonemeId::new("ph_a"),
                     ],
-            stress: None,
+                    stress: None,
                 }],
             },
             glosses: Vec::new(),
             part_of_speech: PartOfSpeech::Noun,
             cognate_set: CognateSetId::new("cog_x_0002"),
             source: WordSource::Authored,
+            trace: None,
         });
 
         let report = check_against_inventory(&lexicon, &inventory());
@@ -389,13 +396,14 @@ mod tests {
                         stem_core::PhonemeId::new("ph_t"),
                         stem_core::PhonemeId::new("ph_a"),
                     ],
-            stress: None,
+                    stress: None,
                 }],
             },
             glosses: Vec::new(),
             part_of_speech: PartOfSpeech::Noun,
             cognate_set: CognateSetId::new("cog_x_0001"),
             source: WordSource::Authored,
+            trace: None,
         }]);
         let report = check_against_inventory(&lexicon, &inventory());
         assert!(
@@ -430,13 +438,14 @@ mod tests {
                         stem_core::PhonemeId::new(first),
                         stem_core::PhonemeId::new("ph_a"),
                     ],
-            stress: None,
+                    stress: None,
                 }],
             },
             glosses: vec!["thing".to_owned()],
             part_of_speech: PartOfSpeech::Noun,
             cognate_set: CognateSetId::new(set),
             source: WordSource::Authored,
+            trace: None,
         };
         let lexicon = Lexicon::from_entries([
             word("w_0001", "ph_k", "cog_x_0001"),

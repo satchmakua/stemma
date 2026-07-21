@@ -35,6 +35,53 @@ const REQUIRED_OF_DORSAL: &[Feature] =
 /// Rounding is a labial gesture, so a labial segment always answers it.
 const REQUIRED_OF_LABIAL: &[Feature] = &[Feature::Round];
 
+/// Which required features this bundle fails to value, in frozen [`Feature::ALL`]
+/// order.
+///
+/// **The single implementation of the `REQUIRED_OF_ALL` / `REQUIRED_OF_DORSAL` /
+/// `REQUIRED_OF_LABIAL` geometry**, extracted from `check_features` at M3 so it
+/// has exactly three callers:
+///
+/// 1. [`PhonemeInventory`]'s `validate` → `missing_required_feature` (Error);
+/// 2. the reference table's construction test — every row is a legal phoneme;
+/// 3. the rule engine — a site whose output bundle fails this is not applied.
+///
+/// If the engine could write a bundle the validator calls broken, the two would
+/// disagree. They cannot, because they are the same function. This is the
+/// concrete discharge of the defect class this project has already been bitten
+/// by.
+pub fn required_features_missing(bundle: crate::FeatureBundle) -> Vec<Feature> {
+    use crate::Sign;
+    let dorsal = bundle.is(Feature::Dorsal, Sign::Plus);
+    let labial = bundle.is(Feature::Labial, Sign::Plus);
+    Feature::ALL
+        .iter()
+        .copied()
+        .filter(|f| {
+            let required = REQUIRED_OF_ALL.contains(f)
+                || (dorsal && REQUIRED_OF_DORSAL.contains(f))
+                || (labial && REQUIRED_OF_LABIAL.contains(f));
+            required && !bundle.is_specified(*f)
+        })
+        .collect()
+}
+
+/// Why a feature was required *of this bundle*, for the diagnostic message.
+///
+/// Takes the bundle because `round` sits in both conditional tables: on a
+/// `[+labial -dorsal]` segment it is the labial rule that demands it, and naming
+/// the dorsal rule there would send the author looking at the wrong articulator.
+fn requirement_reason(feature: Feature, bundle: crate::FeatureBundle) -> &'static str {
+    use crate::Sign;
+    if REQUIRED_OF_ALL.contains(&feature) {
+        "required of every segment"
+    } else if bundle.is(Feature::Dorsal, Sign::Plus) && REQUIRED_OF_DORSAL.contains(&feature) {
+        "required of every [+dorsal] segment"
+    } else {
+        "required of every [+labial] segment"
+    }
+}
+
 /// Above this consonant-to-vowel ratio the inventory is flagged as typologically
 /// lopsided. Natural languages cluster around 4:1; Ubykh, an extreme real case,
 /// reaches roughly 40:1. The threshold sits well past attested territory so it
@@ -117,6 +164,43 @@ impl PhonemeInventory {
         self.of_kind(kind)
             .map(|p| (p.id.clone(), p.frequency_weight))
             .unzip()
+    }
+
+    /// The first phoneme whose bundle is byte-identical to `bundle`, in authored
+    /// order.
+    ///
+    /// "First in authored order" is a pin, not an accident: `identical_features`
+    /// is deliberately only a Warning (length, tone and phonation are not
+    /// modelled, so /a/ and /aː/ legitimately collide), so a valid language may
+    /// contain two phonemes with one bundle. When it does, resolution reports
+    /// `ambiguous_target_symbol` rather than choosing silently — see
+    /// [`Self::all_by_bundle`].
+    pub fn by_bundle(&self, bundle: crate::FeatureBundle) -> Option<&Phoneme> {
+        self.phonemes.iter().find(|p| p.features == bundle)
+    }
+
+    /// Every phoneme with this exact bundle, in authored order.
+    pub fn all_by_bundle(&self, bundle: crate::FeatureBundle) -> Vec<&Phoneme> {
+        self.phonemes
+            .iter()
+            .filter(|p| p.features == bundle)
+            .collect()
+    }
+
+    /// The phoneme holding this IPA string, if any.
+    ///
+    /// Used before minting, so the engine can never manufacture `duplicate_ipa` —
+    /// an Error — by giving a new phoneme a glyph the language already writes.
+    ///
+    /// Comparison is **byte-exact**, not canonical-equivalence: an author glyph
+    /// saved decomposed (NFD `c` + U+0327) will not match the reference table's
+    /// precomposed `ç`, so in that corner a mint can slip past the guard and
+    /// leave two indistinguishably rendered glyphs in one inventory. Closing it
+    /// wants Unicode normalization data and belongs to M7's plausibility profile
+    /// as an `ipa_not_nfc` warning on authored inventories — report at the file
+    /// boundary once, not normalize in a hot comparison forever.
+    pub fn by_ipa(&self, ipa: &str) -> Option<&Phoneme> {
+        self.phonemes.iter().find(|p| p.ipa == ipa)
     }
 
     /// How many phonemes the inventory holds.
@@ -277,56 +361,39 @@ impl PhonemeInventory {
     /// `missing_required_feature` would obscure the single thing they need to know.
     fn check_features(&self, phoneme: &Phoneme, report: &mut ValidationReport) {
         if phoneme.features.is_empty() {
-            // Warning, not Error: `CLAUDE.md` requires pre-M1 project files to keep
-            // loading, and M1's generator does not read features at all. This
-            // becomes an Error in M3, when a rule engine exists that can do nothing
-            // with such a segment.
+            // Error since M3, keeping the promise recorded here and in
+            // `PROGRESS.md` at M1: "this becomes an Error in M3, when a rule
+            // engine exists that can do nothing with such a segment." That engine
+            // now exists and gates on this. Pre-M1 files still *load* —
+            // `CLAUDE.md`'s constraint is about loading — and still generate,
+            // because `generation_blocking` filters this code for the paths that
+            // never read features.
             report.push(
                 Issue::new(
-                    Severity::Warning,
+                    Severity::Error,
                     "features_unspecified",
                     "this phoneme has no phonological features, so no sound-change rule \
-                     will ever match it (`DESIGN.md` §7.1)",
+                     can ever match it (`DESIGN.md` §7.1)",
                 )
                 .about(&phoneme.id),
             );
             return;
         }
 
-        let dorsal = phoneme.features.is(Feature::Dorsal, crate::Sign::Plus);
-        let labial = phoneme.features.is(Feature::Labial, crate::Sign::Plus);
-
-        let required = REQUIRED_OF_ALL
-            .iter()
-            .map(|f| (f, "required of every segment"))
-            .chain(
-                REQUIRED_OF_DORSAL
-                    .iter()
-                    .filter(|_| dorsal)
-                    .map(|f| (f, "required of every [+dorsal] segment")),
-            )
-            .chain(
-                REQUIRED_OF_LABIAL
-                    .iter()
-                    .filter(|_| labial && !dorsal)
-                    .map(|f| (f, "required of every [+labial] segment")),
+        for feature in required_features_missing(phoneme.features) {
+            report.push(
+                Issue::new(
+                    Severity::Error,
+                    "missing_required_feature",
+                    format!(
+                        "`{}` is unvalued, but it is {}; leaving it out would make \
+                         \"not specified\" indistinguishable from \"the author forgot\"",
+                        feature.name(),
+                        requirement_reason(feature, phoneme.features)
+                    ),
+                )
+                .about(&phoneme.id),
             );
-
-        for (feature, why) in required {
-            if !phoneme.features.is_specified(*feature) {
-                report.push(
-                    Issue::new(
-                        Severity::Error,
-                        "missing_required_feature",
-                        format!(
-                            "`{}` is unvalued, but it is {why}; leaving it out would make \
-                             \"not specified\" indistinguishable from \"the author forgot\"",
-                            feature.name()
-                        ),
-                    )
-                    .about(&phoneme.id),
-                );
-            }
         }
 
         // Rounding IS a labial gesture — that is the stated reason rounded vowels
@@ -457,14 +524,142 @@ fn sorted_duplicates<'a>(counts: &HashMap<&'a str, usize>) -> Vec<(&'a str, usiz
 mod tests {
     use super::*;
 
+    /// Fully featured since M3: `features_unspecified` is an Error now, and this
+    /// helper serves tests whose point is that a *sound* inventory is clean.
+    /// Bundles are the reference fixture's own values.
     fn tiny_inventory() -> PhonemeInventory {
         PhonemeInventory::from_phonemes([
-            Phoneme::new("ph_p", "p", SegmentKind::Consonant),
-            Phoneme::new("ph_t", "t", SegmentKind::Consonant),
-            Phoneme::new("ph_k", "k", SegmentKind::Consonant),
-            Phoneme::new("ph_a", "a", SegmentKind::Vowel),
-            Phoneme::new("ph_i", "i", SegmentKind::Vowel),
-            Phoneme::new("ph_u", "u", SegmentKind::Vowel),
+            featured(
+                "ph_p",
+                "p",
+                SegmentKind::Consonant,
+                &[
+                    "-syllabic",
+                    "+consonantal",
+                    "-sonorant",
+                    "-approximant",
+                    "-continuant",
+                    "-nasal",
+                    "-lateral",
+                    "-trill",
+                    "-voice",
+                    "+labial",
+                    "-coronal",
+                    "-dorsal",
+                    "-round",
+                ],
+            ),
+            featured(
+                "ph_t",
+                "t",
+                SegmentKind::Consonant,
+                &[
+                    "-syllabic",
+                    "+consonantal",
+                    "-sonorant",
+                    "-approximant",
+                    "-continuant",
+                    "-nasal",
+                    "-lateral",
+                    "-trill",
+                    "-voice",
+                    "-labial",
+                    "+coronal",
+                    "-dorsal",
+                ],
+            ),
+            featured(
+                "ph_k",
+                "k",
+                SegmentKind::Consonant,
+                &[
+                    "-syllabic",
+                    "+consonantal",
+                    "-sonorant",
+                    "-approximant",
+                    "-continuant",
+                    "-nasal",
+                    "-lateral",
+                    "-trill",
+                    "-voice",
+                    "-labial",
+                    "-coronal",
+                    "+dorsal",
+                    "+high",
+                    "-low",
+                    "+back",
+                    "-round",
+                ],
+            ),
+            featured(
+                "ph_a",
+                "a",
+                SegmentKind::Vowel,
+                &[
+                    "+syllabic",
+                    "-consonantal",
+                    "+sonorant",
+                    "+approximant",
+                    "+continuant",
+                    "-nasal",
+                    "-lateral",
+                    "-trill",
+                    "+voice",
+                    "-labial",
+                    "-coronal",
+                    "+dorsal",
+                    "-high",
+                    "+low",
+                    "+back",
+                    "-round",
+                ],
+            ),
+            featured(
+                "ph_i",
+                "i",
+                SegmentKind::Vowel,
+                &[
+                    "+syllabic",
+                    "-consonantal",
+                    "+sonorant",
+                    "+approximant",
+                    "+continuant",
+                    "-nasal",
+                    "-lateral",
+                    "-trill",
+                    "+voice",
+                    "-labial",
+                    "-coronal",
+                    "+dorsal",
+                    "+high",
+                    "-low",
+                    "-back",
+                    "-round",
+                ],
+            ),
+            featured(
+                "ph_u",
+                "u",
+                SegmentKind::Vowel,
+                &[
+                    "+syllabic",
+                    "-consonantal",
+                    "+sonorant",
+                    "+approximant",
+                    "+continuant",
+                    "-nasal",
+                    "-lateral",
+                    "-trill",
+                    "+voice",
+                    "+labial",
+                    "-coronal",
+                    "+dorsal",
+                    "+high",
+                    "-low",
+                    "+back",
+                    "+round",
+                ],
+            ),
         ])
     }
 
@@ -521,16 +716,33 @@ mod tests {
 
     #[test]
     fn a_lopsided_inventory_warns_but_stays_valid() {
+        // Every consonant carries the same full bundle: that trips the
+        // `identical_features` *Warning*, which is exactly the point — a
+        // speculative design may be odd in several ways at once and still valid.
         let mut phonemes: Vec<_> = (0..60)
             .map(|n| {
-                Phoneme::new(
-                    PhonemeId::sequential(n),
-                    format!("c{n}"),
+                featured(
+                    PhonemeId::sequential(n).as_str(),
+                    &format!("c{n}"),
                     SegmentKind::Consonant,
+                    &[
+                        "-syllabic",
+                        "+consonantal",
+                        "-sonorant",
+                        "-approximant",
+                        "-continuant",
+                        "-nasal",
+                        "-lateral",
+                        "-trill",
+                        "-voice",
+                        "-labial",
+                        "+coronal",
+                        "-dorsal",
+                    ],
                 )
             })
             .collect();
-        phonemes.push(Phoneme::new("ph_a", "a", SegmentKind::Vowel));
+        phonemes.push(full_a());
 
         let report = PhonemeInventory::from_phonemes(phonemes).validate();
         assert!(
@@ -622,15 +834,18 @@ mod tests {
     }
 
     #[test]
-    fn a_phoneme_with_no_features_warns_rather_than_erroring() {
+    fn a_phoneme_with_no_features_is_an_error_once_a_rule_engine_exists() {
+        // The escalation promised at M1 ("this becomes an Error in M3") landing.
+        // The file still LOADS — `CLAUDE.md`'s constraint is about loading — and
+        // still generates, via `generation_blocking`; but `validate` now calls it
+        // what it is: a segment no rule can ever match.
         let inventory = PhonemeInventory::from_phonemes([
             Phoneme::new("ph_t", "t", SegmentKind::Consonant),
             full_a(),
         ]);
         let report = inventory.validate();
-        assert!(report.is_ok(), "a pre-M1 file must keep loading: {report}");
         assert!(
-            report.warnings().any(|i| i.code == "features_unspecified"),
+            report.errors().any(|i| i.code == "features_unspecified"),
             "{report}"
         );
     }
@@ -647,7 +862,8 @@ mod tests {
                 .iter()
                 .filter(|i| i.code == "features_unspecified")
                 .count(),
-            1
+            1,
+            "one clear message, not twelve: {report}"
         );
         assert_eq!(
             report

@@ -52,19 +52,20 @@ outside this phase matters until it works end to end._
   reloading yields an identical lexicon; `export-md` writes a readable dictionary
   and `export-csv` a CLDF-shaped table; both are byte-identical across runs.
 
-- [ ] **M3 — Sound-change engine.** The heart of the program (`DESIGN.md` §7.2,
-  §8.4, §11). Rules as Rust structs — **no DSL parser yet** (§20.4: start with
-  structs, add a readable DSL once the semantics are settled). Segment and
-  environment matching over feature bundles; ordered application; and a
-  `RuleApplicationTrace` for every single application.
-
-  Tracing is not instrumentation to add later — it is the product (§3.3). A rule
-  that transforms correctly but silently is a bug.
-
-  **Test:** intervocalic voicing turns `takala` → `tagala`; final unstressed vowel
-  loss turns `tagala` → `tagal`; nasal place assimilation works; chaining the three
-  in order reproduces the §10.2 worked example. Every transformed word carries a
-  trace whose final form equals the stored form.
+- [x] **M3 — Sound-change engine.** Rules as structs over feature bundles —
+  target, adjacency-window environment, `set`/`copy`/`delete` changes; simultaneous
+  application over a frozen snapshot; a three-tier bundle-to-symbol resolver that
+  can **mint a phoneme the language did not have** (voicing /k/ creates /ɡ/,
+  U+0261, from a compiled-in 20-row reference table); a minimal prosody store
+  (fixed-position stress) so "final *unstressed* vowel loss" is honest; and a
+  stored per-word `Derivation` that replays to the stored form. `stemma
+  apply-rules`, `stemma trace`, `stemma rules`. **No RNG anywhere in the engine.**
+  **Test:** `stemma apply-rules fixtures/asterian_attested.ron --rules
+  fixtures/rules_asterian.ron …` reproduces §10.2's chain `takala → tagala →
+  tagal → taɣal` exactly; nasal place assimilation resolves three ways from one
+  rule (declared /m/, declared /n/ via absence-copying, minted /ŋ/); `*taka`
+  proves rule order is observable (`tag` vs `tak`); every word's trace replays to
+  its stored form; two runs are byte-identical.
 
 - [ ] **M4 — Forking & lineage.** `LanguageLineageGraph`, `fork_language`, and
   independent rule histories per daughter (`DESIGN.md` §8.6). Cognate-set IDs must

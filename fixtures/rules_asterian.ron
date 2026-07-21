@@ -1,0 +1,100 @@
+// The Early Asterian sound changes.
+//
+// ORDER IS CHRONOLOGY (§11.3) and it is the point of the milestone. Two
+// relationships are demonstrated here and both are asserted by name in the tests.
+//
+// FEEDING. r_0001 voices /k/ to /ɡ/. Proto-Asterian has NO voiced stop of any
+// kind, so the only segment r_0004 can ever apply to is one r_0001 created. That
+// is why the engine has no inventory-membership fast path anywhere in matching:
+// a segment a later rule cannot see is a broken feeding order, and ordered sound
+// change IS feeding order.
+//
+// BLEEDING and COUNTERBLEEDING, on *taka. Under the declared order:
+//     taka > taga (r_0001) > tag (r_0003)
+// and the /ɡ/ survives word-finally with the vowel that conditioned it gone —
+// counterbleeding opacity, the earlier rule no longer surface-true. Swap r_0001
+// and r_0003 and you get:
+//     taka > tak (r_0003) > tak  (r_0001 finds no following vowel)
+// which is bleeding. NOTE, because it is easy to assume otherwise: *takala shows
+// NEITHER. Its final vowel sits on the far side of /l/ and never conditioned the
+// /k/, so both orders give tagal. *taka is the word that proves order matters.
+//
+// Rules name FEATURES, never letters (§7.1, CLAUDE.md). ["-sonorant",
+// "-continuant", "-voice"] is exactly {p, t, k} in this inventory — proved by
+// `features_select_the_intervocalic_voicing_target` against the real fixture,
+// not asserted here.
+(
+    id: "rules_asterian_early",
+    name: "Early Asterian sound changes",
+    description: "The chain of DESIGN.md §10.2, plus nasal place assimilation.",
+    rules: [
+        // §11.1's IntervocalicVoicing, and §10.2's rule 1.
+        (
+            id: "r_0001",
+            name: "Intervocalic voicing",
+            description: "Voiceless stops voice between vowels.",
+            chronology_years: 250,
+            target: (features: ["-sonorant", "-continuant", "-voice"]),
+            environment: (
+                before: [segment((features: ["+syllabic"]))],
+                after: [segment((features: ["+syllabic"]))],
+            ),
+            change: set(["+voice"]),
+        ),
+
+        // §7.2's assimilation. `copy`, NOT `set` — the place is whatever the
+        // following stop's place is, and the rule does not know which. On this
+        // inventory the one rule gives /m/ before /p/ (a declared phoneme), /n/
+        // before /t/ (declared, and only because the copy can REMOVE the rounding
+        // cell /t/ leaves absent), and /ŋ/ before /k/ (minted from the reference
+        // table).
+        //
+        // `after(0)` is checked against `environment.after[0]` at load, so a
+        // change can never read a position the environment did not match.
+        (
+            id: "r_0002",
+            name: "Nasal place assimilation",
+            description: "A nasal takes the place of articulation of a following stop.",
+            chronology_years: 300,
+            target: (features: ["+nasal"]),
+            environment: (
+                after: [segment((features: ["-sonorant", "-continuant"]))],
+            ),
+            change: copy(from: after(0), node: place),
+        ),
+
+        // §11.1's FinalVowelLoss, and §10.2's rule 2. §11.1 writes
+        // `[+vowel, -stress]`; `vowel` is not a feature here (it is `+syllabic`)
+        // and stress is syllable-scoped, so the two halves land on the two axes
+        // of the target. `stress: Some(unstressed)` matches ONLY a syllable
+        // explicitly marked unstressed — a word whose prosody was never assigned
+        // does not match, which is what makes this differ from "delete the last
+        // vowel".
+        (
+            id: "r_0003",
+            name: "Final unstressed vowel loss",
+            description: "A word-final vowel is lost unless its syllable bears stress.",
+            chronology_years: 410,
+            target: (features: ["+syllabic"], stress: Some(unstressed)),
+            environment: (
+                after: [boundary],
+            ),
+            change: delete,
+        ),
+
+        // §10.2's rule 3. Its target class is EMPTY in Proto-Asterian; see the
+        // FEEDING note at the top of this file.
+        (
+            id: "r_0004",
+            name: "Velar lenition",
+            description: "The voiced velar stop spirantises between vowels.",
+            chronology_years: 480,
+            target: (features: ["-sonorant", "-continuant", "+voice", "+dorsal"]),
+            environment: (
+                before: [segment((features: ["+syllabic"]))],
+                after: [segment((features: ["+syllabic"]))],
+            ),
+            change: set(["+continuant"]),
+        ),
+    ],
+)

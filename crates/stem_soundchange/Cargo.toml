@@ -14,5 +14,8 @@ stem_lexicon.workspace = true
 stem_phonology.workspace = true
 serde.workspace = true
 
+[dev-dependencies]
+ron.workspace = true
+
 [lints]
 workspace = true

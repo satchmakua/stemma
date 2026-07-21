@@ -363,9 +363,21 @@ pub fn check_against_inventory(
             if let (Some(declared), Some(actual)) = (declared, actual)
                 && declared != actual
             {
+                // The discriminator is deliberately the trace rather than
+                // `WordSource`: `source` says who typed the word, `trace` says
+                // whether there is a *recorded causal explanation* for the
+                // mismatch. A word with a derivation has that explanation one
+                // `stemma trace` away, so a Warning that would fire on every M3
+                // output is noise; Note is the honest severity. A hand-edited
+                // mismatch with no derivation stays a Warning.
+                let severity = if entry.trace.is_some() {
+                    Severity::Note
+                } else {
+                    Severity::Warning
+                };
                 report.push(
                     Issue::new(
-                        Severity::Warning,
+                        severity,
                         "syllable_shape_mismatch",
                         format!(
                             "syllable `{}` does not describe its own segments; either the \

@@ -5,8 +5,8 @@ A build log of what shipped and the notable decisions behind it. **Keep it hones
 acceptance tests live in [ROADMAP.md](ROADMAP.md); this is the backward-looking
 "what got done and why" companion.
 
-**Current phase:** Phase 1 — the diachronic kernel. Next milestone: **M3 —
-sound-change engine**.
+**Current phase:** Phase 1 — the diachronic kernel. Next milestone: **M4 —
+forking & lineage**.
 
 ## State of the tree
 
@@ -15,11 +15,136 @@ sound-change engine**.
 | `stem_core` | typed IDs, `StemmaError`, `Validate` / `ValidationReport`, `rng`, `suggest` | working |
 | `stem_phonology` | features, `Phoneme`, inventory, phonotactics, root generation | working |
 | `stem_lexicon` | `WordEntry`, `Lexicon`, the 103-concept list, cognate-set minting | working |
-| `stem_soundchange` | rules, matching, traces | empty — M3 |
+| `stem_soundchange` | rules, matching, ordered application, resolution, traces | working |
 | `stem_genome` | `LanguageGenome` | grows a field per milestone |
 | `stem_io` | RON/JSON load & save | working — **untouched since M0** |
 | `stem_export` | Markdown dictionaries, CLDF-shaped CSV | working |
-| `stem_cli` | the `stemma` binary | `validate`, `info`, `convert`, `generate-roots`, `features`, `new-lexicon`, `export-md`, `export-csv` |
+| `stem_cli` | the `stemma` binary | `validate`, `info`, `convert`, `generate-roots`, `features`, `new-lexicon`, `export-md`, `export-csv`, `apply-rules`, `trace`, `rules` |
+
+---
+
+## M3 — Sound-change engine · built 2026-07-20 · ✓ verified
+
+The heart of the program. Languages now *change*: `stemma apply-rules` runs an
+ordered rule sequence over a lexicon, every application writes a per-word
+`Derivation`, and `stemma trace` prints §10.2's killer feature — the full causal
+history of a word, rule by rule, back to the proto-form. **314 tests pass**;
+clippy clean under `-D warnings`.
+
+Verified by running it: applying `fixtures/rules_asterian.ron` to
+`fixtures/asterian_attested.ron` reproduces the design doc's own worked example
+exactly — `takala → tagala → tagal → taɣal` — and the other seven fixture words
+land on their hand-computed forms (`tag`, `sawel` unchanged, `akw`, `reɣan`,
+`saŋk`, `amp`, `ant`). Three phonemes were minted along the way (/ɡ/ /ɣ/ /ŋ/),
+two runs write byte-identical files, and the M1/M2 corpus digests are untouched.
+
+### Decisions worth knowing
+
+**The engine uses no RNG at all.** `apply_rules` is a pure function of its five
+arguments. `RngDomain` gained no variant — the strongest determinism claim the
+project can make, and it was free.
+
+**A rule can create a phoneme the language does not have.** Voicing /k/ yields a
+bundle no inventory phoneme carries; a compiled-in 20-row reference table
+(`stem_phonology::reference`) names it. The minted /ɡ/ is **U+0261 SCRIPT G**,
+not ASCII `g` — the ASCII letter is its romanisation, which is why `written()`
+prints ROADMAP's literal `tagala` while `ipa()` prints `taɡala`. Ids come from
+the table row (`ph_g`), so two sister languages independently innovating /ɡ/ get
+the *same* phoneme — a correct merger, not a collision. Exact match at every
+tier: on this fixture `/k/[+voice]` is Hamming-1 from /k/ itself, so any fuzzy
+resolver would silently undo the rule and write a trace that lies.
+
+**Simultaneous application over a frozen snapshot.** Within one rule, every
+match is found against the word as it stood before the rule; a rule's output is
+never visible to its own matching, and a `Copy`'s donor reads from the snapshot
+too. With single-segment targets, application is provably commutative over the
+site set — which is why there is no `ltr`/`rtl` flag and no overlap resolver:
+they would be unobservable settings, i.e. lies about what the file format means.
+The multi-segment tie-breakers are pre-committed in `apply.rs`'s module doc.
+
+**The design doc's own example cannot demonstrate rule ordering.** Verified
+arithmetically: `takala` yields `tagal` under either order of voicing and
+apocope, because its final vowel never conditioned the /k/. The fixture ships
+`*taka`, which genuinely bleeds (`tak`) and counterbleeds (`tag`) — and a test
+pins the *reason* it exists so a future session cannot delete it as redundant.
+
+**Assimilation is a feature copy that can transfer absence.** One rule (`copy
+place from after(0)`) resolves three ways on the fixture: /n/+/p/ → declared
+/m/; /m/+/t/ → declared /n/ — which requires the copy to *remove* the rounding
+cell /t/ leaves absent, the reason `FeatureBundle::unset` exists; /n/+/k/ →
+minted /ŋ/. The node is the unit of copy (`FeatureNode::Place` carries the
+articulators *and* their dependents), making the ill-formed partial copy
+unrepresentable.
+
+**Stress landed as a syllable-scoped store, not a feature.** `Prosody::assign`
+marks a word once in its life (all-or-nothing, so splitting a rule sequence
+across two runs gives the same language), and `Some(Unstressed)` never matches
+an unmarked syllable — a language with no declared prosody cannot silently get
+"delete the last vowel" while claiming the stronger rule.
+`rules.stress_without_prosody` says so out loud.
+
+**Traces are deltas, not snapshots.** `Derivation { input, steps }` stores the
+proto-form plus per-site edits; `replay()` reconstructs every intermediate, so
+§16.3's property — the trace replays to the stored form — is a statement about
+the *file*. A second `apply-rules` run extends the derivation rather than
+replacing it, so a derivation always begins at the proto-form.
+
+**The promised escalation landed:** `phonology.features_unspecified` is now an
+**Error** — the M1 commitment ("this becomes an Error in M3, when a rule engine
+exists") had its trigger fire. Two-sided: `generation_blocking` still filters it
+so pre-M1 files keep generating, and `apply_rules` gates on the *unfiltered*
+report, so the validator and the engine agree in both directions.
+
+### Adversarial review — 6 findings, 5 fixed, 1 deferred with rationale
+
+An adversarial panel reviewed the implementation (resolution and severity
+dimensions completed; the rest were cut short by a session limit and their
+findings verified by hand instead). Confirmed and fixed, now at 317 tests:
+
+1. **`ambiguous_target_symbol` was promised and never emitted** (spec §9.5, and
+   `inventory.rs` documented it as existing). When two phonemes share a bundle
+   (legal — `identical_features` is only a Warning) resolution silently chose
+   first-in-authored-order: exactly the Lexurgy-issue-#9 silence the design
+   calls out. Now warned once per (rule, chosen phoneme) per run, naming every
+   carrier; the per-site record was already in the trace's `ambiguous_with`.
+2. **A convergent mint's weight depended on lexicon order.** Two different
+   sources feeding one reference row kept whichever weight arrived first — word
+   order reaching the evolved genome's bytes, against the module's own promise.
+   The mint now keeps the **maximum** over its sources, a function of the set.
+3. **`stress_without_prosody` claimed "can never fire" falsely** on lexicons
+   with hand-authored stress marks, which the engine legitimately reads. The
+   check now takes the lexicon and stays silent when any syllable is marked.
+4. **A stale comment in `generate.rs`** still called `features_unspecified` a
+   Warning — wrong in the direction that invites un-gating the engine. Fixed.
+5. (Duplicate of 1, found independently by the second reviewer.)
+
+Deferred: **`by_ipa` compares bytes, not canonical equivalence** — an author
+glyph saved in NFD can evade the mint guard and leave two identically rendered
+glyphs in one inventory. Closing it needs Unicode normalization data; recorded
+at the comparison site and queued as an `ipa_not_nfc` warning for M7's
+plausibility profile, where validation grows anyway.
+
+### Gotchas for the next session
+
+- **M4's fork obligation is unchanged and now demonstrated:** `evolve` copies
+  every `cognate_set` verbatim (a test walks it), and `evolve` is *not* a fork —
+  it produces one descendant; a fork produces sisters. The primitives are all in
+  place.
+- **`stemma trace` output comes entirely from `render_derivation`** in
+  `stem_soundchange::view` — the CLI contributes parsing only, so the M11 UI
+  calls the same function.
+- **Resolution is evaluated against the input inventory,** never the growing
+  one, so `Inventory` vs `Innovated` in a trace cannot flip when words reorder.
+  Mints are appended in reference-table order after the run.
+- **`Derivation` lives in `stem_lexicon`, not `stem_soundchange`** — the reverse
+  would be a crate cycle (`stem_soundchange` already depends on `stem_lexicon`).
+  The spec caught this before implementation.
+- **The reference table is append-only and injective** — four construction tests
+  hold it. Adding /ʃ/ would be a bug until a stridency feature exists (it would
+  be byte-identical to /s/).
+- **The cognate-mint source scan now walks all of `crates/*/src/`** rather than
+  four hard-coded files, so `stem_soundchange` (and every future crate) is
+  covered automatically.
 
 ---
 

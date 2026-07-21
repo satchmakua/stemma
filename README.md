@@ -12,11 +12,11 @@ The name comes from textual criticism: a *stemma* is the reconstructed family tr
 showing how surviving manuscripts descend from a lost original. That is exactly
 this program's core data structure.
 
-**Status:** early — **M2 complete**. Languages have phonemes with real distinctive
-features, syllable shapes, and a lexicon: one word per meaning, exportable as a
-dictionary. 232 tests pass. Sound change, forking and tracing are still ahead. See
-[ROADMAP.md](ROADMAP.md) for the plan and [PROGRESS.md](PROGRESS.md) for what has
-shipped.
+**Status:** early — **M3 complete**. Languages evolve: ordered sound changes
+transform the lexicon, every change is traced, and `stemma trace` prints a word's
+full causal history back to its proto-form. 314 tests pass. Forking into daughter
+languages and cognate tables are next. See [ROADMAP.md](ROADMAP.md) for the plan
+and [PROGRESS.md](PROGRESS.md) for what has shipped.
 
 ---
 
@@ -121,6 +121,50 @@ survive forking: when Proto-Asterian splits into Coastal and Highland and their
 words drift apart, `cog_proto_asterian_0003` is what still says those two words are
 the same word.
 
+### Evolve it
+
+```bash
+cargo run -p stem_cli -- apply-rules fixtures/asterian_attested.ron \
+    --rules fixtures/rules_asterian.ron \
+    --id early_asterian --name "Early Asterian" --years 480 \
+    --out out/early_asterian.ron
+cargo run -p stem_cli -- trace out/early_asterian.ron w_0001
+```
+
+```
+*takala  "star"  cog_asterian_attested_0001
+
+  proto      takala        /takala/
+  │ stress   TA.ka.la
+  │
+  0  r_0001  Intervocalic voicing
+  │    k > g  [2,3)   environment  a _ a
+  │    /ɡ/ is new to this language  (reference table)
+  │    → tagala      /taɡala/
+  │
+  1  r_0002  Nasal place assimilation — did not apply
+  │
+  2  r_0003  Final unstressed vowel loss
+  │    a > ∅  [5,6)   environment  l _ #
+  │    → tagal       /taɡal/
+  │
+  3  r_0004  Velar lenition
+  │    g > ɣ  [2,3)   environment  a _ a
+  │    → taɣal       /taɣal/
+  │
+  modern     taɣal         /taɣal/
+```
+
+This is the design's north star working end to end: a word looks strange *for a
+reason*, and the reason is on record. Note what happened at step 0 — the language
+had no /ɡ/, so applying `[+voice]` to /k/ **created a phoneme**, named from a
+compiled-in reference table. Rules are written over features, never letters:
+"voiceless stops voice between vowels" is one rule, and whether it produces a
+declared phoneme, a different declared phoneme, or a brand-new one is worked out
+per site. Ordering is real, too — the fixture's `*taka` becomes `tag` under the
+declared order but `tak` with the rules swapped, which is the classic
+bleeding/counterbleeding contrast from historical linguistics.
+
 ### Commands
 
 | Command | What it does |
@@ -132,6 +176,9 @@ the same word.
 | `stemma new-lexicon <file>` | Coin one word per concept (`--seed`, `--concepts`, `--out`) |
 | `stemma export-md <file>` | Write the lexicon as a Markdown dictionary |
 | `stemma export-csv <file>` | Write the lexicon as CLDF-shaped CSV |
+| `stemma apply-rules <file>` | Apply an ordered rule set, producing a descendant language |
+| `stemma trace <file> <word>` | Print a word's derivation, rule by rule |
+| `stemma rules <file>` | Validate and summarise a rule-set file |
 | `stemma convert <in> <out>` | Convert a project between RON and JSON |
 
 | Task | Command |

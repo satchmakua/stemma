@@ -65,6 +65,7 @@ fn canary() -> LanguageGenome {
             part_of_speech: PartOfSpeech::Determiner,
             cognate_set: CognateSetId::new("cog_demo_0001"),
             source: WordSource::Generated,
+            trace: None,
         },
         WordEntry {
             id: WordId::new("w_0002"),
@@ -79,6 +80,7 @@ fn canary() -> LanguageGenome {
             part_of_speech: PartOfSpeech::Noun,
             cognate_set: CognateSetId::new("cog_demo_0002"),
             source: WordSource::Generated,
+            trace: None,
         },
     ]))
 }

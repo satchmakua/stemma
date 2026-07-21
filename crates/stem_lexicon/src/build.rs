@@ -105,6 +105,7 @@ pub fn build_proto_lexicon(
                 part_of_speech: concept.part_of_speech,
                 cognate_set: scoped_cognate_set(language, ordinal),
                 source: WordSource::Generated,
+                trace: None,
             }
         })
         .collect();
