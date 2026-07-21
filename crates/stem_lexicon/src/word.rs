@@ -8,9 +8,13 @@ use crate::concept::{Concept, ConceptKey, PartOfSpeech, concept};
 
 /// How a word came to be in this language.
 ///
-/// Two variants because M2 produces exactly two. `Inherited` arrives with M4's
-/// fork and `Borrowed` with M7's contact; shipping either now would be a variant
-/// with no producer, which is scaffolding.
+/// Two variants because M2 produces exactly two. M4's fork does **not** add
+/// `Inherited`: it copies each entry's `source` verbatim (a forked word keeps
+/// being what it was — authored or generated — in the daughter), so there is
+/// still no producer for an `Inherited` variant. It arrives, with `Borrowed`
+/// (M7's contact) and `Derived` (M8's morphology), when a producer writes a
+/// value the copy cannot; shipping either now would be scaffolding
+/// (`docs/adr/0008`).
 ///
 /// A unit variant, deliberately not `Generated { draw: u32 }`. The draw index *is*
 /// the entry's ordinal under the draw contract in [`crate::build`], so storing it

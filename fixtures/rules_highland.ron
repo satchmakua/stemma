@@ -1,0 +1,61 @@
+// Highland Asterian — shares two isoglosses with Coastal, keeps its velars
+// (M4 acceptance fixture).
+//
+// Highland innovates intervocalic voicing (with Coastal) and final unstressed
+// vowel loss (with Coastal), but instead of Coastal's lenition→loss chain it
+// innovates NASAL PLACE ASSIMILATION — the isogloss it shares with Riverine,
+// not Coastal. So Highland's velars survive as stops: *takala > tagala > tagal,
+// where Coastal hollows the /ɡ/ out entirely.
+//
+// The two shared rules are BYTE-IDENTICAL in body to their namesakes in
+// rules_coastal.ron and rules_riverine.ron (cross-file id convention, ADR-0008);
+// only `chronology_years` differs — here apocope arrives ten years earlier than
+// on the coast. Dates are absolute from the lineage root and monotonic.
+(
+    id: "rules_highland",
+    name: "Highland Asterian sound changes",
+    description: "Voicing and nasal place assimilation; final unstressed vowels drop, keeping the velars.",
+    rules: [
+        // SHARED with Coastal — identical body, same date (120).
+        (
+            id: "r_ivv",
+            name: "Intervocalic voicing",
+            description: "Voiceless stops voice between vowels.",
+            chronology_years: 120,
+            target: (features: ["-sonorant", "-continuant", "-voice"]),
+            environment: (
+                before: [segment((features: ["+syllabic"]))],
+                after: [segment((features: ["+syllabic"]))],
+            ),
+            change: set(["+voice"]),
+        ),
+
+        // SHARED with Riverine — identical body. A nasal takes the place of a
+        // following stop; before /k/ this mints /ŋ/ (ph_eng) from the reference
+        // table, exactly as M3's r_0002 did.
+        (
+            id: "r_nasal_place",
+            name: "Nasal place assimilation",
+            description: "A nasal takes the place of articulation of a following stop.",
+            chronology_years: 300,
+            target: (features: ["+nasal"]),
+            environment: (
+                after: [segment((features: ["-sonorant", "-continuant"]))],
+            ),
+            change: copy(from: after(0), node: place),
+        ),
+
+        // SHARED with Coastal — identical body, arriving ten years earlier here.
+        (
+            id: "r_apocope",
+            name: "Final unstressed vowel loss",
+            description: "A word-final vowel is lost unless its syllable bears stress.",
+            chronology_years: 460,
+            target: (features: ["+syllabic"], stress: Some(unstressed)),
+            environment: (
+                after: [boundary],
+            ),
+            change: delete,
+        ),
+    ],
+)

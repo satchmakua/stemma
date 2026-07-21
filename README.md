@@ -12,11 +12,12 @@ The name comes from textual criticism: a *stemma* is the reconstructed family tr
 showing how surviving manuscripts descend from a lost original. That is exactly
 this program's core data structure.
 
-**Status:** early — **M3 complete**. Languages evolve: ordered sound changes
-transform the lexicon, every change is traced, and `stemma trace` prints a word's
-full causal history back to its proto-form. 314 tests pass. Forking into daughter
-languages and cognate tables are next. See [ROADMAP.md](ROADMAP.md) for the plan
-and [PROGRESS.md](PROGRESS.md) for what has shipped.
+**Status:** early — **M4 complete**. Languages evolve *and branch*: ordered sound
+changes transform the lexicon, every change is traced, and a proto-language forks
+into daughters that each carry their own history — `stemma family` shows the tree
+and proves every cognate set survives the split. 360 tests pass. Comparative
+cognate tables are next. See [ROADMAP.md](ROADMAP.md) for the plan and
+[PROGRESS.md](PROGRESS.md) for what has shipped.
 
 ---
 
@@ -165,6 +166,38 @@ per site. Ordering is real, too — the fixture's `*taka` becomes `tag` under th
 declared order but `tak` with the rules swapped, which is the classic
 bleeding/counterbleeding contrast from historical linguistics.
 
+### Fork it into a family
+
+One proto-language, three daughters, three different histories:
+
+```bash
+cargo run -p stem_cli -- fork fixtures/asterian_attested.ron \
+    --rules fixtures/rules_coastal.ron  --id coastal  --name "Coastal Asterian"  --years 470 --out out/coastal.ron
+cargo run -p stem_cli -- fork fixtures/asterian_attested.ron \
+    --rules fixtures/rules_highland.ron --id highland --name "Highland Asterian" --years 460 --out out/highland.ron
+cargo run -p stem_cli -- fork fixtures/asterian_attested.ron \
+    --rules fixtures/rules_riverine.ron --id riverine --name "Riverine Asterian" --years 420 --out out/riverine.ron
+cargo run -p stem_cli -- family fixtures/asterian_attested.ron out/coastal.ron out/highland.ron out/riverine.ron
+```
+
+```
+Attested Asterian (asterian_attested) — proto · 15 phonemes · 8 words · 0 rules
+├─ Coastal Asterian (coastal) — +470y · 17 phonemes · 8 words · 4 rules
+├─ Highland Asterian (highland) — +460y · 17 phonemes · 8 words · 3 rules
+└─ Riverine Asterian (riverine) — +420y · 16 phonemes · 8 words · 3 rules
+
+cognate coverage — asterian_attested: 8 sets, 3 descendants, 8/8 present in all
+```
+
+`*takala` "star" comes out **taal** on the coast, **tagal** in the highlands, and
+**tala** by the river — three languages, one ancestor, and the whole descent is on
+record. The cognate ids are *copied* across every fork, never re-minted, which is
+what lets `family` prove all eight sets survive into all three daughters; run
+`stemma trace out/coastal.ron w_0001` to watch one word's chain walk back to
+`*takala`. Descent is read from each file's `parent` field — nothing about the
+family tree is stored anywhere, so it can never fall out of sync with the
+languages themselves.
+
 ### Commands
 
 | Command | What it does |
@@ -177,6 +210,8 @@ bleeding/counterbleeding contrast from historical linguistics.
 | `stemma export-md <file>` | Write the lexicon as a Markdown dictionary |
 | `stemma export-csv <file>` | Write the lexicon as CLDF-shaped CSV |
 | `stemma apply-rules <file>` | Apply an ordered rule set, producing a descendant language |
+| `stemma fork <parent>` | Fork a daughter (`--id`, `--name`, `--rules`, `--years`, `--out`) |
+| `stemma family <files>…` | Assemble a lineage; print the family tree, cognate coverage, and report |
 | `stemma trace <file> <word>` | Print a word's derivation, rule by rule |
 | `stemma rules <file>` | Validate and summarise a rule-set file |
 | `stemma convert <in> <out>` | Convert a project between RON and JSON |

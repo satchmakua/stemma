@@ -248,6 +248,13 @@ mod tests {
 
     /// The invariant is a naming rule, so it is defended by reading the sources
     /// rather than by runtime indirection. Crude, and honest about being so.
+    ///
+    /// This scan covers `stem_lexicon`'s own non-test modules. Every *other*
+    /// crate that could mint carries its own sibling scan — `stem_genome`'s
+    /// `stem_genome_never_mints_a_cognate_set` is the first — because
+    /// `include_str!` cannot reach across a crate boundary (`docs/adr/0008`
+    /// corrects CLAUDE.md's earlier "the whole workspace" phrasing). `trace.rs`
+    /// is on this list from M4: M3 added it and it must be proven inert too.
     #[test]
     fn only_proto_lexicon_construction_mints_a_cognate_set() {
         let sources = [
@@ -255,6 +262,7 @@ mod tests {
             ("lexicon.rs", include_str!("lexicon.rs")),
             ("word.rs", include_str!("word.rs")),
             ("concept.rs", include_str!("concept.rs")),
+            ("trace.rs", include_str!("trace.rs")),
         ];
         for (name, src) in sources {
             for (n, line) in src.lines().enumerate() {

@@ -97,9 +97,11 @@ pub struct LanguageGenome {
     /// re-sorted. `RuleApplication::index` indexes into it. Ids may repeat: real
     /// histories apply intervocalic voicing twice, in different strata.
     ///
-    /// §8.5's `HistoricalEvent` is deferred to M4: of its five fields the only one
-    /// §10.4's timeline reads is the date, and that ships as `chronology_years` on
-    /// the rule. A union with one inhabited variant is scaffolding.
+    /// §8.5's `HistoricalEvent` stays deferred past M4: of its five fields the
+    /// only one §10.4's timeline reads is the date, and that ships as
+    /// `chronology_years` on the rule. A union with one inhabited variant is
+    /// still scaffolding, and M4's lineage graph derives descent from `parent`
+    /// rather than from a stored event log (`docs/adr/0008`).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub applied_rules: Vec<SoundChangeRule>,
 
@@ -276,15 +278,67 @@ impl Validate for LanguageGenome {
 }
 
 impl LanguageGenome {
+    /// M4's split (`DESIGN.md` §3.5, §8.6): this genome copied verbatim under a
+    /// new identity, with a parent edge back. **No rules run, no RNG, no form
+    /// changes** — forking is a statement about lineage, not about change. Rule
+    /// application stays [`Self::evolve`]'s job; the CLI's `fork` verb calls
+    /// `evolve` when given `--rules`, so at file level a bare fork and a
+    /// rule-bearing fork are the same two-file, two-id shape (`docs/adr/0008`).
+    ///
+    /// The cognate obligation (`docs/adr/0007`) is discharged **by
+    /// construction**: the lexicon is cloned whole, so every `cognate_set` is
+    /// byte-identical and no code path here can mint. Word ids are copied
+    /// verbatim too, which is why a daughter word's ancestor is always the
+    /// same-id entry of the parent and needs no stored field (§2.4 of the spec,
+    /// `docs/adr/0008`).
+    ///
+    /// Traces and `applied_rules` are carried verbatim: those changes *did*
+    /// happen to these forms, and `Derivation::input` stays the ultimate
+    /// proto-form, so a later `evolve` on the daughter extends the same
+    /// derivation and `stemma trace` still walks unbroken to the proto.
+    ///
+    /// Infallible — a clone-and-relabel has nothing to report that
+    /// [`Self::validate`] does not already say. The caller validates; a fork
+    /// given the parent's own id yields a genome the `self_parent` Error catches.
+    #[must_use]
+    pub fn fork(
+        &self,
+        id: impl Into<LanguageId>,
+        name: impl Into<String>,
+        elapsed_years: i32,
+    ) -> LanguageGenome {
+        LanguageGenome {
+            id: id.into(),
+            name: name.into(),
+            parent: Some(self.id.clone()),
+            // Same arithmetic as `evolve`; a bare split is conventionally +0y,
+            // and the daughter's total depth is the parent's plus the split gap.
+            lineage_depth_years: self.lineage_depth_years + elapsed_years,
+            // Copied verbatim, per `evolve`'s precedent: the seed reproduces the
+            // inherited lexicon, so the daughter file stays reproducible from
+            // itself alone. Two sisters therefore share a seed — a documented
+            // consequence (`docs/adr/0008`), harmless until a daughter-side
+            // stochastic step exists, since no RNG runs at a fork.
+            seed: self.seed,
+            phonemes: self.phonemes.clone(),
+            phonotactics: self.phonotactics.clone(),
+            lexicon: self.lexicon.clone(),
+            prosody: self.prosody,
+            applied_rules: self.applied_rules.clone(),
+            notes: self.notes.clone(),
+        }
+    }
+
     /// Applies a rule set, producing the **next stage of this lineage**.
     ///
     /// A new genome with a new `id`, `parent: Some(self.id)`, and
     /// `lineage_depth_years` advanced. It is emphatically not an in-place edit: in
     /// a file-based project format there is no in-place, there are two files, and
     /// two genomes sharing a `LanguageId` is exactly what `docs/adr/0003` says
-    /// must stay an Error. It is also not M4's fork, which produces *sisters* from
-    /// one parent and copies cognate sets across a split; this produces one
-    /// descendant and there is nothing to coordinate.
+    /// must stay an Error. It differs from [`Self::fork`] only in that fork runs
+    /// no rules: the *operations* are distinct (advance a stage vs relabel a
+    /// copy), while the CLI *verb* `fork` covers both because the file records no
+    /// verb (`docs/adr/0008`).
     ///
     /// `applied_rules` accumulates, so derivation indices stay meaningful across
     /// strata and `stemma trace` on the output is self-contained. The returned
@@ -480,5 +534,199 @@ mod tests {
         assert!(summary.contains("2C/1V"), "{summary}");
         assert!(summary.contains("seed 42"), "{summary}");
         assert!(summary.contains("proto"), "{summary}");
+    }
+
+    // ----- M4: fork -----
+
+    use stem_core::{CognateSetId, PhonemeId, WordId};
+    use stem_lexicon::{Lexicon, PartOfSpeech, WordEntry, WordSource};
+    use stem_phonology::{Root, Syllable};
+    use stem_soundchange::{Change, EnvItem, Environment, SegmentPattern};
+
+    /// A one-word lexicon (`taka`) so fork's copy-verbatim obligation has
+    /// something to carry, and so the intervocalic /k/ gives [`voicing`] a site.
+    fn with_one_word(mut genome: LanguageGenome) -> LanguageGenome {
+        let syl = |c: &str, v: &str| Syllable {
+            pattern: "CV".to_owned(),
+            segments: vec![PhonemeId::new(c), PhonemeId::new(v)],
+            stress: None,
+        };
+        let entry = WordEntry {
+            id: WordId::new("w_0001"),
+            concept: Some(stem_lexicon::ConceptKey::new("MOON")),
+            phonemic_form: Root {
+                syllables: vec![syl("ph_t", "ph_a"), syl("ph_k", "ph_a")],
+            },
+            glosses: vec![],
+            part_of_speech: PartOfSpeech::Noun,
+            cognate_set: CognateSetId::new("cog_proto_asterian_0001"),
+            source: WordSource::Authored,
+            trace: None,
+        };
+        genome.lexicon = Lexicon::from_entries([entry]);
+        genome
+    }
+
+    /// Intervocalic voicing as a one-rule set: voices the /k/ of `taka` to a
+    /// minted /ɡ/. Enough to give a fork a real trace and rule history to carry.
+    fn voicing() -> RuleSet {
+        let bundle = |tokens: &[&str]| {
+            stem_phonology::FeatureBundle::try_from(
+                tokens.iter().map(|s| (*s).to_owned()).collect::<Vec<_>>(),
+            )
+            .expect("valid feature list")
+        };
+        RuleSet {
+            id: "rules_voicing".to_owned(),
+            name: "Voicing".to_owned(),
+            description: String::new(),
+            rules: vec![SoundChangeRule {
+                id: stem_core::RuleId::new("r_ivv"),
+                name: "Intervocalic voicing".to_owned(),
+                description: String::new(),
+                chronology_years: 100,
+                target: SegmentPattern {
+                    features: bundle(&["-sonorant", "-continuant", "-voice"]),
+                    stress: None,
+                },
+                environment: Environment {
+                    before: vec![EnvItem::Segment(SegmentPattern {
+                        features: bundle(&["+syllabic"]),
+                        stress: None,
+                    })],
+                    after: vec![EnvItem::Segment(SegmentPattern {
+                        features: bundle(&["+syllabic"]),
+                        stress: None,
+                    })],
+                },
+                change: Change::Set(bundle(&["+voice"])),
+            }],
+        }
+    }
+
+    #[test]
+    fn a_fork_copies_every_cognate_set_verbatim() {
+        let parent = with_one_word(asterian());
+        let daughter = parent.fork("coastal", "Coastal", 100);
+        let parent_sets: Vec<_> = parent.lexicon.iter().map(|e| &e.cognate_set).collect();
+        let daughter_sets: Vec<_> = daughter.lexicon.iter().map(|e| &e.cognate_set).collect();
+        assert_eq!(
+            parent_sets, daughter_sets,
+            "fork must copy cognate sets byte-for-byte, never mint"
+        );
+    }
+
+    #[test]
+    fn a_fork_copies_word_ids_verbatim_so_ancestry_is_derivable() {
+        let parent = with_one_word(asterian());
+        let daughter = parent.fork("coastal", "Coastal", 100);
+        for child_word in daughter.lexicon.iter() {
+            assert!(
+                parent.lexicon.get(&child_word.id).is_some(),
+                "every daughter word id `{}` must resolve in the parent, so `ancestor` \
+                 need not be stored",
+                child_word.id
+            );
+        }
+    }
+
+    #[test]
+    fn a_fork_changes_identity_parent_and_years_and_nothing_else() {
+        let parent = with_one_word(asterian());
+        let daughter = parent.fork("coastal", "Coastal Asterian", 250);
+
+        assert_eq!(daughter.id, LanguageId::new("coastal"));
+        assert_eq!(daughter.name, "Coastal Asterian");
+        assert_eq!(daughter.parent, Some(parent.id.clone()));
+        assert_eq!(
+            daughter.lineage_depth_years,
+            parent.lineage_depth_years + 250
+        );
+
+        // Everything else is byte-identical to the parent.
+        assert_eq!(daughter.seed, parent.seed, "seed copied verbatim");
+        assert_eq!(daughter.phonemes, parent.phonemes);
+        assert_eq!(daughter.phonotactics, parent.phonotactics);
+        assert_eq!(daughter.prosody, parent.prosody);
+        assert_eq!(daughter.lexicon, parent.lexicon);
+        assert_eq!(daughter.applied_rules, parent.applied_rules);
+        assert_eq!(daughter.notes, parent.notes);
+    }
+
+    #[test]
+    fn a_zero_year_fork_of_a_proto_warns_no_elapsed_time_but_stays_valid() {
+        // The genome-level warning fires only when TOTAL depth is 0, i.e. the
+        // parent is itself a depth-0 proto (§2.2). A daughter of a deep parent
+        // would not trip it; `family.no_divergence` is the complement there.
+        let parent = with_one_word(asterian()); // depth 0
+        let daughter = parent.fork("coastal", "Coastal", 0);
+        let report = daughter.validate();
+        assert!(report.is_ok(), "a fresh fork is valid: {report}");
+        assert!(
+            report.warnings().any(|i| i.code == "no_elapsed_time"),
+            "a zero-year fork of a depth-0 proto has had no time to diverge: {report}"
+        );
+    }
+
+    #[test]
+    fn a_fork_given_its_parents_id_fails_validation_as_self_parent() {
+        let parent = with_one_word(asterian());
+        let daughter = parent.fork(parent.id.clone(), "Impostor", 100);
+        let report = daughter.validate();
+        assert!(
+            report.errors().any(|i| i.code == "self_parent"),
+            "a fork onto the parent's own id is the self_parent Error: {report}"
+        );
+    }
+
+    #[test]
+    fn forking_an_evolved_language_keeps_its_traces_and_rule_history() {
+        let proto = with_one_word(asterian());
+        let (evolved, _) = proto
+            .evolve("stage1", "Stage One", &voicing(), 100)
+            .unwrap();
+        // Sanity: evolution produced a trace and a rule log.
+        let evolved_word = evolved.lexicon.iter().next().unwrap();
+        assert!(evolved_word.trace.is_some(), "evolve records a trace");
+        assert_eq!(evolved.applied_rules.len(), 1);
+
+        let sister = evolved.fork("sister", "Sister", 50);
+        let sister_word = sister.lexicon.iter().next().unwrap();
+        assert_eq!(
+            sister_word.trace, evolved_word.trace,
+            "fork carries the derivation verbatim; the history happened to these forms"
+        );
+        assert_eq!(
+            sister.applied_rules, evolved.applied_rules,
+            "fork carries the rule history verbatim, or RuleApplication::index is orphaned"
+        );
+    }
+
+    #[test]
+    fn evolving_a_fork_extends_its_derivation_from_the_proto_form() {
+        let proto = with_one_word(asterian());
+        let proto_form = proto.lexicon.iter().next().unwrap().phonemic_form.clone();
+
+        let (stage1, _) = proto
+            .evolve("stage1", "Stage One", &voicing(), 100)
+            .unwrap();
+        let forked = stage1.fork("branch", "Branch", 0);
+        // A second stratum on the fork: voicing again is a no-op (already voiced),
+        // but evolve still extends the derivation and its indices continue.
+        let (stage2, _) = forked
+            .evolve("stage2", "Stage Two", &voicing(), 100)
+            .unwrap();
+
+        let word = stage2.lexicon.iter().next().unwrap();
+        let derivation = word.trace.as_ref().expect("carries a derivation");
+        assert_eq!(
+            derivation.input, proto_form,
+            "Derivation::input stays the ultimate proto-form across fork and re-evolution"
+        );
+        assert_eq!(
+            stage2.applied_rules.len(),
+            2,
+            "the second stratum extends applied_rules; it does not replace it"
+        );
     }
 }

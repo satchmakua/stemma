@@ -1,0 +1,84 @@
+// Coastal Asterian — the innovator branch (M4 acceptance fixture).
+//
+// A three-rule FEEDING CHAIN plus apocope. Each of the middle two rules targets
+// a class that is EMPTY in the proto-language, so its only possible input is a
+// segment the previous rule created — the same feeding pattern M3's
+// rules_asterian.ron proved, extended one link:
+//
+//     *takala > tagala (voicing) > taɣala (lenition) > taala (γ-loss) > taal (apocope)
+//
+// Voicing and apocope are the two isoglosses Coastal SHARES with Highland
+// (cross-file rule-id convention: identical `id` ⟹ identical body; the
+// per-branch `chronology_years` is that innovation's arrival date, ADR-0008).
+// Coastal alone carries the lenition→loss chain that hollows out its velars.
+//
+// CHRONOLOGY IS ABSOLUTE from the lineage root (§2.3): every date here is time
+// since Proto-Asterian, and the sequence is monotonic so the whole-log
+// `chronology_not_monotonic` check stays quiet. `--years 470` on the fork verb
+// equals the last rule's date, keeping lineage_depth_years and the timeline
+// agreed.
+(
+    id: "rules_coastal",
+    name: "Coastal Asterian sound changes",
+    description: "Voicing feeds lenition feeds loss; final unstressed vowels drop.",
+    rules: [
+        // SHARED with Highland — identical body, same date: the innovation
+        // reaching both communities at once.
+        (
+            id: "r_ivv",
+            name: "Intervocalic voicing",
+            description: "Voiceless stops voice between vowels.",
+            chronology_years: 120,
+            target: (features: ["-sonorant", "-continuant", "-voice"]),
+            environment: (
+                before: [segment((features: ["+syllabic"]))],
+                after: [segment((features: ["+syllabic"]))],
+            ),
+            change: set(["+voice"]),
+        ),
+
+        // FED by r_ivv: its target /ɡ/ does not exist in the proto — voicing
+        // mints it. Warns `target_matches_nothing` at apply time (Warning by
+        // design; the daughter's own inventory then contains /ɡ/).
+        (
+            id: "r_velar_lenition",
+            name: "Velar lenition",
+            description: "The voiced velar stop spirantises between vowels.",
+            chronology_years: 260,
+            target: (features: ["-sonorant", "-continuant", "+voice", "+dorsal"]),
+            environment: (
+                before: [segment((features: ["+syllabic"]))],
+                after: [segment((features: ["+syllabic"]))],
+            ),
+            change: set(["+continuant"]),
+        ),
+
+        // FED by r_velar_lenition: its target /ɣ/ likewise exists only after the
+        // previous rule fires. Deletion between vowels.
+        (
+            id: "r_gamma_loss",
+            name: "Intervocalic velar fricative loss",
+            description: "The voiced velar fricative deletes between vowels.",
+            chronology_years: 380,
+            target: (features: ["-sonorant", "+continuant", "+voice", "+dorsal"]),
+            environment: (
+                before: [segment((features: ["+syllabic"]))],
+                after: [segment((features: ["+syllabic"]))],
+            ),
+            change: delete,
+        ),
+
+        // SHARED with Highland — identical body, per-branch date.
+        (
+            id: "r_apocope",
+            name: "Final unstressed vowel loss",
+            description: "A word-final vowel is lost unless its syllable bears stress.",
+            chronology_years: 470,
+            target: (features: ["+syllabic"], stress: Some(unstressed)),
+            environment: (
+                after: [boundary],
+            ),
+            change: delete,
+        ),
+    ],
+)

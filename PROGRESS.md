@@ -5,8 +5,8 @@ A build log of what shipped and the notable decisions behind it. **Keep it hones
 acceptance tests live in [ROADMAP.md](ROADMAP.md); this is the backward-looking
 "what got done and why" companion.
 
-**Current phase:** Phase 1 — the diachronic kernel. Next milestone: **M4 —
-forking & lineage**.
+**Current phase:** Phase 1 — the diachronic kernel. Next milestone: **M5 —
+cognate tables & word traces**.
 
 ## State of the tree
 
@@ -16,10 +16,143 @@ forking & lineage**.
 | `stem_phonology` | features, `Phoneme`, inventory, phonotactics, root generation | working |
 | `stem_lexicon` | `WordEntry`, `Lexicon`, the 103-concept list, cognate-set minting | working |
 | `stem_soundchange` | rules, matching, ordered application, resolution, traces | working |
-| `stem_genome` | `LanguageGenome` | grows a field per milestone |
+| `stem_genome` | `LanguageGenome`, `fork`, `LineageGraph`, family validation, `render_family` | working |
 | `stem_io` | RON/JSON load & save | working — **untouched since M0** |
 | `stem_export` | Markdown dictionaries, CLDF-shaped CSV | working |
-| `stem_cli` | the `stemma` binary | `validate`, `info`, `convert`, `generate-roots`, `features`, `new-lexicon`, `export-md`, `export-csv`, `apply-rules`, `trace`, `rules` |
+| `stem_cli` | the `stemma` binary | …M3's commands, plus `fork` and `family` |
+
+---
+
+## M4 — Forking & lineage · built 2026-07-21 · ✓ verified
+
+Languages now *branch*. `stemma fork` splits a parent into a daughter — a
+verbatim copy under a new identity, or (with `--rules`) a daughter that has
+already undergone its own sound changes — and `stemma family` assembles several
+language files into a lineage, printing the family tree, cognate coverage, and a
+graded report. **360 tests pass**; clippy clean under `-D warnings`.
+
+Verified by running the ROADMAP acceptance end to end: forking
+`asterian_attested` three ways under three hand-written rule histories yields
+Coastal, Highland, and Riverine, whose lexicons differ pairwise — `*takala`
+reflects as **taal** / **tagal** / **tala**, and the whole 24-cell golden table
+matches the engine cell for cell. `stemma family` reports **8/8 cognate sets
+present in all three** daughters, every daughter's trace replays to its stored
+form, `stemma trace out/coastal.ron w_0001` walks unbroken from *takala to taal,
+and two fork runs write byte-identical files.
+
+### Decisions worth knowing
+
+**The lineage graph is derived, never stored.** `DESIGN.md` §8.6 sketches a
+`HashMap` of nodes plus a stored `Vec<LineageEdge>`; both were rejected.
+`LineageGraph` holds a `Vec<LanguageGenome>` in argv order and derives every edge
+from the `parent` field on demand — a stored edge beside `parent` is a second
+copy of one fact that nothing keeps synchronised, the exact desync class this
+project has refused three times (`form`, stored intermediate forms,
+`Syllable::pattern`-as-semantics). And there is **no map anywhere**: a `HashMap`
+leaks iteration order toward output (§9.4) and swallows the duplicate ids the
+validator must see. Tens of nodes, linear scans, fully deterministic.
+(`docs/adr/0008`.)
+
+**`fork` is identity-plus-split; `evolve` still runs the rules.**
+`LanguageGenome::fork` clones the genome verbatim and relabels it — no rules, no
+RNG, no form change. The CLI's `fork --rules` calls `evolve` through the *same*
+load→gate→write helper `apply-rules` uses, so the write gate (refuse on
+validation Errors) cannot drift between the two verbs. Rejected outright: an
+in-place `advance` operation, because `apply-rules x --out x` is not idempotent —
+re-running one line applies a stratum twice, the double-application hazard
+`applied_rules`' past-tense contract exists to forbid.
+
+**The cognate obligation was one line, and it is discharged by construction.**
+`fork` clones the lexicon whole, so every `cognate_set` is byte-identical and no
+code path can mint. A new source scan (`stem_genome_never_mints_a_cognate_set`,
+walking `src/*.rs` at runtime) proves it, and it closed a real gap: the old
+`stem_lexicon` scan used `include_str!`, which cannot cross a crate boundary, so
+it never saw `stem_genome` and already missed `stem_lexicon`'s own `trace.rs`
+(now added). The rule is unchanged; its enforcement is honestly per-crate.
+
+**No `LineageEdgeKind`, not even `Descent`.** With edges derived there is no file
+format to stabilise, so a one-variant enum is scaffolding by the `HistoricalEvent`
+precedent. A dialect split *is* descent; "split" is out-degree, derivable. The
+four contact-like kinds are not derivable from `parent` (a contact edge is a
+second parent) and arrive with their producers in M7+.
+
+**`WordEntry.ancestor` stays unshipped.** ADR-0007 deferred it "to M4"; M4
+discharges it instead. Both fork and evolve copy word ids verbatim, so a
+daughter word's ancestor is *always* the same-id parent entry — a stored field
+would hold a tautology. It ships when a producer writes a non-identity value (M7
+borrowing, M8 derivation); until then a library test plus the cross-file
+`family.word_id_orphan` Warning defend the derivability.
+
+**`chronology_years` is absolute from the lineage root.** Already the codebase's
+commitment (M3 dated its last rule 480 and passed `--years 480`; the monotonicity
+check runs over the whole concatenated log). So the three daughters' rule dates
+are absolute, and `--years` conventionally equals the last rule's date. Family
+edges report the depth *delta* (`+470y`), never the total; a negative delta is
+`family.depth_regression`, an Error.
+
+### The fixtures — three crossing isoglosses
+
+Chosen so the acceptance contrasts are real, not decorative. Coastal innovates a
+feeding chain (voicing → lenition → γ-loss) plus apocope; Highland shares voicing
+and apocope but assimilates nasals instead of leniting; Riverine shares only the
+nasal isogloss and keeps its final vowels and voiceless stops. Result: voicing
+{Coastal, Highland}, apocope {Coastal, Highland}, nasal assimilation {Highland,
+Riverine} — three isoglosses, each shared by a different pair, wave-model in
+miniature. Two convergences fall out (`rean` and `ta` are identical in Coastal
+and Riverine through different histories, distinguishable only by trace), and the
+cross-file rule-id convention is honest: `r_ivv` is byte-identical in Coastal and
+Highland, only its per-branch date differs.
+
+### Adversarial review — 3 findings, all fixed
+
+A five-dimension adversarial panel reviewed the implementation (each finding
+independently reproduced by a skeptic before it counted). It surfaced three
+distinct defects, all minor, all in the family-coverage rendering, now fixed at
+**361 tests**:
+
+1. **Gap language lists came out in DFS order, not node order.**
+   `descendant_indices` walked the closure with a stack (`frontier.pop()`, so
+   depth-first despite a comment claiming breadth-first), and that order *did*
+   reach output — the `gap: X absent from …` line `stemma family` prints. A
+   comment even asserted it "does not reach output", which was false. The closure
+   is now sorted into stored order before it returns, honouring the documented
+   "languages in node order" contract for any tree shape. Caught only because the
+   acceptance family is flat (one root, three direct children), where DFS order
+   coincides with node order — a depth-≥2 family exposed it.
+2. **`apply-rules --years` lacked the `range(0..)` guard `fork` has.** The M4
+   refactor routes both verbs through one write gate, but only `fork` rejected
+   negatives; `apply-rules --years=-100` on a deep parent would persist a
+   descendant *earlier* than its parent (total depth still positive, so the
+   genome's `negative_lineage_depth` Error never fires). Both verbs now carry the
+   same guard, with a test asserting it.
+3. **The coverage line printed "1 sets".** The set count was the one count in
+   `render_family` never singularised. Fixed.
+
+One finding was **refuted**: the mint-scan's test-region cutoff (it stops at the
+first `#[cfg(test)]`) and its non-recursive `read_dir` are real limitations, but
+the skeptic confirmed the current flat `stem_genome/src` is clean, so it is a
+latent-robustness note rather than an M4 defect — left as-is.
+
+### Gotchas for the next session
+
+- **`stemma family` output is two parts.** `render_family` (tree + coverage) is
+  library-owned and snapshot-pinned for M6; the validation report prints
+  *separately* via `print_report`. The snapshot covers only the first part.
+- **The acceptance family is valid but not silent.** Each daughter carries
+  `lexicon.syllable_shape_mismatch` **Notes** (stale `Syllable::pattern` after
+  deletions — M3 established this is Note-severity on a word with a derivation),
+  so the family report honestly ends `✓ valid — 0 warning(s), nothing blocking`,
+  never `✓ no issues`.
+- **Deviation from ROADMAP's literal "Proto-Asterian":** the fork parent is
+  `asterian_attested.ron`, the proto stage that *has* words (`proto_asterian.ron`
+  has none, and M3's own acceptance forked it). Recorded in the fixture headers.
+- **Deviation from DESIGN §21's sketch:** Highland gives `tagal`, not §21's
+  `tazal` — ɡ → z is a place shift `set` cannot express (`overlay` never removes
+  a cell, apply.rs). Revisit at M10 if node-level writes arrive.
+- **M5 continuity debt (recorded, not solved):** ROADMAP M5 names meaning MOTHER
+  and gloss "king", but the fixture has no MOTHER concept and "king" is a gloss
+  override on MAN. M5 appends a MOTHER word (checking no golden pins the word
+  count) or adjusts its meanings.
 
 ---
 

@@ -1,0 +1,68 @@
+// Riverine Asterian — the conservative branch, with its own feeding pair
+// (M4 acceptance fixture).
+//
+// Riverine innovates NEITHER voicing NOR apocope — it keeps every final vowel
+// and every voiceless stop its sisters change. Instead it deletes the voiceless
+// velar stop between vowels and then coalesces adjacent low vowels, its own
+// two-rule feeding chain:
+//
+//     *takala > taala (velar loss) > tala (low-vowel coalescence)
+//
+// and it shares the nasal-place isogloss with Highland (identical rule body),
+// arriving late. The result: Riverine RETAINS what {Coastal, Highland}
+// innovated, so its lexicon is the one that most resembles the proto — the
+// wave-model's conservative periphery.
+//
+// Dates are absolute from the lineage root and monotonic; `--years 420` matches
+// the last rule.
+(
+    id: "rules_riverine",
+    name: "Riverine Asterian sound changes",
+    description: "Velar loss feeds low-vowel coalescence; late nasal place assimilation. No voicing, no apocope.",
+    rules: [
+        // Riverine's OWN innovation: the voiceless velar stop deletes between
+        // vowels. Voicing never happened here, so the target is the plain /k/.
+        (
+            id: "r_velar_loss",
+            name: "Intervocalic velar stop loss",
+            description: "The voiceless velar stop deletes between vowels.",
+            chronology_years: 150,
+            target: (features: ["-sonorant", "-continuant", "-voice", "+dorsal"]),
+            environment: (
+                before: [segment((features: ["+syllabic"]))],
+                after: [segment((features: ["+syllabic"]))],
+            ),
+            change: delete,
+        ),
+
+        // FED by r_velar_loss: *takala loses its /k/, bringing two /a/ into
+        // contact, and the second one deletes. Its input pattern (low vowel after
+        // low vowel) does not exist in the proto lexicon until velar loss creates
+        // it in *takala.
+        (
+            id: "r_low_coalescence",
+            name: "Low vowel coalescence",
+            description: "A low vowel is lost after another low vowel.",
+            chronology_years: 300,
+            target: (features: ["+syllabic", "+low"]),
+            environment: (
+                before: [segment((features: ["+syllabic", "+low"]))],
+            ),
+            change: delete,
+        ),
+
+        // SHARED with Highland — identical body, arriving latest of the three
+        // branches' copies of this innovation.
+        (
+            id: "r_nasal_place",
+            name: "Nasal place assimilation",
+            description: "A nasal takes the place of articulation of a following stop.",
+            chronology_years: 420,
+            target: (features: ["+nasal"]),
+            environment: (
+                after: [segment((features: ["-sonorant", "-continuant"]))],
+            ),
+            change: copy(from: after(0), node: place),
+        ),
+    ],
+)
