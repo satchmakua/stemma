@@ -12,11 +12,12 @@ The name comes from textual criticism: a *stemma* is the reconstructed family tr
 showing how surviving manuscripts descend from a lost original. That is exactly
 this program's core data structure.
 
-**Status:** early — **M4 complete**. Languages evolve *and branch*: ordered sound
-changes transform the lexicon, every change is traced, and a proto-language forks
-into daughters that each carry their own history — `stemma family` shows the tree
-and proves every cognate set survives the split. 360 tests pass. Comparative
-cognate tables are next. See [ROADMAP.md](ROADMAP.md) for the plan and
+**Status:** early — **M5 complete**. Languages evolve *and branch*, and the family
+is now legible: ordered sound changes transform the lexicon, every change is
+traced, a proto-language forks into daughters, and `stemma cognates` prints a
+comparative table of one meaning's reflexes across the whole family — joined by
+shared ancestry, so meaning drift never breaks the join. 385 tests pass. A scripted
+portfolio demo is next. See [ROADMAP.md](ROADMAP.md) for the plan and
 [PROGRESS.md](PROGRESS.md) for what has shipped.
 
 ---
@@ -181,22 +182,50 @@ cargo run -p stem_cli -- family fixtures/asterian_attested.ron out/coastal.ron o
 ```
 
 ```
-Attested Asterian (asterian_attested) — proto · 15 phonemes · 8 words · 0 rules
-├─ Coastal Asterian (coastal) — +470y · 17 phonemes · 8 words · 4 rules
-├─ Highland Asterian (highland) — +460y · 17 phonemes · 8 words · 3 rules
-└─ Riverine Asterian (riverine) — +420y · 16 phonemes · 8 words · 3 rules
+Attested Asterian (asterian_attested) — proto · 15 phonemes · 9 words · 0 rules
+├─ Coastal Asterian (coastal) — +470y · 17 phonemes · 9 words · 4 rules
+├─ Highland Asterian (highland) — +460y · 17 phonemes · 9 words · 3 rules
+└─ Riverine Asterian (riverine) — +420y · 16 phonemes · 9 words · 3 rules
 
-cognate coverage — asterian_attested: 8 sets, 3 descendants, 8/8 present in all
+cognate coverage — asterian_attested: 9 sets, 3 descendants, 9/9 present in all
 ```
 
 `*takala` "star" comes out **taal** on the coast, **tagal** in the highlands, and
 **tala** by the river — three languages, one ancestor, and the whole descent is on
 record. The cognate ids are *copied* across every fork, never re-minted, which is
-what lets `family` prove all eight sets survive into all three daughters; run
+what lets `family` prove all nine sets survive into all three daughters; run
 `stemma trace out/coastal.ron w_0001` to watch one word's chain walk back to
 `*takala`. Descent is read from each file's `parent` field — nothing about the
 family tree is stored anywhere, so it can never fall out of sync with the
 languages themselves.
+
+### Compare it by meaning
+
+```bash
+cargo run -p stem_cli -- cognates \
+    fixtures/asterian_attested.ron out/coastal.ron out/highland.ron out/riverine.ron \
+    --meanings water sun star king mother
+cargo run -p stem_cli -- trace-word out/coastal.ron star   # == trace … w_0001
+```
+
+```
+meaning  asterian_attested  coastal  highland  riverine
+water    *akwa              akw      akw       akwa
+sun      *sawel             sawel    sawel     sawel
+star     *takala            taal     tagal     tala
+king     *rekan             rean     regan     rean
+mother   *mikala            mial     migal     miala
+```
+
+This is the comparative method's core table: each row is one meaning, each column a
+language, and the reflexes line up because they descend from one proto-word — the
+`*`-marked reconstruction in the reference column. The join is by *shared ancestry*
+(cognate set), never by the meaning label, so a word whose sense later drifts still
+sits in its own row. Note `king`: it resolves to `*rekan` through the word's gloss,
+even though that word's underlying concept is "man" (the etymology the eventual
+semantic layer will model). `stemma trace-word <file> <meaning>` is `trace` by
+meaning instead of by id — the same derivation ledger, reached by what a word
+*means*.
 
 ### Commands
 
@@ -212,7 +241,9 @@ languages themselves.
 | `stemma apply-rules <file>` | Apply an ordered rule set, producing a descendant language |
 | `stemma fork <parent>` | Fork a daughter (`--id`, `--name`, `--rules`, `--years`, `--out`) |
 | `stemma family <files>…` | Assemble a lineage; print the family tree, cognate coverage, and report |
+| `stemma cognates <files>… --meanings <m>…` | Print the comparative table of each meaning's reflexes across the family |
 | `stemma trace <file> <word>` | Print a word's derivation, rule by rule |
+| `stemma trace-word <file> <meaning>` | Print a word's derivation, addressed by meaning |
 | `stemma rules <file>` | Validate and summarise a rule-set file |
 | `stemma convert <in> <out>` | Convert a project between RON and JSON |
 

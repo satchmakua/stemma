@@ -20,4 +20,7 @@ pub mod language;
 pub mod lineage;
 
 pub use language::LanguageGenome;
-pub use lineage::{CognateCoverage, LineageEdge, LineageGraph, render_family};
+pub use lineage::{
+    CognateColumn, CognateCoverage, CognateRow, CognateTable, LineageEdge, LineageGraph,
+    render_cognate_table, render_family,
+};

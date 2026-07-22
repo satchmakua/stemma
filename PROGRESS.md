@@ -5,8 +5,8 @@ A build log of what shipped and the notable decisions behind it. **Keep it hones
 acceptance tests live in [ROADMAP.md](ROADMAP.md); this is the backward-looking
 "what got done and why" companion.
 
-**Current phase:** Phase 1 — the diachronic kernel. Next milestone: **M5 —
-cognate tables & word traces**.
+**Current phase:** Phase 1 — the diachronic kernel. Next milestone: **M6 — the
+portfolio demo**.
 
 ## State of the tree
 
@@ -19,7 +19,78 @@ cognate tables & word traces**.
 | `stem_genome` | `LanguageGenome`, `fork`, `LineageGraph`, family validation, `render_family` | working |
 | `stem_io` | RON/JSON load & save | working — **untouched since M0** |
 | `stem_export` | Markdown dictionaries, CLDF-shaped CSV | working |
-| `stem_cli` | the `stemma` binary | …M3's commands, plus `fork` and `family` |
+| `stem_cli` | the `stemma` binary | …M4's commands, plus `cognates` and `trace-word` |
+
+---
+
+## M5 — Cognate tables & word traces · built 2026-07-21 · ✓ verified
+
+The family becomes *legible*. `stemma cognates` prints §10.3's comparative table —
+reflexes of each meaning across every daughter, side by side — and `stemma
+trace-word` prints §10.2's full derivation addressed by meaning instead of by word
+id. **385 tests pass**; clippy clean under `-D warnings`.
+
+Verified by running the ROADMAP acceptance: `stemma cognates … --meanings water
+sun star king mother` prints the table with `star → *takala / taal / tagal /
+tala`, `king → *rekan / rean / regan / rean`, and `mother → *mikala / mial / migal
+/ miala`; `stemma trace-word out/coastal.ron star` is byte-identical to `stemma
+trace out/coastal.ron w_0001`.
+
+### Decisions worth knowing
+
+**The whole milestone was one lexicon query, one graph view, two thin verbs, and
+one fixture word.** Everything else was already in the tree: the cognate set is
+the cross-language join (`docs/adr/0007`), and `render_derivation` already emits
+the entire §10.2 ledger. M5 changed no engine code and no file format.
+
+**Meaning resolves by *displayed gloss*, never by concept.** `Lexicon::by_meaning`
+matches `display_gloss()` case-insensitively, so `king` finds `*rekan` — concept
+MAN, gloss override "king" — which a concept-key match (`king → KING concept →`
+no fixture word) would render as an empty row. The fixture is built to expose
+exactly that bug: `w_0005` is deliberately concept MAN with a "king" gloss (the
+etymology-vs-surface seed M9 needs). One shared resolver serves both `cognates`
+and `trace-word`, so the two can never disagree about what a meaning names.
+
+**The table joins by cognate set, resolved *once* against the reference.** Not
+re-resolved by meaning per column — that would be a concept join, and under M9's
+meaning drift a daughter whose reflex shifted sense would silently drop out of its
+own row. Ancestry gets a language into the row; the displayed meaning is only the
+row label. A daughter lacking the set is a gap (`—`), not an error (plausibility
+reported, not enforced). Each cell renders against its *own* column's inventory,
+because Highland's `tagal` carries `ph_g`, absent from the proto inventory —
+rendering with the reference's would abort the whole table.
+
+**`MOTHER *mikala` earned its place with a real contrast.** The velar chain again,
+but `/i/` is `[-low]`, so Riverine's low-vowel coalescence cannot fire and it
+alone keeps all three vowels (`miala`), where STAR's `*takala` coalesced to
+`tala` — a lesson (coalescence is conditioned) no earlier word teaches. Chosen
+over a zero-risk `*maka` (which would have been isomorphic to `*taka`). The
+reflexes were **verified against the engine**, not hand-computed into the goldens.
+
+**`stemma trace-word coastal star` is file-native.** ROADMAP writes a language id;
+the CLI is file-native (there is no language registry — the lineage is derived
+from files), so "coastal" is `out/coastal.ron`, the same deviation `trace` and
+`family` already made. `trace-word` is `trace` with meaning-addressing swapped for
+id-addressing: same renderer, zero new rendering.
+
+### Gotchas for the next session
+
+- **The reference fixture is now nine words.** Adding `w_0009` MOTHER moved five
+  M4 test goldens (`forms()` `1..=9`, `len()==9`, the reflex table's ninth row,
+  coverage `9/9`, the family snapshot's `9 words`) and three doc pins — all
+  updated. The M4 PROGRESS entry above now reads `9/9` and `27-cell` for accuracy
+  (a reader running the M4 tests today sees those numbers). `proto_asterian.ron`
+  is untouched (its own `w_0009` is BLOOD); M3 acceptance stays green because
+  `*mikala` mints nothing new.
+- **`render_cognate_table` pads by char count, not byte length**, so `ŋ`/`ɣ`
+  cells align. Its output is the M6 demo's raw material and will want a
+  `stem_export` Markdown/CLDF projection over the same `CognateTable` struct —
+  the struct carries the ids and names a projection or a clickable cell needs.
+- **`cognates` writes only the table to stdout;** the reference banner and any
+  notes go to stderr, so the table stays diffable (the `generate-roots` split).
+- **The M5 continuity debt is settled, not carried forward:** MOTHER and KING were
+  on the concept list since M2 (a prior session's hook for exactly this); MOTHER
+  is now a real word, and `king` resolves by gloss.
 
 ---
 
@@ -34,8 +105,8 @@ graded report. **360 tests pass**; clippy clean under `-D warnings`.
 Verified by running the ROADMAP acceptance end to end: forking
 `asterian_attested` three ways under three hand-written rule histories yields
 Coastal, Highland, and Riverine, whose lexicons differ pairwise — `*takala`
-reflects as **taal** / **tagal** / **tala**, and the whole 24-cell golden table
-matches the engine cell for cell. `stemma family` reports **8/8 cognate sets
+reflects as **taal** / **tagal** / **tala**, and the whole 27-cell golden table
+matches the engine cell for cell. `stemma family` reports **9/9 cognate sets
 present in all three** daughters, every daughter's trace replays to its stored
 form, `stemma trace out/coastal.ron w_0001` walks unbroken from *takala to taal,
 and two fork runs write byte-identical files.
