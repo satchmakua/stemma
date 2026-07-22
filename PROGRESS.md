@@ -73,6 +73,17 @@ from files), so "coastal" is `out/coastal.ron`, the same deviation `trace` and
 `family` already made. `trace-word` is `trace` with meaning-addressing swapped for
 id-addressing: same renderer, zero new rendering.
 
+### Adversarial review — clean
+
+A five-dimension adversarial panel (resolver correctness, the cognate-set join,
+determinism/rendering, CLI wiring & fixture correctness, placement & invariants),
+each dimension charged to reproduce any defect against the code, returned **zero
+findings**. Credible for the smallest milestone of the phase — one lexicon query
+and one graph view over established patterns — and backed by front-loaded
+verification: the `*mikala` reflexes were confirmed against the engine before the
+goldens were written, the acceptance table's exact bytes were baselined from the
+real renderer, and `trace-word star == trace w_0001` was checked byte-for-byte.
+
 ### Gotchas for the next session
 
 - **The reference fixture is now nine words.** Adding `w_0009` MOTHER moved five
