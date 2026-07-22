@@ -391,10 +391,12 @@ pub fn nearest_concept_key(key: &ConceptKey) -> Option<&'static str> {
 
 /// The concept whose gloss is exactly `gloss`, matched case-insensitively.
 ///
-/// The M5 join key: `stemma cognates --meanings water sun star king mother` takes
-/// lowercase English, and `gloss` is the only field whose values are those words.
-/// Well-defined because `the_gloss_column_is_unique` asserts no two concepts share
-/// one.
+/// The meaning→*concept* resolver, for diagnostics and (later) CLDF anchoring.
+/// It is **not** M5's cognate-table join: that anchor is
+/// [`crate::Lexicon::by_meaning`] → `cognate_set`, which matches a word's
+/// *displayed* gloss so a gloss override like `king` on concept MAN resolves to
+/// the word rather than to the (word-less) KING concept. Well-defined because
+/// `the_gloss_column_is_unique` asserts no two concepts share one gloss.
 pub fn concept_by_gloss(gloss: &str) -> Option<&'static Concept> {
     CONCEPTS
         .iter()

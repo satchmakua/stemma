@@ -113,6 +113,36 @@ impl Lexicon {
             .collect()
     }
 
+    /// Every entry whose *displayed* gloss matches `meaning`, case-insensitively,
+    /// in stored order. The token→word resolver shared by `stemma cognates` and
+    /// `stemma trace-word`, so the two can never disagree about what a meaning
+    /// names (M5).
+    ///
+    /// Matches [`WordEntry::display_gloss`] — the label a reader sees — **not**
+    /// `concept`: the meaning a user types is the *surface* gloss, so `king` must
+    /// find `*rekan` (concept MAN, gloss override "king"), §10.3's own
+    /// `king → *rekan` row. A concept-key match (`concept_by_gloss("king") →
+    /// KING`, then `by_concept(KING) → []`) would render an empty row — the bug
+    /// the fixture is built to expose. And because `display_gloss` falls back to
+    /// the concept's own gloss, a word with no override (`MOTHER *mikala`) still
+    /// resolves via "mother". `docs/adr/0007`: meaning gets you *into* the row;
+    /// ancestry (`cognate_set`) fills it.
+    ///
+    /// A `Vec`, not `Option`, for the reason [`Self::by_concept`] is: a displayed
+    /// gloss is not unique within a lexicon (synonymy, or an override colliding
+    /// with another entry's concept gloss), so a caller that must pick is *told*
+    /// it is picking. Empty = the meaning is absent here. Linear, stored order,
+    /// no map (§9.4).
+    pub fn by_meaning(&self, meaning: &str) -> Vec<&WordEntry> {
+        self.entries
+            .iter()
+            .filter(|e| {
+                e.display_gloss()
+                    .is_some_and(|g| g.eq_ignore_ascii_case(meaning))
+            })
+            .collect()
+    }
+
     /// A one-line summary for CLI output, in `LanguageGenome::summary`'s style.
     ///
     /// Deliberately says nothing about homophones: detecting those needs the

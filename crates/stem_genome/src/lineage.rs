@@ -67,6 +67,50 @@ pub struct CognateCoverage {
     pub gaps: Vec<(CognateSetId, Vec<LanguageId>)>,
 }
 
+/// One column of the §10.3 comparative table: a language, and whether its
+/// reflexes are marked `*` (a lineage root, by the reconstruction convention).
+/// `name` is carried for M6/M11; the terminal renderer prints `id`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CognateColumn {
+    pub id: LanguageId,
+    pub name: String,
+    pub is_root: bool,
+}
+
+/// One row of the table: a requested meaning, the cognate set it resolved to
+/// (the join key, resolved **once** against the reference — `docs/adr/0007`),
+/// and the reflex in each column. `cells` is parallel to
+/// [`CognateTable::columns`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CognateRow {
+    /// The meaning as the caller typed it — the row label, echoed verbatim.
+    pub meaning: String,
+    /// The cognate set of the reference word this meaning resolved to. `None` =
+    /// the meaning named no word in the reference language (an all-gap row).
+    pub cognate_set: Option<CognateSetId>,
+    /// `Some(written form)` per column, or `None` for a genuine gap (word death,
+    /// or a daughter that never inherited the set); renders as `—`.
+    pub cells: Vec<Option<String>>,
+}
+
+/// DESIGN.md §10.3's comparative table: reflexes of each meaning across a
+/// family. Columns in node (argv) order; rows in the order the meanings were
+/// given. Built in memory, never persisted, never sorted — so it carries no
+/// serde-forward-compat burden and may grow fields additively (M6/M11).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CognateTable {
+    /// Column languages, node/argv order (the proto is first when passed first).
+    pub columns: Vec<CognateColumn>,
+    /// The language meanings were resolved against — the first node. Its reflexes
+    /// are the proto forms and the join anchors.
+    pub reference: LanguageId,
+    /// One row per requested meaning, in request order.
+    pub rows: Vec<CognateRow>,
+    /// Advisory notes (a meaning unresolved in the reference; a synonymy anchor
+    /// choice), in the order encountered. The CLI prints these to stderr.
+    pub notes: Vec<String>,
+}
+
 impl LineageGraph {
     /// Assembles a family from loaded genomes, keeping their given order. Never
     /// fails: a broken family is a *report* ([`Self::validate_family`]), not a
@@ -276,6 +320,102 @@ impl LineageGraph {
             });
         }
         coverage
+    }
+
+    /// Builds DESIGN.md §10.3's comparative table for `meanings`, row order
+    /// preserved (M5).
+    ///
+    /// Columns are every node in node (argv) order. Each meaning is resolved
+    /// **once** — against the *reference* (the first node) via
+    /// [`stem_lexicon::Lexicon::by_meaning`] — and every column is filled by
+    /// `by_cognate_set` of that word's set: the join is by **ancestry, never by
+    /// re-resolving meaning per column** (`docs/adr/0007`), so a daughter that
+    /// (M9) drifts the meaning still appears in its row because it is still
+    /// cognate. A meaning resolving to several reference words (synonymy) anchors
+    /// on the first in stored order and pushes a note; one resolving to none is
+    /// an all-gap row (`cognate_set: None`) plus a note.
+    ///
+    /// `Result` because a cell is rendered with **its own column's inventory**,
+    /// and a segment missing there is the `unknown_phoneme` Error `validate`
+    /// reports (a valid family never trips it). Linear `by_cognate_set` scans;
+    /// columns in node order, rows in meaning order; no map, no sort — a pure
+    /// function of node order and the meanings.
+    pub fn cognate_table(&self, meanings: &[String]) -> stem_core::Result<CognateTable> {
+        let columns: Vec<CognateColumn> = self
+            .nodes
+            .iter()
+            .map(|g| CognateColumn {
+                id: g.id.clone(),
+                name: g.name.clone(),
+                is_root: match &g.parent {
+                    None => true,
+                    Some(p) => self.index_of(p).is_none(),
+                },
+            })
+            .collect();
+
+        // Empty family: total method, even though the CLI's `required` files make
+        // it unreachable from the binary. No `LanguageId::Default` exists, so the
+        // reference is only meaningful when there is a first node.
+        let Some(reference_node) = self.nodes.first() else {
+            return Ok(CognateTable {
+                columns,
+                reference: LanguageId::new(""),
+                rows: Vec::new(),
+                notes: vec!["no languages were given".to_owned()],
+            });
+        };
+        let reference = reference_node.id.clone();
+
+        let mut rows = Vec::with_capacity(meanings.len());
+        let mut notes = Vec::new();
+
+        for meaning in meanings {
+            let matches = reference_node.lexicon.by_meaning(meaning);
+            let Some(word) = matches.first() else {
+                notes.push(format!(
+                    "`{meaning}` matched no word in reference `{reference}`"
+                ));
+                rows.push(CognateRow {
+                    meaning: meaning.clone(),
+                    cognate_set: None,
+                    cells: vec![None; columns.len()],
+                });
+                continue;
+            };
+            if matches.len() > 1 {
+                notes.push(format!(
+                    "`{meaning}` matched {} words in `{reference}`; anchoring on `{}`",
+                    matches.len(),
+                    word.id
+                ));
+            }
+            let set = word.cognate_set.clone();
+
+            let mut cells = Vec::with_capacity(columns.len());
+            for node in &self.nodes {
+                // Render each cell against its OWN inventory — Highland `tagal`
+                // carries `ph_g`, absent from the proto inventory, so rendering
+                // with the reference's would make `written` fail and abort.
+                let cell = match node.lexicon.by_cognate_set(&set) {
+                    Some(entry) => Some(entry.written(&node.phonemes)?),
+                    None => None,
+                };
+                cells.push(cell);
+            }
+            rows.push(CognateRow {
+                meaning: meaning.clone(),
+                cognate_set: Some(set),
+                cells,
+            });
+        }
+
+        Ok(CognateTable {
+            columns,
+            reference,
+            rows,
+            notes,
+        })
     }
 
     /// Family-level validation (`docs/adr/0008`, spec §7). Absorbs each node's
@@ -629,6 +769,88 @@ fn render_subtree(
     }
 }
 
+/// Renders a [`CognateTable`] as DESIGN.md §10.3's aligned monospace text.
+///
+/// Infallible: the forms were rendered (and any failure surfaced) when the table
+/// was built. A root column's cells carry a leading `*` (the reconstruction
+/// convention); a gap renders `—`. The header is each column's `id`. In the
+/// library, not the CLI, for the [`render_family`] precedent — the M11 UI must
+/// render the identical text through the identical function.
+///
+/// Padding is by **char count**, not byte length, so `ŋ`/`ɣ` cells stay aligned
+/// (the same rule `stemma features` follows). Two-space gutters; trailing
+/// whitespace trimmed per line; newline-terminated. A pure function of the
+/// table — no sort, no map (§9.4).
+pub fn render_cognate_table(table: &CognateTable) -> String {
+    // The first column is the meaning label; the rest are the languages.
+    let meaning_header = "meaning";
+    let cell_of = |row: &CognateRow, col: usize| -> String {
+        match &row.cells[col] {
+            Some(form) if table.columns[col].is_root => format!("*{form}"),
+            Some(form) => form.clone(),
+            None => "—".to_owned(),
+        }
+    };
+    let char_len = |s: &str| s.chars().count();
+
+    // Column 0 width: the header vs the longest meaning.
+    let meaning_width = table
+        .rows
+        .iter()
+        .map(|r| char_len(&r.meaning))
+        .chain(std::iter::once(char_len(meaning_header)))
+        .max()
+        .unwrap_or(0);
+
+    // Each language column's width: its id vs its widest rendered cell.
+    let col_widths: Vec<usize> = table
+        .columns
+        .iter()
+        .enumerate()
+        .map(|(c, column)| {
+            table
+                .rows
+                .iter()
+                .map(|r| char_len(&cell_of(r, c)))
+                .chain(std::iter::once(char_len(column.id.as_str())))
+                .max()
+                .unwrap_or(0)
+        })
+        .collect();
+
+    let pad = |s: &str, width: usize| {
+        let deficit = width.saturating_sub(char_len(s));
+        format!("{s}{}", " ".repeat(deficit))
+    };
+
+    let mut out = String::new();
+    // Header row.
+    let mut line = pad(meaning_header, meaning_width);
+    for (c, column) in table.columns.iter().enumerate() {
+        line.push_str("  ");
+        line.push_str(&pad(column.id.as_str(), col_widths[c]));
+    }
+    push_trimmed_line(&mut out, &line);
+
+    // Data rows.
+    for row in &table.rows {
+        let mut line = pad(&row.meaning, meaning_width);
+        for (c, &width) in col_widths.iter().enumerate() {
+            line.push_str("  ");
+            line.push_str(&pad(&cell_of(row, c), width));
+        }
+        push_trimmed_line(&mut out, &line);
+    }
+    out
+}
+
+/// Appends `line` with its trailing whitespace trimmed, plus a newline — so the
+/// last (widest-free) column never leaves padding on the line.
+fn push_trimmed_line(out: &mut String, line: &str) {
+    out.push_str(line.trim_end());
+    out.push('\n');
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -973,6 +1195,196 @@ mod tests {
         let a = render_family(&family());
         let b = render_family(&family());
         assert_eq!(a, b, "same node order, identical bytes");
+    }
+
+    // ----- M5: the cognate table -----
+
+    /// A genome whose lexicon is the given `(gloss, cognate_set, length)` words —
+    /// each word `length` copies of `ph_a`, so forms differ by length and every
+    /// cell renders. `gloss` is a display override, so `by_meaning` resolves it
+    /// directly.
+    fn worded(id: &str, parent: Option<&str>, words: &[(&str, &str, usize)]) -> LanguageGenome {
+        let mut genome = LanguageGenome::proto(id, id.to_uppercase());
+        genome.parent = parent.map(Into::into);
+        genome.phonemes = PhonemeInventory::from_phonemes([featured("ph_a")]);
+        let entries = words
+            .iter()
+            .enumerate()
+            .map(|(i, (gloss, set, len))| WordEntry {
+                id: WordId::sequential(i + 1),
+                concept: None,
+                phonemic_form: Root {
+                    syllables: vec![Syllable {
+                        pattern: "V".repeat(*len),
+                        segments: vec![PhonemeId::new("ph_a"); *len],
+                        stress: None,
+                    }],
+                },
+                glosses: vec![(*gloss).to_owned()],
+                part_of_speech: PartOfSpeech::Noun,
+                cognate_set: CognateSetId::new(*set),
+                source: WordSource::Authored,
+                trace: None,
+            });
+        genome.lexicon = Lexicon::from_entries(entries);
+        genome
+    }
+
+    #[test]
+    fn the_cognate_table_joins_by_cognate_set_not_by_meaning() {
+        // The daughter has DRIFTED the meaning ("omen") but kept the cognate set;
+        // it must still fill the "star" row, because the join is ancestry.
+        let graph = LineageGraph::assemble(vec![
+            worded("proto", None, &[("star", "cog_star", 3)]),
+            worded("coastal", Some("proto"), &[("omen", "cog_star", 2)]),
+        ]);
+        let table = graph.cognate_table(&["star".to_owned()]).unwrap();
+        assert_eq!(table.rows.len(), 1);
+        assert_eq!(
+            table.rows[0].cognate_set.as_ref().unwrap().as_str(),
+            "cog_star"
+        );
+        assert!(
+            table.rows[0].cells[1].is_some(),
+            "the drifted daughter still appears because it is still cognate (ADR-0007)"
+        );
+    }
+
+    #[test]
+    fn a_daughter_lacking_the_cognate_set_shows_a_gap_cell() {
+        let graph = LineageGraph::assemble(vec![
+            worded("proto", None, &[("star", "cog_star", 3)]),
+            worded("coastal", Some("proto"), &[("water", "cog_water", 2)]),
+        ]);
+        let table = graph.cognate_table(&["star".to_owned()]).unwrap();
+        assert!(
+            table.rows[0].cells[1].is_none(),
+            "a daughter that never inherited the set is a gap, not an error"
+        );
+    }
+
+    #[test]
+    fn a_meaning_absent_from_the_reference_is_an_all_gap_row_with_a_note() {
+        let graph = LineageGraph::assemble(vec![worded("proto", None, &[("star", "cog_star", 3)])]);
+        let table = graph.cognate_table(&["dragon".to_owned()]).unwrap();
+        assert!(table.rows[0].cognate_set.is_none());
+        assert!(table.rows[0].cells.iter().all(Option::is_none));
+        assert!(
+            table.notes.iter().any(|n| n.contains("dragon")),
+            "an unresolved meaning is noted, not an error: {:?}",
+            table.notes
+        );
+    }
+
+    #[test]
+    fn the_columns_follow_node_order_and_flag_roots() {
+        let graph = LineageGraph::assemble(vec![
+            worded("proto", None, &[("star", "cog_star", 3)]),
+            worded("coastal", Some("proto"), &[("star", "cog_star", 2)]),
+        ]);
+        let table = graph.cognate_table(&["star".to_owned()]).unwrap();
+        let ids: Vec<&str> = table.columns.iter().map(|c| c.id.as_str()).collect();
+        assert_eq!(ids, vec!["proto", "coastal"]);
+        assert!(table.columns[0].is_root, "the proto is a root");
+        assert!(!table.columns[1].is_root, "the daughter is not");
+    }
+
+    #[test]
+    fn a_synonym_anchor_picks_the_first_in_stored_order_and_notes_it() {
+        let graph = LineageGraph::assemble(vec![worded(
+            "proto",
+            None,
+            &[("star", "cog_a", 3), ("star", "cog_b", 2)],
+        )]);
+        let table = graph.cognate_table(&["star".to_owned()]).unwrap();
+        assert_eq!(
+            table.rows[0].cognate_set.as_ref().unwrap().as_str(),
+            "cog_a",
+            "the anchor is the first synonym in stored order"
+        );
+        assert!(
+            table.notes.iter().any(|n| n.contains("2 words")),
+            "the synonymy is noted: {:?}",
+            table.notes
+        );
+    }
+
+    #[test]
+    fn render_cognate_table_marks_root_cells_as_reconstructed() {
+        let graph = LineageGraph::assemble(vec![
+            worded("proto", None, &[("star", "cog_star", 3)]),
+            worded("coastal", Some("proto"), &[("star", "cog_star", 2)]),
+        ]);
+        let text = render_cognate_table(&graph.cognate_table(&["star".to_owned()]).unwrap());
+        // proto cell is a root reflex → starred; daughter cell is not. One root
+        // column, one row → exactly one `*` in the whole table.
+        assert!(
+            text.contains("*aaa"),
+            "the root form is reconstructed:\n{text}"
+        );
+        assert_eq!(
+            text.matches('*').count(),
+            1,
+            "only the root column's cell is starred:\n{text}"
+        );
+    }
+
+    #[test]
+    fn render_cognate_table_has_no_trailing_whitespace() {
+        let text = render_cognate_table(&family_table());
+        for line in text.lines() {
+            assert_eq!(line, line.trim_end(), "line has trailing space: {line:?}");
+        }
+    }
+
+    #[test]
+    fn render_cognate_table_pads_by_char_count_so_wide_glyph_columns_align() {
+        // A column header shorter than a multi-byte cell: the cell's CHAR width,
+        // not its byte length, must drive alignment.
+        let graph = LineageGraph::assemble(vec![worded("p", None, &[("star", "cog_s", 1)])]);
+        let mut table = graph.cognate_table(&["star".to_owned()]).unwrap();
+        // Force a multi-byte reflex to exercise char-count padding.
+        table.rows[0].cells[0] = Some("ŋaŋ".to_owned());
+        let text = render_cognate_table(&table);
+        // "star" (4 chars) is wider than the "*ŋaŋ" reflex (4 chars incl. star),
+        // so the row and header meaning columns start the language column at the
+        // same offset. Assert the header and row align on the language column.
+        let lines: Vec<&str> = text.lines().collect();
+        let header_gap = lines[0].find("p").unwrap();
+        // The data line's language cell begins after the same meaning-column pad.
+        assert!(
+            lines[1]
+                .chars()
+                .take(header_gap)
+                .all(|c| c == ' ' || "star".contains(c)),
+            "columns misaligned by byte vs char counting:\n{text}"
+        );
+    }
+
+    #[test]
+    fn the_cognate_table_is_a_pure_function_of_node_and_meaning_order() {
+        let a = render_cognate_table(&family_table());
+        let b = render_cognate_table(&family_table());
+        assert_eq!(a, b, "same inputs, identical bytes");
+    }
+
+    /// A small four-language table over the family() shape, meanings resolved.
+    fn family_table() -> CognateTable {
+        let graph = LineageGraph::assemble(vec![
+            worded(
+                "proto",
+                None,
+                &[("star", "cog_star", 3), ("water", "cog_water", 4)],
+            ),
+            worded(
+                "coastal",
+                Some("proto"),
+                &[("star", "cog_star", 2), ("water", "cog_water", 3)],
+            ),
+        ]);
+        graph
+            .cognate_table(&["star".to_owned(), "water".to_owned()])
+            .unwrap()
     }
 
     /// The cognate-mint invariant, defended in `stem_genome` the way

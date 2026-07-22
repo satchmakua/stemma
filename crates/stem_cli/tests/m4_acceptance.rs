@@ -63,7 +63,7 @@ fn form_of(genome: &LanguageGenome, word: &str) -> String {
 
 /// Every word's romanised form, in id order.
 fn forms(genome: &LanguageGenome) -> Vec<String> {
-    (1..=8)
+    (1..=9)
         .map(|i| form_of(genome, &format!("w_{i:04}")))
         .collect()
 }
@@ -86,7 +86,7 @@ fn forking_the_attested_fixture_three_ways_yields_three_valid_sisters() {
             genome.parent.as_ref().map(|p| p.as_str()),
             Some("asterian_attested")
         );
-        assert_eq!(genome.lexicon.len(), 8);
+        assert_eq!(genome.lexicon.len(), 9);
     }
 }
 
@@ -113,6 +113,10 @@ fn takala_reflects_as_taal_tagal_and_tala() {
         ("w_0006", "sank", "saŋk", "saŋka"),
         ("w_0007", "anp", "amp", "ampa"),
         ("w_0008", "amt", "ant", "anta"),
+        // MOTHER *mikala (added at M5): /i/ is [-low], so Riverine's coalescence
+        // cannot fire and it alone keeps all three vowels — verified against the
+        // engine, not hand-computed into these goldens.
+        ("w_0009", "mial", "migal", "miala"),
     ];
     let (c, h, r) = (coastal(), highland(), riverine());
     for (word, ec, eh, er) in table {
@@ -195,12 +199,12 @@ fn every_proto_cognate_set_survives_into_every_daughter() {
             );
         }
     }
-    // And the family coverage agrees: 8/8 universal.
+    // And the family coverage agrees: 9/9 universal.
     let graph = LineageGraph::assemble(vec![proto, coastal(), highland(), riverine()]);
     let coverage = graph.cognate_coverage();
     assert_eq!(coverage.len(), 1);
-    assert_eq!(coverage[0].universal, 8);
-    assert_eq!(coverage[0].sets, 8);
+    assert_eq!(coverage[0].universal, 9);
+    assert_eq!(coverage[0].sets, 9);
     assert!(coverage[0].gaps.is_empty(), "{:?}", coverage[0].gaps);
 }
 
@@ -333,12 +337,12 @@ fn the_family_rendering_is_stable() {
     let graph = LineageGraph::assemble(vec![attested(), coastal(), highland(), riverine()]);
     let rendered = stem_genome::render_family(&graph);
     let expected = "\
-Attested Asterian (asterian_attested) — proto · 15 phonemes · 8 words · 0 rules
-├─ Coastal Asterian (coastal) — +470y · 17 phonemes · 8 words · 4 rules
-├─ Highland Asterian (highland) — +460y · 17 phonemes · 8 words · 3 rules
-└─ Riverine Asterian (riverine) — +420y · 16 phonemes · 8 words · 3 rules
+Attested Asterian (asterian_attested) — proto · 15 phonemes · 9 words · 0 rules
+├─ Coastal Asterian (coastal) — +470y · 17 phonemes · 9 words · 4 rules
+├─ Highland Asterian (highland) — +460y · 17 phonemes · 9 words · 3 rules
+└─ Riverine Asterian (riverine) — +420y · 16 phonemes · 9 words · 3 rules
 
-cognate coverage — asterian_attested: 8 sets, 3 descendants, 8/8 present in all
+cognate coverage — asterian_attested: 9 sets, 3 descendants, 9/9 present in all
 ";
     assert_eq!(rendered, expected, "the family rendering drifted");
 }

@@ -3,9 +3,9 @@
 // A complete genome carrying the REFERENCE INVENTORY VERBATIM (a test asserts
 // `asterian_attested.phonemes == proto_asterian.phonemes`, so the two files
 // cannot drift apart silently — RON has no include mechanism, and the checked
-// invariant is the honest substitute). The lexicon is eight hand-authored words:
+// invariant is the honest substitute). The lexicon is nine hand-authored words:
 // four are the design doc's own attested roots, which `proto_asterian.ron`
-// already names and vouches for; four are coined, each for a stated reason in
+// already names and vouches for; five are coined, each for a stated reason in
 // the comment above it.
 //
 // PROSODY. `fixed(from: left, offset: 0)` — initial stress, one of the commonest
@@ -147,8 +147,10 @@
             source: authored,
         ),
         // *rekan 'king'. Voices; no final vowel to lose; the nasal is word-final so
-        // assimilation cannot fire. There is no KING concept — the gloss override
-        // is exactly for this.
+        // assimilation cannot fire. Concept is MAN, glossed "king": etymology 'man',
+        // surface sense 'king' — the split M9 will model, and the reason
+        // `--meanings king` must resolve by gloss (this word), not by concept key
+        // (KING is on the list since M2, but no fixture word carries it).
         (
             id: "w_0005",
             concept: "MAN",
@@ -198,6 +200,24 @@
             ]),
             part_of_speech: noun,
             cognate_set: "cog_asterian_attested_0008",
+            source: authored,
+        ),
+        // MOTHER *mikala. The velar chain again, but /i/ is [-low], so Riverine's
+        // low-vowel coalescence cannot fire — the one daughter that keeps all three
+        // vowels (miala), where STAR's *takala coalesced to tala. Concept MOTHER
+        // carries no gloss override, so it resolves by its concept gloss "mother":
+        // the concept-path counterpart to w_0005 'king', which resolves by an
+        // override. Added for M5's `stemma cognates … --meanings … mother`.
+        (
+            id: "w_0009",
+            concept: "MOTHER",
+            phonemic_form: (syllables: [
+                (pattern: "CV", segments: ["ph_m", "ph_i"]),
+                (pattern: "CV", segments: ["ph_k", "ph_a"]),
+                (pattern: "CV", segments: ["ph_l", "ph_a"]),
+            ]),
+            part_of_speech: noun,
+            cognate_set: "cog_asterian_attested_0009",
             source: authored,
         ),
     ],

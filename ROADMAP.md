@@ -75,17 +75,22 @@ outside this phase matters until it works end to end._
   producer needs them; the graph uses no map anywhere.
   **Test:** `stemma fork fixtures/asterian_attested.ron --rules fixtures/rules_coastal.ron …`
   (and Highland, Riverine) yields three sisters whose lexicons differ pairwise —
-  `takala` → **taal** / **tagal** / **tala**; `stemma family …` reports **8/8**
+  `takala` → **taal** / **tagal** / **tala**; `stemma family …` reports **9/9**
   cognate sets present in all three; every daughter's trace replays to its stored
   form and `stemma trace out/coastal.ron w_0001` walks unbroken back to `*takala`;
   two fork runs are byte-identical.
 
-- [ ] **M5 — Cognate tables & word traces.** The two views that make the engine
-  legible: the comparative table of §10.3 and the "trace this word" output of
-  §10.2 — the killer feature.
-  **Test:** `stemma cognates --meanings water sun star king mother` prints the §10.3
-  table across all three daughters; `stemma trace-word coastal star` prints the
-  full derivation, rule by rule, from proto-form to modern form.
+- [x] **M5 — Cognate tables & word traces.** The two meaning-addressed views:
+  §10.3's comparative table (`stemma cognates`), joined by cognate set so meaning
+  drift can never drop a reflex, and §10.2's derivation addressed by meaning
+  (`stemma trace-word`, reusing the M3 renderer). One shared `Lexicon::by_meaning`
+  resolver matches a word's displayed gloss, so `king` finds the word glossed
+  "king". MOTHER `*mikala` joined the reference fixture (now nine words).
+  **Test:** `stemma cognates fixtures/asterian_attested.ron out/coastal.ron
+  out/highland.ron out/riverine.ron --meanings water sun star king mother` prints
+  the §10.3 table (`star` → `*takala`/taal/tagal/tala; `king` → `*rekan`/rean/…;
+  `mother` → `*mikala`/mial/migal/miala); `stemma trace-word out/coastal.ron star`
+  prints the full derivation and is byte-identical to `trace … w_0001`.
 
 - [ ] **M6 — The portfolio demo.** One scripted command that produces the §21
   artefact: "Growing a Language Family in 90 Seconds." Proto-language, three

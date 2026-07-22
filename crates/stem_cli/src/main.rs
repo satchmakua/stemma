@@ -194,6 +194,33 @@ enum Command {
         #[arg(required = true)]
         files: Vec<PathBuf>,
     },
+
+    /// Print the §10.3 comparative table: reflexes of each meaning across a
+    /// family, joined by cognate set (shared ancestry).
+    ///
+    /// Columns are the languages you pass, in order — the first is the reference
+    /// the meanings resolve against, and its forms are the reconstructed
+    /// proto-forms (marked `*`). A meaning is matched to a word by its displayed
+    /// gloss, so `king` finds the word glossed "king".
+    Cognates {
+        /// The language files to compare, in column order (the first is the
+        /// reference).
+        #[arg(required = true, num_args = 1..)]
+        files: Vec<PathBuf>,
+        /// The meanings to tabulate — one row each, in the given order.
+        #[arg(long, required = true, num_args = 1..)]
+        meanings: Vec<String>,
+    },
+
+    /// Trace one word by MEANING (§10.2): resolve the meaning to a word, then
+    /// print its full derivation, rule by rule. The meaning-addressed sibling of
+    /// `trace`.
+    TraceWord {
+        /// Path to a language file (`.ron` or `.json`).
+        path: PathBuf,
+        /// The meaning to trace, as an English gloss (`star`, `king`).
+        meaning: String,
+    },
 }
 
 fn main() -> ExitCode {
@@ -249,6 +276,8 @@ fn run() -> Result<ExitCode> {
             out,
         } => fork(&parent, &id, &name, rules.as_deref(), years, out.as_deref()),
         Command::Family { files } => family(&files),
+        Command::Cognates { files, meanings } => cognates(&files, &meanings),
+        Command::TraceWord { path, meaning } => trace_word(&path, &meaning),
     }
 }
 
@@ -626,6 +655,58 @@ fn family(files: &[PathBuf]) -> Result<ExitCode> {
     })
 }
 
+fn cognates(files: &[PathBuf], meanings: &[String]) -> Result<ExitCode> {
+    let mut genomes = Vec::with_capacity(files.len());
+    for file in files {
+        genomes.push(load_genome(file)?);
+    }
+    let graph = stem_genome::LineageGraph::assemble(genomes);
+    let table = graph
+        .cognate_table(meanings)
+        .context("building the cognate table")?;
+
+    // Banner and notes to stderr; the table alone to stdout, so it stays
+    // diffable (the `generate-roots` split).
+    eprintln!(
+        "reference: {} — meanings resolved here; * marks reconstructed root forms",
+        table.reference
+    );
+    for note in &table.notes {
+        eprintln!("note: {note}");
+    }
+    print!("{}", stem_genome::render_cognate_table(&table));
+
+    Ok(ExitCode::SUCCESS)
+}
+
+fn trace_word(path: &std::path::Path, meaning: &str) -> Result<ExitCode> {
+    let genome = load_genome(path)?;
+    let matches = genome.lexicon.by_meaning(meaning);
+    let entry = match matches.as_slice() {
+        [] => anyhow::bail!("no word means `{meaning}` in `{}`", genome.name),
+        [first, rest @ ..] => {
+            if !rest.is_empty() {
+                // Same first-in-stored-order policy the cognate table uses, so the
+                // two can never point at different words for one meaning.
+                eprintln!(
+                    "note: {} words mean `{meaning}` in {}; tracing `{}`",
+                    matches.len(),
+                    genome.name,
+                    first.id
+                );
+            }
+            *first
+        }
+    };
+
+    let rendered =
+        stem_soundchange::render_derivation(entry, &genome.applied_rules, &genome.phonemes)
+            .with_context(|| format!("rendering the derivation of `{}`", entry.id))?;
+    print!("{rendered}");
+
+    Ok(ExitCode::SUCCESS)
+}
+
 fn trace(path: &std::path::Path, word: &str) -> Result<ExitCode> {
     let genome = load_genome(path)?;
     let entry = genome
@@ -802,6 +883,35 @@ mod tests {
         match cli.command {
             Command::Family { files } => assert_eq!(files.len(), 3),
             other => panic!("expected family, got {other:?}"),
+        }
+
+        // M5's two verbs. `cognates` mixes a required variadic positional with a
+        // greedy `--meanings` — the `--` split is what keeps clap from swallowing
+        // the meanings as files.
+        let cli = Cli::parse_from([
+            "stemma",
+            "cognates",
+            "a.ron",
+            "b.ron",
+            "--meanings",
+            "water",
+            "sun",
+        ]);
+        match cli.command {
+            Command::Cognates { files, meanings } => {
+                assert_eq!(files.len(), 2, "two files");
+                assert_eq!(meanings, vec!["water", "sun"], "two meanings");
+            }
+            other => panic!("expected cognates, got {other:?}"),
+        }
+
+        let cli = Cli::parse_from(["stemma", "trace-word", "coastal.ron", "star"]);
+        match cli.command {
+            Command::TraceWord { path, meaning } => {
+                assert_eq!(path, PathBuf::from("coastal.ron"));
+                assert_eq!(meaning, "star");
+            }
+            other => panic!("expected trace-word, got {other:?}"),
         }
     }
 

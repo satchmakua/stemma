@@ -305,6 +305,90 @@ mod tests {
         }])
     }
 
+    // --- by_meaning: the M5 meaning→word resolver ---
+    //
+    // These live here, not in `lexicon.rs`, because the mint scan
+    // `only_proto_lexicon_construction_mints_a_cognate_set` hard-lists
+    // `lexicon.rs` and does not exempt `#[cfg(test)]`, so a `CognateSetId::new`
+    // in a `lexicon.rs` test would fail it.
+
+    fn entry(id: &str, concept: Option<&str>, glosses: &[&str]) -> WordEntry {
+        WordEntry {
+            id: WordId::new(id),
+            concept: concept.map(ConceptKey::new),
+            phonemic_form: Root {
+                syllables: vec![Syllable {
+                    pattern: "CV".to_owned(),
+                    segments: vec![
+                        stem_core::PhonemeId::new("ph_t"),
+                        stem_core::PhonemeId::new("ph_a"),
+                    ],
+                    stress: None,
+                }],
+            },
+            glosses: glosses.iter().map(|g| (*g).to_owned()).collect(),
+            part_of_speech: PartOfSpeech::Noun,
+            cognate_set: CognateSetId::new(format!("cog_x_{id}")),
+            source: WordSource::Authored,
+            trace: None,
+        }
+    }
+
+    #[test]
+    fn by_meaning_resolves_a_gloss_override_not_just_the_concept() {
+        // The fixture's `*rekan`: concept MAN, gloss override "king".
+        let lex = one_entry(Some("MAN"), vec!["king".to_owned()]);
+        assert_eq!(
+            lex.by_meaning("king").len(),
+            1,
+            "a gloss override must be found by the meaning it displays"
+        );
+        assert!(
+            lex.by_meaning("man").is_empty(),
+            "the underlying concept gloss is shadowed by the override, so `man` finds nothing"
+        );
+    }
+
+    #[test]
+    fn by_meaning_uses_the_concept_gloss_when_there_is_no_override() {
+        // MOTHER *mikala carries no override, so it resolves via its concept gloss.
+        let lex = one_entry(Some("MOTHER"), vec![]);
+        assert_eq!(
+            lex.by_meaning("mother").len(),
+            1,
+            "a word with no override resolves through its concept's gloss"
+        );
+    }
+
+    #[test]
+    fn by_meaning_is_case_insensitive() {
+        let lex = one_entry(Some("STAR"), vec![]);
+        for token in ["star", "STAR", "Star"] {
+            assert_eq!(lex.by_meaning(token).len(), 1, "`{token}` must resolve");
+        }
+    }
+
+    #[test]
+    fn by_meaning_returns_every_synonym_in_stored_order() {
+        let lex = Lexicon::from_entries([
+            entry("w_0001", Some("STAR"), &["star"]),
+            entry("w_0002", None, &["star"]), // a synonym, later in stored order
+        ]);
+        let hits = lex.by_meaning("star");
+        assert_eq!(hits.len(), 2, "both synonyms are returned");
+        assert_eq!(
+            hits[0].id.as_str(),
+            "w_0001",
+            "stored order: the first is first"
+        );
+    }
+
+    #[test]
+    fn by_meaning_of_an_absent_meaning_is_empty() {
+        let lex = one_entry(Some("STAR"), vec![]);
+        assert!(lex.by_meaning("dragon").is_empty());
+    }
+
     #[test]
     fn a_misspelled_concept_key_warns_and_suggests_the_nearest_real_one() {
         let report = one_entry(Some("NOES"), vec!["nose".to_owned()]).validate();
