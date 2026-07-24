@@ -382,6 +382,7 @@ dependencies = [
  "stem_io",
  "stem_lexicon",
  "stem_phonology",
+ "stem_soundchange",
 ]
 
 [[package]]

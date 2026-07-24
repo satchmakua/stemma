@@ -107,6 +107,29 @@ impl WeightedTemplate {
         }
         Ok(slots)
     }
+
+    /// The longest run of consecutive consonant slots in this template — its
+    /// heaviest cluster (M7, §17). A malformed template (already the
+    /// `bad_template` Error) contributes **0**, the same skip discipline
+    /// `check_against_inventory` uses, so a plausibility read never panics on and
+    /// never piles a second finding onto a broken template.
+    pub fn consonant_run(&self) -> usize {
+        let Ok(slots) = self.slots() else {
+            return 0;
+        };
+        let mut run = 0;
+        let mut best = 0;
+        for slot in slots {
+            match slot {
+                Slot::Consonant => {
+                    run += 1;
+                    best = best.max(run);
+                }
+                Slot::Vowel => run = 0,
+            }
+        }
+        best
+    }
 }
 
 /// Why a template string is not a syllable shape.
@@ -183,6 +206,25 @@ impl WeightedSyllableCount {
     }
 }
 
+/// Onsets and codas of three-plus consonants are typologically marked — most
+/// languages cap clusters at two (`DESIGN.md` §17, M7). Measured over the
+/// **declared** root templates; surface clusters a sound change may create are
+/// not counted (there is no resyllabifier yet — deferred).
+pub const MARKED_CLUSTER_LEN: usize = 3;
+
+/// A qualitative phonotactic-complexity band (§17, M7), over the declared root
+/// templates. Enum, not a number: no float reaches output (§9.4). `Complex`
+/// holds exactly when a template trips `large_consonant_cluster`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Complexity {
+    /// No clusters — every template is (C)V(C) at most.
+    Simple,
+    /// Clusters present but capped at two (CCV, CVCC).
+    Moderate,
+    /// A run of three-plus consonants somewhere — typologically marked.
+    Complex,
+}
+
 /// The phonotactic system of one language.
 ///
 /// **[`Default`] is empty, not a standard `(C)V(C)` table.** A compiled-in default
@@ -217,6 +259,28 @@ impl Phonotactics {
     /// Whether anything is declared at all.
     pub fn is_empty(&self) -> bool {
         self.templates.is_empty() && self.syllables_per_root.is_empty()
+    }
+
+    /// The heaviest consonant cluster across the declared templates (M7). Malformed
+    /// templates contribute 0 ([`WeightedTemplate::consonant_run`]); no templates
+    /// → 0.
+    pub fn max_consonant_run(&self) -> usize {
+        self.templates
+            .iter()
+            .map(WeightedTemplate::consonant_run)
+            .max()
+            .unwrap_or(0)
+    }
+
+    /// The phonotactic-complexity band (§17), over the declared root templates.
+    /// `Complex` holds exactly when a template trips `large_consonant_cluster`,
+    /// so the band and the warning agree.
+    pub fn complexity(&self) -> Complexity {
+        match self.max_consonant_run() {
+            n if n >= MARKED_CLUSTER_LEN => Complexity::Complex,
+            2 => Complexity::Moderate,
+            _ => Complexity::Simple,
+        }
     }
 
     /// Whether a sequence of slot classes is admitted by some template.
@@ -292,6 +356,28 @@ impl Validate for Phonotactics {
                 report.push(
                     Issue::new(Severity::Error, "bad_template", error.to_string())
                         .about(&template.pattern),
+                );
+            }
+            // §17 phonotactic-complexity warning: a run of three-plus consonants is
+            // typologically marked. Warning, not Error — a bold design choice, not
+            // a mistake. `consonant_run` skips malformed templates, so this never
+            // doubles up on a `bad_template`.
+            let run = template.consonant_run();
+            if run >= MARKED_CLUSTER_LEN {
+                report.push(
+                    Issue::new(
+                        Severity::Warning,
+                        "large_consonant_cluster",
+                        format!(
+                            "the template `{}` packs {run} consonants in a row; onsets and \
+                             codas of three or more are typologically marked (most languages \
+                             cap clusters at two), so this is a bold design choice rather than \
+                             a mistake — but worth motivating. (This counts the declared root \
+                             template; surface clusters from sound change are not yet measured.)",
+                            template.pattern
+                        ),
+                    )
+                    .about(&template.pattern),
                 );
             }
             if template.weight == 0 {
@@ -512,6 +598,67 @@ mod tests {
             report.errors().any(|i| i.code == "bad_template"),
             "{report}"
         );
+    }
+
+    // --- M7: the phonotactic-complexity warning and band ---
+
+    fn with_templates(patterns: &[&str]) -> Phonotactics {
+        Phonotactics {
+            templates: patterns.iter().map(|p| WeightedTemplate::new(*p)).collect(),
+            syllables_per_root: vec![WeightedSyllableCount::new(1)],
+        }
+    }
+
+    #[test]
+    fn a_template_with_a_three_consonant_cluster_warns_and_scores_complex() {
+        let phonotactics = with_templates(&["CCCVC"]);
+        let report = phonotactics.validate();
+        assert!(
+            report.is_ok(),
+            "a marked cluster is a Warning, not an Error: {report}"
+        );
+        assert!(
+            report
+                .warnings()
+                .any(|i| i.code == "large_consonant_cluster"),
+            "{report}"
+        );
+        assert_eq!(phonotactics.complexity(), Complexity::Complex);
+    }
+
+    #[test]
+    fn a_malformed_template_contributes_no_cluster_run() {
+        // `CCCC` has no nucleus (already `bad_template`); it must not also panic or
+        // pile on a cluster warning.
+        let phonotactics = with_templates(&["CCCC"]);
+        assert_eq!(phonotactics.max_consonant_run(), 0);
+        let report = phonotactics.validate();
+        assert!(
+            !report
+                .issues
+                .iter()
+                .any(|i| i.code == "large_consonant_cluster"),
+            "no second finding on a broken template: {report}"
+        );
+    }
+
+    #[test]
+    fn the_reference_c_v_c_phonotactics_trips_no_cluster_warning_and_scores_simple() {
+        let phonotactics = with_templates(&["CV", "CVC", "V", "VC"]);
+        let report = phonotactics.validate();
+        assert!(
+            !report
+                .issues
+                .iter()
+                .any(|i| i.code == "large_consonant_cluster"),
+            "{report}"
+        );
+        assert_eq!(phonotactics.complexity(), Complexity::Simple);
+    }
+
+    #[test]
+    fn a_capped_two_cluster_scores_moderate() {
+        assert_eq!(with_templates(&["CCVC"]).complexity(), Complexity::Moderate);
     }
 
     #[test]

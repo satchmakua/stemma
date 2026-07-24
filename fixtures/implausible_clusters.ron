@@ -1,0 +1,94 @@
+// Implausible Clusters — an M7 plausibility fixture.
+//
+// The reference inventory verbatim, plus a single `CCCVCC` root template. That
+// three-consonant onset is typologically marked, so `stemma profile` reports the
+// phonotactics as Complex and `validate` emits the `large_consonant_cluster`
+// Warning — but the language is well-formed and stays valid (§17: report, do not
+// police). Used to demonstrate a firing plausibility warning from the CLI.
+(
+    id: "implausible_clusters",
+    name: "Implausible Clusters",
+    lineage_depth_years: 0,
+    seed: 42,
+
+    phonemes: [
+        // --- Stops ---
+        (id: "ph_p", ipa: "p", kind: consonant, frequency_weight: 30,
+         features: ["-syllabic", "+consonantal", "-sonorant", "-approximant", "-continuant", "-nasal", "-lateral", "-trill", "-voice", "+labial", "-coronal", "-dorsal", "-round"]),
+        (id: "ph_t", ipa: "t", kind: consonant, frequency_weight: 50,
+         features: ["-syllabic", "+consonantal", "-sonorant", "-approximant", "-continuant", "-nasal", "-lateral", "-trill", "-voice", "-labial", "+coronal", "-dorsal"]),
+        (id: "ph_k", ipa: "k", kind: consonant, frequency_weight: 45,
+         features: ["-syllabic", "+consonantal", "-sonorant", "-approximant", "-continuant", "-nasal", "-lateral", "-trill", "-voice", "-labial", "-coronal", "+dorsal", "+high", "-low", "+back", "-round"]),
+
+        // --- Nasals: [-continuant], because the oral cavity is closed and the air
+        //     escapes nasally. This is the standard treatment and it is what lets
+        //     "stops" be [-sonorant, -continuant] without also catching /m n/.
+        (id: "ph_m", ipa: "m", kind: consonant, frequency_weight: 35,
+         features: ["-syllabic", "+consonantal", "+sonorant", "-approximant", "-continuant", "+nasal", "-lateral", "-trill", "+voice", "+labial", "-coronal", "-dorsal", "-round"]),
+        (id: "ph_n", ipa: "n", kind: consonant, frequency_weight: 40,
+         features: ["-syllabic", "+consonantal", "+sonorant", "-approximant", "-continuant", "+nasal", "-lateral", "-trill", "+voice", "-labial", "+coronal", "-dorsal"]),
+
+        // --- Fricative ---
+        (id: "ph_s", ipa: "s", kind: consonant, frequency_weight: 35,
+         features: ["-syllabic", "+consonantal", "-sonorant", "-approximant", "+continuant", "-nasal", "-lateral", "-trill", "-voice", "-labial", "+coronal", "-dorsal"]),
+
+        // --- Liquids: /l/ is a lateral approximant, /r/ an alveolar trill. Note
+        //     /r/ says "-approximant, +trill" outright rather than leaving
+        //     approximant unvalued — absence must never be used to encode a
+        //     positive property, or a rule targeting [-approximant] would miss it.
+        (id: "ph_l", ipa: "l", kind: consonant, frequency_weight: 30,
+         features: ["-syllabic", "+consonantal", "+sonorant", "+approximant", "+continuant", "-nasal", "+lateral", "-trill", "+voice", "-labial", "+coronal", "-dorsal"]),
+        (id: "ph_r", ipa: "r", kind: consonant, frequency_weight: 25,
+         features: ["-syllabic", "+consonantal", "+sonorant", "-approximant", "+continuant", "-nasal", "-lateral", "+trill", "+voice", "-labial", "+coronal", "-dorsal"]),
+
+        // --- Glides: [-consonantal], filling C slots. See the header note.
+        //     /w/ is the non-syllabic counterpart of /u/ and /j/ of /i/ — each pair
+        //     differs in exactly one feature, [syllabic], which is what makes glide
+        //     formation and vocalization single-feature rules in M3.
+        (id: "ph_w", ipa: "w", kind: consonant, frequency_weight: 20,
+         features: ["-syllabic", "-consonantal", "+sonorant", "+approximant", "+continuant", "-nasal", "-lateral", "-trill", "+voice", "+labial", "-coronal", "+dorsal", "+high", "-low", "+back", "+round"]),
+        (id: "ph_j", ipa: "j", romanization: "y", kind: consonant, frequency_weight: 10,
+         features: ["-syllabic", "-consonantal", "+sonorant", "+approximant", "+continuant", "-nasal", "-lateral", "-trill", "+voice", "-labial", "-coronal", "+dorsal", "+high", "-low", "-back", "-round"]),
+
+        // --- Vowels: three heights over {high, low}. /i u/ are +high, /e o/ are
+        //     -high -low, /a/ is +low. All vowels are [+dorsal] — they are
+        //     articulated with the tongue body, and without that [+dorsal] is not a
+        //     class any rule can use.
+        (id: "ph_a", ipa: "a", kind: vowel, frequency_weight: 60,
+         features: ["+syllabic", "-consonantal", "+sonorant", "+approximant", "+continuant", "-nasal", "-lateral", "-trill", "+voice", "-labial", "-coronal", "+dorsal", "-high", "+low", "+back", "-round"]),
+        (id: "ph_e", ipa: "e", kind: vowel, frequency_weight: 35,
+         features: ["+syllabic", "-consonantal", "+sonorant", "+approximant", "+continuant", "-nasal", "-lateral", "-trill", "+voice", "-labial", "-coronal", "+dorsal", "-high", "-low", "-back", "-round"]),
+        (id: "ph_i", ipa: "i", kind: vowel, frequency_weight: 40,
+         features: ["+syllabic", "-consonantal", "+sonorant", "+approximant", "+continuant", "-nasal", "-lateral", "-trill", "+voice", "-labial", "-coronal", "+dorsal", "+high", "-low", "-back", "-round"]),
+        (id: "ph_o", ipa: "o", kind: vowel, frequency_weight: 30,
+         features: ["+syllabic", "-consonantal", "+sonorant", "+approximant", "+continuant", "-nasal", "-lateral", "-trill", "+voice", "+labial", "-coronal", "+dorsal", "-high", "-low", "+back", "+round"]),
+        (id: "ph_u", ipa: "u", kind: vowel, frequency_weight: 35,
+         features: ["+syllabic", "-consonantal", "+sonorant", "+approximant", "+continuant", "-nasal", "-lateral", "-trill", "+voice", "+labial", "-coronal", "+dorsal", "+high", "-low", "+back", "+round"]),
+    ],
+
+    // PHONOTACTICS. This is the (C)V(C) system ROADMAP M1 names, written as the
+    // four concrete shapes it stands for with their probabilities made explicit
+    // rather than hidden behind an unspecified optional-slot rate. Templates hold
+    // `C` and `V` only — parentheses are rejected with a message pointing here.
+    // Weights are relative. Roots are one to three syllables, most often two,
+    // which is what makes *takala, *sawel, *akwa, *rekan look like one family.
+    phonotactics: (
+        templates: [
+            (pattern: "CV",  weight: 45),
+            (pattern: "CVC", weight: 35),
+            (pattern: "V",   weight: 12),
+            (pattern: "VC",  weight: 8),
+            (pattern: "CCCVCC", weight: 5),
+        ],
+        syllables_per_root: [
+            (count: 1, weight: 25),
+            (count: 2, weight: 55),
+            (count: 3, weight: 20),
+        ],
+    ),
+
+    notes: [
+        "M7 plausibility fixture: the reference inventory with one deliberately marked template.",
+        "The CCCVCC template packs three consonants in a row, which trips the `large_consonant_cluster` Warning and scores the phonotactics `Complex` — a bold but well-formed design, so the file still validates.",
+    ],
+)

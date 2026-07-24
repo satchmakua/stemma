@@ -134,15 +134,16 @@ pub fn write_lexicon_markdown(out: &mut String, genome: &LanguageGenome) -> Resu
 ///
 /// Concept glosses are compiled in and safe; a language `name` and an authored
 /// `glosses` entry are not. Backslash first, or escaping the pipe would then have
-/// its own backslash escaped.
-fn escape(text: &str) -> String {
+/// its own backslash escaped. `pub(crate)` since M6: the cognate-table and demo
+/// renderers escape the same cells.
+pub(crate) fn escape(text: &str) -> String {
     text.replace('\\', "\\\\").replace('|', "\\|")
 }
 
 /// A `fmt::Write` failure into a `String` cannot actually happen — `String`'s impl
 /// is infallible — but the signature is fallible, so it is mapped rather than
-/// unwrapped.
-fn fmt_err(error: std::fmt::Error) -> StemmaError {
+/// unwrapped. `pub(crate)` since M6, shared by the family-demo renderers.
+pub(crate) fn fmt_err(error: std::fmt::Error) -> StemmaError {
     let mut report = ValidationReport::new();
     report.error("export.write_failed", error.to_string());
     StemmaError::Invalid("rendering the document".to_owned(), report)

@@ -13,6 +13,10 @@ stem_core.workspace = true
 stem_genome.workspace = true
 stem_lexicon.workspace = true
 stem_phonology.workspace = true
+# M6's family demo composes `render_derivation` into the document. A direct
+# downward edge to an already-transitive ancestor (via stem_genome) — no cycle,
+# and rendering a derivation is rendering, so ADR-0006 holds.
+stem_soundchange.workspace = true
 
 [dev-dependencies]
 # Only the golden tests need to load a fixture. The library itself never touches

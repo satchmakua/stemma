@@ -92,13 +92,19 @@ outside this phase matters until it works end to end._
   `mother` → `*mikala`/mial/migal/miala); `stemma trace-word out/coastal.ron star`
   prints the full derivation and is byte-identical to `trace … w_0001`.
 
-- [ ] **M6 — The portfolio demo.** One scripted command that produces the §21
-  artefact: "Growing a Language Family in 90 Seconds." Proto-language, three
-  daughters, distinct histories, cognate table, five etymology traces, Markdown
-  export. Snapshot-test the output (§16.4).
+- [x] **M6 — The portfolio demo.** `stemma demo` — one command, no arguments —
+  emits the §21 artefact "Growing a Language Family in 90 Seconds" as a
+  self-contained Markdown document: the proto-language, its three daughters with
+  their rule histories, the comparative cognate table, and five full etymology
+  traces. Pure composition — a `stem_genome::grow_family` helper builds the family,
+  a new `stem_export::write_cognate_table_markdown` projects the table, and a pure
+  `write_family_demo` stitches it all — plus honest scope: it shows the engine's
+  real `tagal` (never §21's unreachable `tazal`) and names meaning drift as
+  forthcoming rather than faking it. **No engine work.**
   **Test:** `stemma demo --out output/demo.md` runs start to finish and writes a
-  document that reads as a language-family sketch. Running it twice produces
-  byte-identical output.
+  language-family sketch (star row `*takala | taal | tagal | tala`, five fenced
+  derivations); two runs are byte-identical; a `stem_export` golden pins the exact
+  bytes and engine-independent canaries pin the renderer.
 
 ---
 
@@ -107,11 +113,19 @@ outside this phase matters until it works end to end._
 _Only after Phase 1 is genuinely done. DESIGN §20.1 is explicit that scope
 explosion is the top risk to this project._
 
-- [ ] **M7 — Plausibility profile.** Grow the M0 validation report into the
-  typological profile of §17: scored dimensions and specific, non-authoritarian
-  warnings.
-  **Test:** the §17 example warnings fire on languages that deserve them and stay
-  quiet on Proto-Asterian.
+- [x] **M7 — Plausibility profile.** §17's typological profile grown into the
+  *same* `ValidationReport`: three new phonological/lineage Warnings/Notes
+  (`large_consonant_inventory`, `large_vowel_inventory`, `large_consonant_cluster`,
+  `high_change_density`), plus a derived scored-dimensions block
+  (`plausibility_profile()` + `render_profile`, bands not percentages) shown by
+  `stemma profile`. The bands read the *same* threshold constants the warnings do,
+  so the score can never disagree with the check (`docs/adr/0009`); dimensions with
+  no data (morphology M8, semantics M9, script M9+, alien §18) render "not yet
+  modelled", never a fabricated number. Report, do not police — every new check is
+  a Warning/Note, never an Error.
+  **Test:** the §17 example warnings fire on languages that deserve them (an
+  80-consonant inventory, a `CCCVCC` template — each still `is_ok()`) and stay
+  quiet on Proto-Asterian and all three of its daughters.
 
 - [ ] **M8 — Morphology v0.** Morphemes, simple affixation, sound change applied
   across morpheme boundaries, and the irregular paradigms that fall out of it
