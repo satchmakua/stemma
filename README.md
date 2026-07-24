@@ -12,13 +12,15 @@ The name comes from textual criticism: a *stemma* is the reconstructed family tr
 showing how surviving manuscripts descend from a lost original. That is exactly
 this program's core data structure.
 
-**Status:** early — **M5 complete**. Languages evolve *and branch*, and the family
-is now legible: ordered sound changes transform the lexicon, every change is
-traced, a proto-language forks into daughters, and `stemma cognates` prints a
-comparative table of one meaning's reflexes across the whole family — joined by
-shared ancestry, so meaning drift never breaks the join. 385 tests pass. A scripted
-portfolio demo is next. See [ROADMAP.md](ROADMAP.md) for the plan and
-[PROGRESS.md](PROGRESS.md) for what has shipped.
+**Status:** **Phase 1 complete (M0–M6); Phase 2 underway (M7 done)** — the
+diachronic kernel runs end to end. Languages get a feature-based phonology,
+generate seeded roots, undergo ordered sound change, fork into daughters with their
+own histories, and line up in a comparative cognate table; `stemma demo` tells the
+whole story as one Markdown document, and `stemma profile` scores a language
+against real typological ranges without policing it. 427 tests pass, and every step
+is deterministic and traced. Morphology and semantics are next. See
+[ROADMAP.md](ROADMAP.md) for the plan and [PROGRESS.md](PROGRESS.md) for what has
+shipped.
 
 ---
 
@@ -227,11 +229,28 @@ semantic layer will model). `stemma trace-word <file> <meaning>` is `trace` by
 meaning instead of by id — the same derivation ledger, reached by what a word
 *means*.
 
+### See it all at once
+
+```bash
+cargo run -p stem_cli -- demo --out output/demo.md
+```
+
+`stemma demo` needs no arguments and no files on disk — it grows the whole
+Asterian family from a compiled-in proto and three rule histories, then writes
+"Growing a Language Family in 90 Seconds" as one self-contained Markdown document:
+the proto glossary, each daughter's sound-change history, the comparative cognate
+table, and five full etymologies from `*takala → taal` to `*mikala → miala`. It is
+deterministic — two runs are byte-identical — and honest: it shows the engine's
+real forms and names what is still ahead rather than faking it. This is the
+Phase 1 capstone. (The exact bytes are pinned as a snapshot at
+[`crates/stem_export/tests/golden/family_demo.md`](crates/stem_export/tests/golden/family_demo.md).)
+
 ### Commands
 
 | Command | What it does |
 |---|---|
 | `stemma validate <file>` | Check a language for structural errors and typological oddities (exit 1 if invalid) |
+| `stemma profile <file>` | Print the §17 plausibility profile: scored typological dimensions plus the report |
 | `stemma info <file>` | Print a language's inventory, lineage, and root shapes |
 | `stemma features <file>` | Show each phoneme's resolved feature matrix |
 | `stemma generate-roots <file>` | Generate root words (`--count`, `--seed`, `--ipa`) |
@@ -244,6 +263,7 @@ meaning instead of by id — the same derivation ledger, reached by what a word
 | `stemma cognates <files>… --meanings <m>…` | Print the comparative table of each meaning's reflexes across the family |
 | `stemma trace <file> <word>` | Print a word's derivation, rule by rule |
 | `stemma trace-word <file> <meaning>` | Print a word's derivation, addressed by meaning |
+| `stemma demo` | Write the "Growing a Language Family in 90 Seconds" document (`--out`) |
 | `stemma rules <file>` | Validate and summarise a rule-set file |
 | `stemma convert <in> <out>` | Convert a project between RON and JSON |
 

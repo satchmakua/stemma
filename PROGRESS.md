@@ -5,8 +5,8 @@ A build log of what shipped and the notable decisions behind it. **Keep it hones
 acceptance tests live in [ROADMAP.md](ROADMAP.md); this is the backward-looking
 "what got done and why" companion.
 
-**Current phase:** Phase 1 — the diachronic kernel. Next milestone: **M6 — the
-portfolio demo**.
+**Current phase:** Phase 2 — depth. M7 shipped; next milestone: **M8 —
+morphology v0**.
 
 ## State of the tree
 
@@ -18,8 +18,213 @@ portfolio demo**.
 | `stem_soundchange` | rules, matching, ordered application, resolution, traces | working |
 | `stem_genome` | `LanguageGenome`, `fork`, `LineageGraph`, family validation, `render_family` | working |
 | `stem_io` | RON/JSON load & save | working — **untouched since M0** |
-| `stem_export` | Markdown dictionaries, CLDF-shaped CSV | working |
-| `stem_cli` | the `stemma` binary | …M4's commands, plus `cognates` and `trace-word` |
+| `stem_export` | Markdown dictionaries, CLDF CSV, cognate table, family demo | working |
+| `stem_cli` | the `stemma` binary | …M6's commands, plus `profile` |
+
+---
+
+## M7 — Plausibility profile · built 2026-07-23 · ✓ verified · **Phase 2 begins**
+
+The validator learns typology. `stemma profile` prints DESIGN §17's scored
+dimensions — typological rarity, phonotactic complexity, historical depth — as
+qualitative *bands*, and the graded report now carries specific, non-authoritarian
+plausibility warnings (an 80-consonant inventory, a three-consonant cluster, a
+rapid change history). **427 tests pass**; clippy clean under `-D warnings`. This
+opens Phase 2 (depth) — and it is the *same* `ValidationReport` with more checks,
+not a new subsystem.
+
+Verified by running it: `stemma profile fixtures/proto_asterian.ron` reports
+`typical / simple / none`, names the four unbuilt dimensions as "not yet modelled",
+and stays quiet (0 warnings); `stemma profile fixtures/implausible_clusters.ron`
+reports `complex` and fires `large_consonant_cluster` — while still validating.
+
+### Decisions worth knowing
+
+**The scored block is a derived read-model, not a second validator
+(`docs/adr/0009`).** The plausibility *warnings* are ordinary `report.warn`/`note`
+calls in the existing `Validate` impls — they reach `stemma validate` with zero new
+plumbing, which is the whole proof this is "more checks on the same report". The
+*bands* are a pure `fn(&genome) -> PlausibilityProfile` presented alongside the
+report the way `summary()` already is: zero `Issue`s, no `Severity`, no serde,
+never stored.
+
+**The band and the warning read one shared set of constants, so they cannot
+disagree.** `LARGE_CONSONANT_COUNT`/`LARGE_VOWEL_COUNT`/`LOPSIDED_RATIO`/
+`VERY_SMALL_TOTAL` live once in `stem_phonology`; both the size warnings and
+`PhonemeInventory::rarity()` read them, so the `Rare` band holds *exactly when* a
+size warning fires — a test pins the projection. That is the line that keeps the
+descriptive view from drifting into a parallel check registry.
+
+**Honesty over completeness.** §17 lists seven dimensions; M7 has real data for
+phonology and coarse lineage only. The five that need unbuilt milestones render as
+explicit "not yet modelled → Mn" lines, never a number; §17's composite "82%" is
+dropped (any percentage would overclaim or average over dimensions that do not
+exist); syntax/word-order is dropped entirely, with no "not modelled" line, so it
+does not invite a syntax engine (§20.1). The lineage signals say out loud that they
+count *authored rules* (an editorial granularity) and read only the sound-change
+log — not the morphological irregularity §17's third example is really about, which
+waits for M8.
+
+**Report, do not police (§17).** Every new check is a Warning or Note — an
+80-consonant monster earns warnings and still `validate()`s. No new Error; the
+acceptance suite pins `is_ok()` on the weird languages. The deliberate *absence* of
+a small-vowel warning (a two-vowel system is attested) is the same call.
+
+**One float left the codebase.** The legacy `lopsided_inventory` used an `f32`
+ratio in its message; it is now integer cross-multiplication (`c > RATIO * v`), so
+the last float leaves the validation control path and the constant is shared with
+the band.
+
+### Adversarial review — 6 findings, all fixed
+
+A five-dimension panel (17 agents) reviewed the implementation, each finding
+independently reproduced. Six distinct defects, all minor, all fixed — and the two
+that mattered were both about the projection invariant the design leans on:
+
+1. **The empty inventory broke `Rare ⟺ a size warning fired`.** `rarity()` scored a
+   zero-phoneme inventory `Rare` (via `c == 0` / `total < 5`), but `validate`
+   early-returns on an empty inventory with only the `empty` Error — so *no* size
+   warning fires, and the band disagreed with the checks it is documented to
+   summarise. Fixed with an explicit empty guard (empty → `Typical`, mirroring
+   `validate`'s early return), and the projection test now sweeps the boundaries
+   (45/46 C, empty, vowelless) in both directions.
+2. **The `rarity()` doc claimed a vowelless inventory "counts as Rare"** — but the
+   code (correctly) scores it `Typical` (a vowelless inventory trips only the
+   `no_nucleus` Error, not a size code). The doc was the wrong half and pointed
+   *opposite* the invariant; corrected.
+3. A doc said "five" not-modelled dimensions; `NOT_MODELLED` holds **four**. Fixed.
+4. **A botched doc merge** — the M7 insertion had split the `Phonotactics` struct
+   doc mid-sentence, orphaning "The genome field stays". Repaired; the const/enum
+   now sit above the struct with intact docs.
+5. The depth line rendered "over 1 years" — `years` is now singularized.
+6. The `implausible_clusters.ron` header still carried the whole copy-pasted
+   Proto-Asterian comment block; removed.
+
+One finding was refuted (the closing "bands sit against attested ranges" line vs
+the coarse historical-depth band — a wording nuance the skeptic did not consider a
+real defect). Net at **427 tests**.
+
+### Gotchas for the next session (M8 — morphology)
+
+- **M8 fills the first "not yet modelled" row.** `NotModelled::MorphologicalIrregularity`
+  (M8) is the honest placeholder; when morphemes exist, M8 measures real
+  irregularity and the profile gains a dimension. `high_change_density` is the
+  *coarse* stopgap that reads only the sound-change log — M8's measure supersedes
+  it, not replaces the report check.
+- **Add profile bands the way M7 did: shared constants, a projection test, no
+  float, no fabricated score.** The band must agree with a report check or it is a
+  second opinion (`docs/adr/0009`).
+- **`ipa_not_nfc` is deferred, not dropped** — the `by_ipa` comment now points at a
+  later data-hygiene pass (it is interchange hygiene, not a §17 typological
+  dimension, and would pull in a Unicode-normalization dependency).
+- **`reference_phonology.rs` pins the proto's codes to `["lexicon.empty"]`** — a
+  new check that fires on Proto-Asterian breaks it. That guardrail is load-bearing;
+  keep new plausibility checks quiet on the reference family.
+
+---
+
+## M6 — The portfolio demo · built 2026-07-22 · ✓ verified · **Phase 1 complete**
+
+`stemma demo` tells the whole story in one command: it grows the Asterian family
+from the committed fixtures, builds the comparative table, traces five words in
+full, and writes it all as a self-contained Markdown document — "Growing a
+Language Family in 90 Seconds." **404 tests pass**; clippy clean under
+`-D warnings`. This is the last milestone of Phase 1: the diachronic kernel
+(inventory → generation → sound change → forking → the comparative views) now
+runs end to end from the command line.
+
+Verified by running the ROADMAP acceptance: `stemma demo --out output/demo.md`
+writes a 199-line document (proto glossary, three daughters with their rule
+histories, the cognate table with the `star` row `*takala | taal | tagal | tala`,
+and five fenced etymologies from `*takala → taal` to `*mikala → miala`); two runs
+are byte-identical; and a `stem_export` golden pins the exact bytes.
+
+### Decisions worth knowing
+
+**M6 was composition, and stayed composition.** No engine work: every genome comes
+from `evolve`, every form from `written`, every derivation from
+`render_derivation`, every table cell from `cognate_table`. The only new *logic*
+is a `stem_genome::grow_family` helper (pure `evolve` + `assemble`) and one new
+renderer.
+
+**Build was split from render — the panel's improvement over all three proposals.**
+Each proposal put the whole demo in one `stem_export` function that called
+`evolve` internally. That would have put engine-*build* code in the render crate
+(an ADR-0006 stretch) **and** made the renderer's canary engine-dependent — any
+`apply.rs` change would move it, defeating the M1 canary-vs-golden isolation.
+Instead `grow_family` (build) lives in `stem_genome` and `write_family_demo`
+(render) is a *pure* projection over an already-built graph, so its canary is a
+true renderer-only tripwire: it hand-builds a graph with a hand-authored
+`Derivation`, runs no engine, and no fixture or `apply.rs` change can move its
+bytes.
+
+**`stem_export` gained a direct `stem_soundchange` dependency** — a legal downward
+edge (it was already transitive via `stem_genome`), needed because the trace
+blocks call `render_derivation`. Rendering a derivation is rendering, so ADR-0006
+holds; no new ADR.
+
+**The demo is honest.** DESIGN §21's flashiest steps need unbuilt milestones, so
+the demo does not fake them: it shows Highland `tagal` (the real form; §21's
+`tazal` is an unreachable `g→z` place shift), and the closer *names* meaning drift,
+morphology, and a visual explorer as forthcoming without printing a drifted gloss
+or an "omen" token. Two tests (a `stem_export` golden assertion and a CLI
+acceptance) fail if `tazal`/`omen`/`royal sign`/`night-signal` ever appear.
+
+**Determinism is by construction.** No RNG (the proto lexicon is authored, not
+generated), no clock (the colophon is dateless; the source-scan now bans
+`SystemTime`/`Instant`/`chrono::`), no map, no sort, `include_str!` inputs so the
+binary runs identically from any directory. Two runs are byte-identical, pinned at
+both the library and the binary.
+
+**The proto roster is bespoke, not `write_lexicon_markdown`.** That renderer emits
+its own H1 and prose that is *false* for the authored fixture ("coined … on the
+`lexicon` RNG stream at seed N" — the nine words were authored, not coined). The
+demo's compact `Gloss | Form | IPA` roster keeps one H1 and one honest provenance
+line. Recorded here so the second rendering surface is tracked, not smuggled.
+
+### Adversarial review — 3 findings, all fixed
+
+A five-dimension adversarial panel (scope/anti-fabrication, determinism,
+renderers, architecture, canary-vs-golden) reviewed the implementation, each
+finding independently reproduced. Three distinct defects, all fixed:
+
+1. **The family-demo canary pinned no bytes (major).**
+   `the_family_demo_canary_matches_its_frozen_bytes` only did `contains()`
+   landmark checks despite its name, so a genuine `write_family_demo` regression
+   (a changed rule-bullet format, a dropped blank line) would slip past it and be
+   caught only by the *re-baselineable* golden — exactly the "a renderer
+   regression must not hide" failure the discipline exists to prevent. Now a real
+   `assert_eq!` against ~1.6KB of inline expected bytes, engine-independent (the
+   canary hand-authors a `Derivation`, so no `apply.rs` change can move it) — a
+   true renderer-only tripwire, like the cognate-table canary.
+2. **The demo printed a non-runnable command (minor).** The proto section said
+   "one command away: `stemma export-md`" — but `export-md` requires a `<PATH>`,
+   so a reader copying it hit exit 2. Now `stemma export-md <file>`.
+3. **The cognate-table notes branch had no byte coverage (minor).** The canary
+   had empty notes; added a test rendering notes as escaped italic bullets.
+
+Also fixed a *refuted-but-real* latent issue: `write_family_demo`'s daughter
+heading printed the daughter's absolute depth as "+Ny from proto" — correct only
+because the demo's proto is at depth 0. Now the edge delta
+(`daughter.depth − proto.depth`), correct for any proto; the demo bytes are
+unchanged.
+
+### Gotchas for the next session (Phase 2 begins)
+
+- **Phase 1 is the MVP and it is done.** M7 opens Phase 2 (depth): grow the M0
+  validation report into §17's typological *plausibility profile* — scored
+  dimensions and specific, non-authoritarian warnings. It is the same
+  `ValidationReport` with more checks behind it, **not a separate subsystem**, and
+  §17's rule stands: report, do not police. Read `DESIGN.md` §17.
+- **The demo's story is single-sourced in `write_asterian_demo`.** The CLI, the
+  golden test, and (eventually) the M11 UI all call it, so the document cannot
+  drift between front ends. Change the story there, re-baseline
+  `golden/family_demo.md`, and only after the inline canaries stay green.
+- **`grow_family` is the sanctioned way to build a family in code.** M11 will use
+  it too. It returns a report per daughter, parallel to the specs; the demo merges
+  them to stderr.
+- **`escape`/`fmt_err` are now `pub(crate)` in `markdown.rs`.** The cognate-table
+  and demo renderers share them; the dictionary golden is unchanged.
 
 ---
 

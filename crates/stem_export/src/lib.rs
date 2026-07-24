@@ -33,10 +33,14 @@
 //! pure function of the genome, and the cheapest way to guarantee a stable sort is
 //! not to sort at all. Two tests read these source files to enforce it.
 
+pub mod cognate_table;
 pub mod csv;
+pub mod demo;
 pub mod markdown;
 
+pub use cognate_table::write_cognate_table_markdown;
 pub use csv::{write_lexicon_csv, write_lexicon_csv_header, write_lexicon_csv_rows};
+pub use demo::{DemoDoc, TracePick, write_asterian_demo, write_family_demo};
 pub use markdown::write_lexicon_markdown;
 
 #[cfg(test)]
@@ -49,10 +53,25 @@ mod tests {
         for (name, src) in [
             ("markdown.rs", include_str!("markdown.rs")),
             ("csv.rs", include_str!("csv.rs")),
+            ("cognate_table.rs", include_str!("cognate_table.rs")),
+            ("demo.rs", include_str!("demo.rs")),
         ] {
             for (n, line) in src.lines().enumerate() {
                 let code = line.split("//").next().unwrap_or("");
-                for banned in ["HashMap", "HashSet", "f32", "f64", ".sort"] {
+                // Clock tokens join the list at M6: the demo colophon is dateless,
+                // and byte-identity across runs forbids reading any clock. `chrono`
+                // is matched as a path (`chrono::`) so it does not false-positive on
+                // the legitimate domain field `chronology_years`.
+                for banned in [
+                    "HashMap",
+                    "HashSet",
+                    "f32",
+                    "f64",
+                    ".sort",
+                    "SystemTime",
+                    "Instant",
+                    "chrono::",
+                ] {
                     assert!(
                         !code.contains(banned),
                         "{name}:{} uses `{banned}`, which §9.4 forbids on a render path",

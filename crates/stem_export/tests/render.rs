@@ -14,7 +14,8 @@ use std::path::{Path, PathBuf};
 
 use stem_core::{CognateSetId, LanguageId, PhonemeId, WordId};
 use stem_export::{
-    write_lexicon_csv, write_lexicon_csv_header, write_lexicon_csv_rows, write_lexicon_markdown,
+    write_asterian_demo, write_lexicon_csv, write_lexicon_csv_header, write_lexicon_csv_rows,
+    write_lexicon_markdown,
 };
 use stem_genome::LanguageGenome;
 use stem_lexicon::{
@@ -354,5 +355,88 @@ fn the_fixture_dictionary_holds_one_row_per_concept() {
             document.contains(&format!("| {gloss} |")),
             "missing `{gloss}`"
         );
+    }
+}
+
+// ---------------------------------------------------------------- M6: the demo
+
+/// Renders the §21 family document from the four committed reference fixtures —
+/// exactly what `stemma demo` writes.
+fn asterian_demo() -> String {
+    let fixture = |name: &str| {
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../fixtures")
+            .join(name)
+    };
+    let proto: LanguageGenome =
+        stem_io::load(fixture("asterian_attested.ron")).expect("proto loads");
+    let coastal: stem_soundchange::RuleSet =
+        stem_io::load(fixture("rules_coastal.ron")).expect("coastal rules load");
+    let highland: stem_soundchange::RuleSet =
+        stem_io::load(fixture("rules_highland.ron")).expect("highland rules load");
+    let riverine: stem_soundchange::RuleSet =
+        stem_io::load(fixture("rules_riverine.ron")).expect("riverine rules load");
+
+    let mut out = String::new();
+    write_asterian_demo(&mut out, &proto, &coastal, &highland, &riverine)
+        .expect("the demo renders");
+    out
+}
+
+/// The GOLDEN. Re-baseline only after the demo canaries (in `src/`) are green: a
+/// canary moving means the *renderer* changed; only a fixture or format edit
+/// legitimately moves this file.
+#[test]
+fn the_asterian_demo_matches_its_golden_file() {
+    let rendered = asterian_demo();
+    let expected = std::fs::read_to_string(golden("family_demo.md")).expect("golden exists");
+    assert_eq!(rendered, expected.replace("\r\n", "\n"));
+}
+
+/// The ROADMAP determinism line, in-process.
+#[test]
+fn rendering_the_demo_twice_produces_identical_bytes() {
+    assert_eq!(asterian_demo(), asterian_demo());
+}
+
+/// The anti-fabrication fence: the demo shows the engine's real `tagal`, and
+/// never DESIGN §21's unreachable `tazal` nor any M9 drifted gloss.
+#[test]
+fn the_demo_never_prints_the_unreachable_tazal_or_a_drifted_gloss() {
+    let doc = asterian_demo();
+    assert!(doc.contains("tagal"), "the real Highland form is present");
+    for faked in ["tazal", "omen", "royal sign", "night-signal"] {
+        assert!(!doc.contains(faked), "the demo fabricated `{faked}`");
+    }
+}
+
+#[test]
+fn the_demo_document_has_no_carriage_return_and_no_byte_order_mark() {
+    let doc = asterian_demo();
+    assert!(!doc.contains('\r'), "no CR — LF line endings only");
+    assert!(!doc.starts_with('\u{feff}'), "no byte-order mark");
+}
+
+/// Each of the five etymologies shows a different mechanism, so the section is
+/// not five copies of one trick.
+#[test]
+fn the_five_etymologies_each_show_their_defining_mechanism() {
+    let doc = asterian_demo();
+    // The feeding chain (Coastal star).
+    assert!(
+        doc.contains("→ tagala"),
+        "the voicing→lenition chain:\n{doc}"
+    );
+    // A minted phoneme, named.
+    assert!(
+        doc.contains("is new to this language"),
+        "a mint is announced"
+    );
+    // A rule that could have fired but did not (Coastal king apocope; Riverine
+    // mother coalescence).
+    assert!(doc.contains("did not apply"), "a non-application is shown");
+    // The five modern forms.
+    for form in ["taal", "tala", "saŋk", "rean", "miala"] {
+        assert!(doc.contains(form), "missing traced modern form `{form}`");
     }
 }

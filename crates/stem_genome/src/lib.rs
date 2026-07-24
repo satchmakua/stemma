@@ -18,9 +18,16 @@
 
 pub mod language;
 pub mod lineage;
+pub mod profile;
 
 pub use language::LanguageGenome;
 pub use lineage::{
-    CognateColumn, CognateCoverage, CognateRow, CognateTable, LineageEdge, LineageGraph,
-    render_cognate_table, render_family,
+    BranchSpec, CognateColumn, CognateCoverage, CognateRow, CognateTable, LineageEdge,
+    LineageGraph, grow_family, render_cognate_table, render_family,
 };
+pub use profile::{
+    HistoricalDepth, NOT_MODELLED, NotModelled, PlausibilityProfile, render_profile,
+};
+// The phonology bands the profile is built from, re-exported so a consumer needs
+// one crate (the `render_family`/`CognateTable` convenience).
+pub use stem_phonology::{Complexity, Rarity};

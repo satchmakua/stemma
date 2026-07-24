@@ -222,6 +222,35 @@ impl Validate for LanguageGenome {
             );
         }
 
+        // §17's "extreme irregularity after only 100 years" names MORPHOLOGICAL
+        // irregularity, which is M8 and does not exist. What M7 can honestly read
+        // is the sound-change LOG — rules per century. A Note, not a Warning: it
+        // is a coarse proxy over an authoring artifact (`applied_rules.len()`
+        // counts *authored* rules — one author's "voicing" is another's three), so
+        // the register is "consider", and the threshold is a deliberately loose
+        // tripwire, not a cited typological constant (the field has no clean rate).
+        // Integer math (§9.4); guarded so it never divides by zero and never
+        // collides with `no_elapsed_time`.
+        const RAPID_CHANGE_RULES_PER_CENTURY: i64 = 3;
+        if self.lineage_depth_years > 0 && !self.applied_rules.is_empty() {
+            let changes = self.applied_rules.len() as i64;
+            let years = i64::from(self.lineage_depth_years);
+            if changes * 100 > years * RAPID_CHANGE_RULES_PER_CENTURY {
+                report.note(
+                    "high_change_density",
+                    format!(
+                        "this language records {changes} sound-change rules across {years} \
+                         simulated years — a high rate for the elapsed time by this tool's \
+                         coarse counting. Rapid-change scenarios are real (heavy contact, \
+                         creolization); if that is not the intent, consider more time depth \
+                         or fewer strata. (This counts authored rules, an editorial \
+                         granularity, and reads only the sound-change log — morphological \
+                         irregularity itself is not modelled until M8.)"
+                    ),
+                );
+            }
+        }
+
         // A `LanguageId` reaches every minted `CognateSetId` verbatim and every CSV
         // cell. A non-portable id does not break Stemma — only interchange — so it
         // warns rather than erroring (§17).
@@ -525,6 +554,59 @@ mod tests {
         assert!(
             report.warnings().any(|i| i.code == "no_elapsed_time"),
             "{report}"
+        );
+    }
+
+    // --- M7: high_change_density (a Note, never an Error) ---
+
+    #[test]
+    fn a_daughter_with_many_rules_in_few_years_notes_high_change_density() {
+        let rule = voicing().rules[0].clone();
+        let mut genome = asterian();
+        genome.parent = Some("proto".into());
+        genome.lineage_depth_years = 100;
+        genome.applied_rules = std::iter::repeat_n(rule, 10).collect(); // 10 rules / 100y
+        let report = genome.validate();
+        assert!(
+            report.is_ok(),
+            "a rapid history is a Note, not a rejection (§17): {report}"
+        );
+        assert!(
+            report
+                .issues
+                .iter()
+                .any(|i| i.code == "high_change_density"),
+            "10 rules in 100 years is a high rate: {report}"
+        );
+    }
+
+    #[test]
+    fn a_proto_with_no_rule_history_is_never_flagged_for_change_density() {
+        // asterian() is a proto: no parent, no applied_rules, depth 0.
+        let report = asterian().validate();
+        assert!(
+            !report
+                .issues
+                .iter()
+                .any(|i| i.code == "high_change_density"),
+            "the guard holds for a proto: {report}"
+        );
+    }
+
+    #[test]
+    fn a_realistic_change_rate_stays_quiet() {
+        let rule = voicing().rules[0].clone();
+        let mut genome = asterian();
+        genome.parent = Some("proto".into());
+        genome.lineage_depth_years = 470;
+        genome.applied_rules = std::iter::repeat_n(rule, 4).collect(); // the Coastal shape
+        let report = genome.validate();
+        assert!(
+            !report
+                .issues
+                .iter()
+                .any(|i| i.code == "high_change_density"),
+            "4 rules over 470 years is an ordinary rate: {report}"
         );
     }
 

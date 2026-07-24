@@ -23,9 +23,48 @@
 //! *second* parent — and arrive with their producers (M7+) as additive genome
 //! fields.
 
-use stem_core::{CognateSetId, Issue, LanguageId, Severity, Validate, ValidationReport, WordId};
+use stem_core::{
+    CognateSetId, Issue, LanguageId, Result, Severity, Validate, ValidationReport, WordId,
+};
+use stem_soundchange::RuleSet;
 
 use crate::LanguageGenome;
+
+/// One daughter to grow off a proto: its id, display name, the rule set that
+/// separates it from the proto, and the elapsed years (absolute from the lineage
+/// root — the M4/M5 convention, `docs/adr/0008`).
+#[derive(Debug, Clone, Copy)]
+pub struct BranchSpec<'a> {
+    pub id: &'a str,
+    pub name: &'a str,
+    pub rules: &'a RuleSet,
+    pub years: i32,
+}
+
+/// Grows each daughter off `proto` with [`LanguageGenome::evolve`] and assembles
+/// them into a [`LineageGraph`], **proto first**, in spec order.
+///
+/// Pure composition of two operations that already exist — no new engine logic,
+/// no RNG, no clock, no map. It is the build half of M6's "grow a family"
+/// (`docs/adr/0006`: building lives here, rendering lives in `stem_export`), and
+/// the shape `family()`/`cognates()` already take in the CLI. Returns the graph
+/// and each daughter's advisory report **parallel to `branches`**, so the caller
+/// decides what to surface. The M11 UI grows families through this same helper.
+pub fn grow_family(
+    proto: &LanguageGenome,
+    branches: &[BranchSpec<'_>],
+) -> Result<(LineageGraph, Vec<ValidationReport>)> {
+    let mut nodes = Vec::with_capacity(branches.len() + 1);
+    let mut reports = Vec::with_capacity(branches.len());
+    nodes.push(proto.clone());
+    for branch in branches {
+        let (daughter, report) =
+            proto.evolve(branch.id, branch.name, branch.rules, branch.years)?;
+        nodes.push(daughter);
+        reports.push(report);
+    }
+    Ok((LineageGraph::assemble(nodes), reports))
+}
 
 /// A family of languages. Never persisted. Never sorted. `nodes` keeps the order
 /// the caller gave.
@@ -1385,6 +1424,74 @@ mod tests {
         graph
             .cognate_table(&["star".to_owned(), "water".to_owned()])
             .unwrap()
+    }
+
+    // ----- M6: grow_family -----
+
+    /// An empty rule set — evolves a daughter that copies the proto's forms
+    /// verbatim, enough to exercise `grow_family`'s composition (the evolving
+    /// itself is `evolve`'s tested job).
+    fn empty_rules(id: &str) -> RuleSet {
+        RuleSet {
+            id: id.to_owned(),
+            name: id.to_uppercase(),
+            description: String::new(),
+            rules: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn grow_family_evolves_daughters_in_spec_order_and_assembles_proto_first() {
+        let proto = worded("proto", None, &[("star", "cog_star", 3)]);
+        let (rc, rh) = (empty_rules("rc"), empty_rules("rh"));
+        let branches = [
+            BranchSpec {
+                id: "coastal",
+                name: "Coastal",
+                rules: &rc,
+                years: 100,
+            },
+            BranchSpec {
+                id: "highland",
+                name: "Highland",
+                rules: &rh,
+                years: 90,
+            },
+        ];
+        let (graph, _reports) = grow_family(&proto, &branches).unwrap();
+        let ids: Vec<&str> = graph.nodes().iter().map(|g| g.id.as_str()).collect();
+        assert_eq!(
+            ids,
+            vec!["proto", "coastal", "highland"],
+            "proto first, then daughters in spec order"
+        );
+        assert_eq!(graph.nodes()[1].parent.as_ref().unwrap().as_str(), "proto");
+    }
+
+    #[test]
+    fn grow_family_returns_a_report_per_daughter_and_never_a_map() {
+        let proto = worded("proto", None, &[("star", "cog_star", 3)]);
+        let (rc, rh) = (empty_rules("rc"), empty_rules("rh"));
+        let branches = [
+            BranchSpec {
+                id: "coastal",
+                name: "Coastal",
+                rules: &rc,
+                years: 100,
+            },
+            BranchSpec {
+                id: "highland",
+                name: "Highland",
+                rules: &rh,
+                years: 90,
+            },
+        ];
+        let (_graph, reports) = grow_family(&proto, &branches).unwrap();
+        assert_eq!(
+            reports.len(),
+            2,
+            "one report per branch, parallel to the specs"
+        );
     }
 
     /// The cognate-mint invariant, defended in `stem_genome` the way

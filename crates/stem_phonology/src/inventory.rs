@@ -82,11 +82,49 @@ fn requirement_reason(feature: Feature, bundle: crate::FeatureBundle) -> &'stati
     }
 }
 
-/// Above this consonant-to-vowel ratio the inventory is flagged as typologically
-/// lopsided. Natural languages cluster around 4:1; Ubykh, an extreme real case,
-/// reaches roughly 40:1. The threshold sits well past attested territory so it
-/// warns about designs that are genuinely unusual, not merely consonant-heavy.
-const LOPSIDED_CONSONANT_VOWEL_RATIO: f32 = 20.0;
+// --- Shared typological thresholds (M7, §17). ---
+//
+// One source of truth: both the plausibility *warnings* (below) and the
+// *rarity band* ([`PhonemeInventory::rarity`]) read these, so the descriptive
+// band can never disagree with the check that fired — the boundary that keeps
+// the M7 profile a projection of the report, not a second opinion
+// (`docs/adr/0009`). Integer, so no float reaches validation output (§9.4).
+
+/// Above this consonant-to-vowel ratio (integer, `consonants > RATIO * vowels`)
+/// the inventory is typologically lopsided. Natural languages cluster around 4:1;
+/// Ubykh, an extreme real case, reaches roughly 40:1. Set well past attested
+/// territory so it warns about the genuinely unusual, not the merely
+/// consonant-heavy.
+pub const LOPSIDED_RATIO: usize = 20;
+
+/// Attested consonant inventories cluster ~19–25 (WALS 1A "average"; mean ~22);
+/// only the Khoisan and NW-Caucasian extremes pass ~45, reaching the 80s (!Xóõ).
+pub const LARGE_CONSONANT_COUNT: usize = 45;
+
+/// Plain-quality vowel systems top out in the teens; past 15 is typologically
+/// striking. (No *small*-vowel floor: a two-vowel system is attested — §17 says
+/// report, do not police.)
+pub const LARGE_VOWEL_COUNT: usize = 15;
+
+/// Smaller than any attested language — Rotokas, near the floor, has ~11.
+pub const VERY_SMALL_TOTAL: usize = 5;
+
+/// A qualitative typological-rarity band for an inventory (`DESIGN.md` §17, M7).
+///
+/// Enum, not a percentage: §9.4 forbids a float reaching output, and a band the
+/// user can reason about beats an opaque number that fakes precision (§17:
+/// transparent, not authoritarian). `Rare` fires **exactly when** one of the
+/// inventory size warnings/notes fires — the band summarises the same checks over
+/// the same shared constants, never a second opinion.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Rarity {
+    /// Within the ordinary attested range.
+    Typical,
+    /// Striking but within speculative reach; no warning fires here.
+    Unusual,
+    /// Past all attested territory; a size warning/note fires too.
+    Rare,
+}
 
 /// The set of contrastive sounds available to one language.
 ///
@@ -196,9 +234,12 @@ impl PhonemeInventory {
     /// saved decomposed (NFD `c` + U+0327) will not match the reference table's
     /// precomposed `ç`, so in that corner a mint can slip past the guard and
     /// leave two indistinguishably rendered glyphs in one inventory. Closing it
-    /// wants Unicode normalization data and belongs to M7's plausibility profile
-    /// as an `ipa_not_nfc` warning on authored inventories — report at the file
-    /// boundary once, not normalize in a hot comparison forever.
+    /// wants Unicode normalization data — an `ipa_not_nfc` warning that normalizes
+    /// once at the file boundary. **M7 deliberately does not ship it:** M7 is
+    /// §17's *typological* plausibility profile, and this is a *data-hygiene /
+    /// interchange* check that would pull in a Unicode-normalization dependency
+    /// for one warning (CLAUDE.md: don't reach for a heavyweight dependency for a
+    /// small need). It belongs to a later data-hygiene pass, not the profile.
     pub fn by_ipa(&self, ipa: &str) -> Option<&Phoneme> {
         self.phonemes.iter().find(|p| p.ipa == ipa)
     }
@@ -211,6 +252,49 @@ impl PhonemeInventory {
     /// Whether the inventory holds no phonemes.
     pub fn is_empty(&self) -> bool {
         self.phonemes.is_empty()
+    }
+
+    /// The typological-rarity band (§17, M7), over the same shared constants the
+    /// size warnings use — so `Rare` holds **exactly when** a size warning/note
+    /// fires. Integer arithmetic (ratio by cross-multiplication).
+    ///
+    /// A *vowelless* inventory (`v == 0`, `c > 0`) is **not** `Rare`: it trips
+    /// only the `no_nucleus` Error, which is not a size code, so scoring it `Rare`
+    /// would break the projection invariant. An *empty* inventory is handled
+    /// first — see below.
+    pub fn rarity(&self) -> Rarity {
+        let c = self.consonants().count();
+        let v = self.vowels().count();
+        let total = c + v;
+
+        // An empty inventory is the structural `empty` Error's domain: `validate`
+        // early-returns on it *before* the plausibility section, so NONE of the
+        // size checks fire. The band must mirror that — otherwise `Rare` (which
+        // `c == 0`/`total < 5` would otherwise assert) has no size warning behind
+        // it, breaking the projection invariant. No phonemes, no rarity concern.
+        if total == 0 {
+            return Rarity::Typical;
+        }
+
+        // Rare — past all attested territory. Each disjunct has a warning/note
+        // partner that fires here (a vowelless `c == 0` never reaches this branch
+        // because it needs vowels to be non-empty; the all-vowel `c == 0` case is
+        // partnered by `no_consonants`). So the band and the checks cannot disagree.
+        if c == 0
+            || c > LARGE_CONSONANT_COUNT
+            || v > LARGE_VOWEL_COUNT
+            || (v > 0 && c > LOPSIDED_RATIO * v)
+            || total < VERY_SMALL_TOTAL
+        {
+            return Rarity::Rare;
+        }
+        // Unusual — a softer descriptive middle (WALS "large" territory, ~26–33
+        // consonants), with no warning partner: a language may be striking without
+        // deserving a warning. Presentational only.
+        if c > 33 || v > 9 || (v > 0 && c > 8 * v) || total < 8 {
+            return Rarity::Unusual;
+        }
+        Rarity::Typical
     }
 }
 
@@ -315,27 +399,52 @@ impl Validate for PhonemeInventory {
             );
         }
 
-        // --- Plausibility: unusual, but the user may mean it (§17). ---
+        // --- Plausibility: unusual, but the user may mean it (§17). Every check
+        // here is a Warning or Note — a weird-but-well-formed language stays
+        // valid (`is_ok()`), because §17 reports, it does not police. Each rarity
+        // trigger reads a shared threshold constant so the rarity *band* agrees. ---
         if consonants == 0 {
             report.warn(
                 "no_consonants",
                 "the inventory is all vowels; this is typologically unattested",
             );
-        } else if vowels > 0 {
-            let ratio = consonants as f32 / vowels as f32;
-            if ratio > LOPSIDED_CONSONANT_VOWEL_RATIO {
-                report.warn(
-                    "lopsided_inventory",
-                    format!(
-                        "{consonants} consonants to {vowels} vowels (ratio {ratio:.1}:1) is far \
-                         outside the attested range; possible as a speculative design, but it \
-                         deserves a historical explanation"
-                    ),
-                );
-            }
+        } else if vowels > 0 && consonants > LOPSIDED_RATIO * vowels {
+            // Integer cross-multiplication — no float on the validation path.
+            report.warn(
+                "lopsided_inventory",
+                format!(
+                    "{consonants} consonants to {vowels} vowels is far outside the attested \
+                     range (natural languages cluster near 4:1); possible as a speculative \
+                     design, but it deserves a historical explanation"
+                ),
+            );
         }
 
-        if self.phonemes.len() < 5 {
+        // The §17 "80 consonants" case — a size warning the ratio check alone
+        // misses (an 80C/40V inventory is ratio 2:1 yet wildly unusual by count).
+        if consonants > LARGE_CONSONANT_COUNT {
+            report.warn(
+                "large_consonant_inventory",
+                format!(
+                    "this inventory has {consonants} consonants; only a handful of attested \
+                     languages exceed ~{LARGE_CONSONANT_COUNT} (the Khoisan and NW-Caucasian \
+                     extremes reach the 80s), so it is possible as a speculative design but \
+                     deserves a historical explanation"
+                ),
+            );
+        }
+        if vowels > LARGE_VOWEL_COUNT {
+            report.warn(
+                "large_vowel_inventory",
+                format!(
+                    "this inventory has {vowels} vowels; the largest attested plain-quality \
+                     systems sit in the teens, so a system this large is possible but \
+                     typologically striking — worth a note in the language's history"
+                ),
+            );
+        }
+
+        if self.phonemes.len() < VERY_SMALL_TOTAL {
             report.note(
                 "very_small_inventory",
                 format!(
@@ -763,6 +872,162 @@ mod tests {
         ]);
         let report = inventory.validate();
         assert!(report.errors().any(|i| i.code == "bad_weight"), "{report}");
+    }
+
+    // --- M7: the plausibility size warnings and the rarity band ---
+
+    const C_BUNDLE: &[&str] = &[
+        "-syllabic",
+        "+consonantal",
+        "-sonorant",
+        "-approximant",
+        "-continuant",
+        "-nasal",
+        "-lateral",
+        "-trill",
+        "-voice",
+        "-labial",
+        "+coronal",
+        "-dorsal",
+    ];
+    const V_BUNDLE: &[&str] = &[
+        "+syllabic",
+        "-consonantal",
+        "+sonorant",
+        "+approximant",
+        "+continuant",
+        "-nasal",
+        "-lateral",
+        "-trill",
+        "+voice",
+        "-labial",
+        "-coronal",
+        "+dorsal",
+        "-high",
+        "+low",
+        "+back",
+        "-round",
+    ];
+
+    /// An inventory of `c` consonants and `v` vowels, each fully featured (so the
+    /// only issues are the plausibility ones under test). Ids/ipa are distinct.
+    fn sized(c: usize, v: usize) -> PhonemeInventory {
+        let mut phonemes = Vec::new();
+        for i in 0..c {
+            phonemes.push(featured(
+                &format!("ph_c{i}"),
+                &format!("c{i}"),
+                SegmentKind::Consonant,
+                C_BUNDLE,
+            ));
+        }
+        for i in 0..v {
+            phonemes.push(featured(
+                &format!("ph_v{i}"),
+                &format!("v{i}"),
+                SegmentKind::Vowel,
+                V_BUNDLE,
+            ));
+        }
+        PhonemeInventory::from_phonemes(phonemes)
+    }
+
+    #[test]
+    fn an_eighty_consonant_inventory_warns_about_its_size_but_stays_valid() {
+        let report = sized(80, 2).validate();
+        assert!(
+            report.is_ok(),
+            "a weird-but-well-formed language must still validate (§17): {report}"
+        );
+        assert!(
+            report
+                .warnings()
+                .any(|i| i.code == "large_consonant_inventory"),
+            "an 80-consonant inventory earns a size warning: {report}"
+        );
+    }
+
+    #[test]
+    fn a_huge_vowel_inventory_warns_but_stays_valid() {
+        let report = sized(4, 20).validate();
+        assert!(report.is_ok(), "{report}");
+        assert!(
+            report.warnings().any(|i| i.code == "large_vowel_inventory"),
+            "20 vowels earns a size warning: {report}"
+        );
+    }
+
+    #[test]
+    fn a_two_vowel_system_is_not_warned_on_its_own() {
+        // 10C/2V: ratio 5:1, not lopsided, and a two-vowel system is attested.
+        let report = sized(10, 2).validate();
+        assert!(
+            !report
+                .issues
+                .iter()
+                .any(|i| i.code == "large_vowel_inventory"),
+            "a small vowel count is not policed (§17): {report}"
+        );
+    }
+
+    #[test]
+    fn the_reference_sized_inventory_trips_no_size_warning() {
+        let report = sized(10, 5).validate();
+        for code in ["large_consonant_inventory", "large_vowel_inventory"] {
+            assert!(
+                !report.issues.iter().any(|i| i.code == code),
+                "10C/5V must trip no size warning, saw {code}: {report}"
+            );
+        }
+    }
+
+    #[test]
+    fn the_rarity_band_is_rare_exactly_when_a_size_warning_fires() {
+        // The projection guard: the band summarises the same checks.
+        let size_codes = [
+            "large_consonant_inventory",
+            "large_vowel_inventory",
+            "lopsided_inventory",
+            "no_consonants",
+            "very_small_inventory",
+        ];
+        let fired = |inv: &PhonemeInventory| {
+            let report = inv.validate();
+            report
+                .issues
+                .iter()
+                .any(|i| size_codes.contains(&i.code.as_str()))
+        };
+
+        // The invariant must hold in BOTH directions across every boundary,
+        // including the degenerate ones `validate` handles specially.
+        let cases: &[(PhonemeInventory, bool)] = &[
+            (sized(80, 2), true),  // Rare: large_consonant + lopsided fire
+            (sized(4, 20), true),  // Rare: large_vowel fires
+            (sized(10, 5), false), // the reference: not Rare, nothing fires
+            // Boundaries: at the constant, not over it.
+            (sized(45, 5), false),
+            (sized(46, 5), true),
+            // Empty inventory: `validate` early-returns with only the `empty`
+            // Error, so no size code fires — the band must not be Rare.
+            (sized(0, 0), false),
+            // Vowelless (10C/0V): only the `no_nucleus` Error, no size code — not
+            // Rare.
+            (sized(10, 0), false),
+        ];
+        for (inv, expect_rare) in cases {
+            let is_rare = inv.rarity() == Rarity::Rare;
+            assert_eq!(
+                is_rare,
+                *expect_rare,
+                "band/warning disagree for {}C/{}V: rare={is_rare}, warning={}",
+                inv.consonants().count(),
+                inv.vowels().count(),
+                fired(inv),
+            );
+            // The projection: Rare exactly when a size warning fired.
+            assert_eq!(is_rare, fired(inv), "Rare must ⟺ a size warning firing");
+        }
     }
 
     // --- M1: features, candidates, and the new checks ---

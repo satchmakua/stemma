@@ -28,7 +28,7 @@ pub mod reference;
 
 pub use features::{Feature, FeatureBundle, FeatureNode, FeatureParseError, Sign};
 pub use generate::{Root, RootGenerator, Syllable};
-pub use inventory::{PhonemeInventory, required_features_missing};
+pub use inventory::{PhonemeInventory, Rarity, required_features_missing};
 pub use phoneme::{Phoneme, SegmentKind};
-pub use phonotactics::{Phonotactics, WeightedSyllableCount, WeightedTemplate};
+pub use phonotactics::{Complexity, Phonotactics, WeightedSyllableCount, WeightedTemplate};
 pub use prosody::{Prosody, Stress, StressPolicy, WordEdge};

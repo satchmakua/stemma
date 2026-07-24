@@ -38,6 +38,13 @@ enum Command {
         path: PathBuf,
     },
 
+    /// Print the §17 plausibility profile: scored typological dimensions plus the
+    /// graded report. Describes the language; it does not police it.
+    Profile {
+        /// Path to a language file (`.ron` or `.json`).
+        path: PathBuf,
+    },
+
     /// Print a summary of a language.
     Info {
         /// Path to a language file (`.ron` or `.json`).
@@ -221,6 +228,18 @@ enum Command {
         /// The meaning to trace, as an English gloss (`star`, `king`).
         meaning: String,
     },
+
+    /// Produce the "Growing a Language Family in 90 Seconds" artefact (§21) as one
+    /// self-contained Markdown document.
+    ///
+    /// The proto-language and its three rule histories are compiled into the
+    /// binary, so the demo needs no fixtures on disk and runs identically from any
+    /// directory. Deterministic: two runs are byte-identical.
+    Demo {
+        /// Write the document here; omitted, print to stdout.
+        #[arg(long)]
+        out: Option<PathBuf>,
+    },
 }
 
 fn main() -> ExitCode {
@@ -240,6 +259,7 @@ fn run() -> Result<ExitCode> {
 
     match cli.command {
         Command::Validate { path } => validate(&path),
+        Command::Profile { path } => profile(&path),
         Command::Info { path } => info(&path),
         Command::Convert { input, output } => convert(&input, &output),
         Command::GenerateRoots {
@@ -278,6 +298,7 @@ fn run() -> Result<ExitCode> {
         Command::Family { files } => family(&files),
         Command::Cognates { files, meanings } => cognates(&files, &meanings),
         Command::TraceWord { path, meaning } => trace_word(&path, &meaning),
+        Command::Demo { out } => demo(out.as_deref()),
     }
 }
 
@@ -296,6 +317,29 @@ fn validate(path: &std::path::Path) -> Result<ExitCode> {
 
     // Errors mean the language is unusable; warnings are commentary. Only the
     // former should fail a script or a CI check.
+    Ok(if report.is_ok() {
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::FAILURE
+    })
+}
+
+fn profile(path: &std::path::Path) -> Result<ExitCode> {
+    let genome = load_genome(path)?;
+    let report = genome.validate();
+
+    println!("{}", genome.summary());
+    println!();
+    // The scored-dimensions block is a derived read-model, rendered by the
+    // library (the `render_family` precedent); the graded report — which already
+    // carries the plausibility *warnings* — prints below it.
+    print!(
+        "{}",
+        stem_genome::render_profile(&genome.plausibility_profile(), &genome.name)
+    );
+    println!();
+    print_report(&report);
+
     Ok(if report.is_ok() {
         ExitCode::SUCCESS
     } else {
@@ -707,6 +751,62 @@ fn trace_word(path: &std::path::Path, meaning: &str) -> Result<ExitCode> {
     Ok(ExitCode::SUCCESS)
 }
 
+fn demo(out: Option<&std::path::Path>) -> Result<ExitCode> {
+    use stem_io::Format;
+
+    // The demo's inputs are compiled in, so it runs from any directory. Parsing
+    // embedded RON is input sourcing, not domain logic — the story lives in
+    // `stem_export::write_asterian_demo`.
+    let proto: LanguageGenome = stem_io::load_str(
+        include_str!("../../../fixtures/asterian_attested.ron"),
+        Format::Ron,
+    )
+    .context("parsing the embedded proto fixture")?;
+    let coastal: stem_soundchange::RuleSet = stem_io::load_str(
+        include_str!("../../../fixtures/rules_coastal.ron"),
+        Format::Ron,
+    )
+    .context("parsing the embedded Coastal rules")?;
+    let highland: stem_soundchange::RuleSet = stem_io::load_str(
+        include_str!("../../../fixtures/rules_highland.ron"),
+        Format::Ron,
+    )
+    .context("parsing the embedded Highland rules")?;
+    let riverine: stem_soundchange::RuleSet = stem_io::load_str(
+        include_str!("../../../fixtures/rules_riverine.ron"),
+        Format::Ron,
+    )
+    .context("parsing the embedded Riverine rules")?;
+
+    let mut document = String::new();
+    let report =
+        stem_export::write_asterian_demo(&mut document, &proto, &coastal, &highland, &riverine)
+            .context("assembling the family demo")?;
+    // The advisory report (the velar-chain rules' `target_matches_nothing` notes)
+    // goes to stderr; the document alone to the file or stdout.
+    for issue in &report.issues {
+        eprintln!("  {issue}");
+    }
+
+    match out {
+        Some(destination) => {
+            if let Some(parent) = destination.parent()
+                && !parent.as_os_str().is_empty()
+            {
+                std::fs::create_dir_all(parent)
+                    .with_context(|| format!("creating `{}`", parent.display()))?;
+            }
+            std::fs::write(destination, &document)
+                .with_context(|| format!("writing `{}`", destination.display()))?;
+            eprintln!("{} bytes -> {}", document.len(), destination.display());
+        }
+        // `print!`, not `println!`: the renderer already ends with a newline.
+        None => print!("{document}"),
+    }
+
+    Ok(ExitCode::SUCCESS)
+}
+
 fn trace(path: &std::path::Path, word: &str) -> Result<ExitCode> {
     let genome = load_genome(path)?;
     let entry = genome
@@ -912,6 +1012,18 @@ mod tests {
                 assert_eq!(meaning, "star");
             }
             other => panic!("expected trace-word, got {other:?}"),
+        }
+
+        let cli = Cli::parse_from(["stemma", "demo", "--out", "output/demo.md"]);
+        match cli.command {
+            Command::Demo { out } => assert_eq!(out, Some(PathBuf::from("output/demo.md"))),
+            other => panic!("expected demo, got {other:?}"),
+        }
+
+        let cli = Cli::parse_from(["stemma", "profile", "x.ron"]);
+        match cli.command {
+            Command::Profile { path } => assert_eq!(path, PathBuf::from("x.ron")),
+            other => panic!("expected profile, got {other:?}"),
         }
     }
 
