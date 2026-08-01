@@ -950,6 +950,7 @@ mod tests {
             cognate_set: CognateSetId::new(*set),
             source: WordSource::Authored,
             trace: None,
+            morphemes: Vec::new(),
         });
         genome.lexicon = Lexicon::from_entries(entries);
         genome
@@ -1264,6 +1265,7 @@ mod tests {
                 cognate_set: CognateSetId::new(*set),
                 source: WordSource::Authored,
                 trace: None,
+                morphemes: Vec::new(),
             });
         genome.lexicon = Lexicon::from_entries(entries);
         genome

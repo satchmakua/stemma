@@ -225,6 +225,7 @@ mod tests {
             cognate_set: CognateSetId::new("cog_proto_asterian_0099"),
             source: WordSource::Authored,
             trace: None,
+            morphemes: Vec::new(),
         };
         let text = ron::ser::to_string(&entry).expect("serialise");
         let back: WordEntry = ron::from_str(&text).expect("deserialise");
@@ -302,6 +303,7 @@ mod tests {
             cognate_set: CognateSetId::new("cog_x_0001"),
             source: WordSource::Authored,
             trace: None,
+            morphemes: Vec::new(),
         }])
     }
 
@@ -331,6 +333,7 @@ mod tests {
             cognate_set: CognateSetId::new(format!("cog_x_{id}")),
             source: WordSource::Authored,
             trace: None,
+            morphemes: Vec::new(),
         }
     }
 
@@ -466,6 +469,7 @@ mod tests {
             cognate_set: CognateSetId::new("cog_x_0002"),
             source: WordSource::Authored,
             trace: None,
+            morphemes: Vec::new(),
         });
 
         let report = check_against_inventory(&lexicon, &inventory());
@@ -496,6 +500,7 @@ mod tests {
             cognate_set: CognateSetId::new("cog_x_0001"),
             source: WordSource::Authored,
             trace: None,
+            morphemes: Vec::new(),
         }]);
         let report = check_against_inventory(&lexicon, &inventory());
         assert!(
@@ -538,6 +543,7 @@ mod tests {
             cognate_set: CognateSetId::new(set),
             source: WordSource::Authored,
             trace: None,
+            morphemes: Vec::new(),
         };
         let lexicon = Lexicon::from_entries([
             word("w_0001", "ph_k", "cog_x_0001"),

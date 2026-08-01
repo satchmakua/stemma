@@ -106,6 +106,7 @@ pub fn build_proto_lexicon(
                 cognate_set: scoped_cognate_set(language, ordinal),
                 source: WordSource::Generated,
                 trace: None,
+                morphemes: Vec::new(),
             }
         })
         .collect();

@@ -911,6 +911,7 @@ mod tests {
             cognate_set: stem_core::CognateSetId::new("cog_x_0001"),
             source: WordSource::Authored,
             trace: None,
+            morphemes: Vec::new(),
         }
     }
 

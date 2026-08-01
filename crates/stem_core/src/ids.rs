@@ -116,6 +116,15 @@ define_id!(
     EventId,
     "ev"
 );
+define_id!(
+    /// Identifies a morpheme — a stem or an affix — within one language (M8).
+    ///
+    /// Readable and deterministic like every other id (`docs/adr/0003`): a plural
+    /// suffix is `m_plural`, a stem `m_tira`. Two sister languages both holding
+    /// `m_plural` is correct — they are different morphemes.
+    MorphemeId,
+    "m"
+);
 
 #[cfg(test)]
 mod tests {

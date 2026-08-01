@@ -238,6 +238,65 @@ impl Derivation {
     pub fn final_form(&self) -> Root {
         self.replay().pop().unwrap_or_else(|| self.input.clone())
     }
+
+    /// The surface segments descending from the input positions in `[start, end)`,
+    /// in surface order (M8, `M8-SPEC` §6).
+    ///
+    /// This is how a *morpheme's* surface allomorph is recovered: a `MorphemeRef`
+    /// records the flat span the morpheme occupied in the composition form — which
+    /// **is** [`Self::input`], because a later stratum extends `steps` and never
+    /// touches `input` — and this returns what that span became after every rule.
+    /// So `tira-`**`ka`** (suffix span `[4, 6)`) surfaces as `[ph_g, ph_a]` once
+    /// intervocalic voicing has fired, and `tan-`**`ka`** (span `[3, 5)`) surfaces
+    /// as `[ph_k, ph_a]` because no rule touched it — the two allomorphs of one
+    /// suffix, read straight off the trace.
+    ///
+    /// Mirrors [`Self::replay`]'s edit discipline exactly (descending commit per
+    /// step) while carrying a parallel `Vec` of each surviving segment's **origin**
+    /// input-index: a `Replace` keeps its position's origin, a `Delete` drops it.
+    /// Consulting only the stored trace — no rule, no inventory, no engine — it is
+    /// exact and general across strata, and returns the raw input span when `steps`
+    /// is empty. Out-of-range site indices are skipped rather than panicking; a
+    /// well-formed trace never produces one, so this only guards a corrupt file.
+    pub fn surface_of_input_span(&self, start: usize, end: usize) -> Vec<PhonemeId> {
+        // Each entry is (current segment, origin index into `input`). The origin is
+        // fixed at composition time and rides along through every edit, so a
+        // survivor can always be traced back to the morpheme it came from.
+        let mut current: Vec<(PhonemeId, usize)> = self
+            .input
+            .segments()
+            .cloned()
+            .enumerate()
+            .map(|(origin, seg)| (seg, origin))
+            .collect();
+
+        for step in &self.steps {
+            let mut sites: Vec<&SiteTrace> = step.sites.iter().collect();
+            // Descending, exactly as `replay`, so a deletion cannot shift the index
+            // of a site not yet committed within this step.
+            sites.sort_by_key(|s| std::cmp::Reverse(s.at));
+            for site in sites {
+                let at = site.at as usize;
+                if at >= current.len() {
+                    continue; // corrupt trace; a valid one never indexes past the form
+                }
+                match &site.after {
+                    // A replacement keeps the position — and thus its origin.
+                    Some(id) => current[at].0 = id.clone(),
+                    // A deletion removes the segment and its origin together.
+                    None => {
+                        current.remove(at);
+                    }
+                }
+            }
+        }
+
+        current
+            .into_iter()
+            .filter(|(_, origin)| *origin >= start && *origin < end)
+            .map(|(seg, _)| seg)
+            .collect()
+    }
 }
 
 #[cfg(test)]
@@ -354,6 +413,97 @@ mod tests {
         };
         assert!(derivation.replay().is_empty());
         assert_eq!(derivation.final_form(), takala_like());
+    }
+
+    /// The M8 span reader over a replacement: `ta.ka.la`'s middle `/k/` voices to
+    /// `/ɡ/`, and the span `[2, 4)` — the second syllable — must surface as
+    /// `[ph_g, ph_a]`, its `/k/` carried through the edit as `/ɡ/`.
+    #[test]
+    fn surface_of_input_span_follows_a_replacement_through_its_origin() {
+        let derivation = Derivation {
+            input: takala_like(),
+            steps: vec![RuleApplication {
+                rule: RuleId::new("r_ivv"),
+                index: 0,
+                sites: vec![SiteTrace {
+                    at: 2,
+                    before: PhonemeId::new("ph_k"),
+                    after: Some(PhonemeId::new("ph_g")),
+                    resolution: None,
+                    left: vec![Some(PhonemeId::new("ph_a"))],
+                    right: vec![Some(PhonemeId::new("ph_a"))],
+                    emptied_syllable: None,
+                }],
+                blocked: vec![],
+            }],
+        };
+        let span: Vec<&str> = derivation
+            .surface_of_input_span(2, 4)
+            .iter()
+            .map(|s| s.as_str())
+            .collect();
+        assert_eq!(span, ["ph_g", "ph_a"], "the /k/ surfaces as /ɡ/ in its span");
+    }
+
+    /// A deletion inside the span drops that segment from the recovered allomorph,
+    /// and a deletion *before* the span does not shift what the span recovers —
+    /// origins are stable under the edit, unlike flat indices.
+    #[test]
+    fn surface_of_input_span_drops_a_deleted_segment_and_is_stable_across_a_prior_deletion() {
+        // `ta.ka.la`: delete index 1 (`a` of `ta`) and index 5 (final `a`).
+        let derivation = Derivation {
+            input: takala_like(),
+            steps: vec![RuleApplication {
+                rule: RuleId::new("r_del"),
+                index: 0,
+                sites: vec![
+                    SiteTrace {
+                        at: 1,
+                        before: PhonemeId::new("ph_a"),
+                        after: None,
+                        resolution: None,
+                        left: vec![],
+                        right: vec![],
+                        emptied_syllable: None,
+                    },
+                    SiteTrace {
+                        at: 5,
+                        before: PhonemeId::new("ph_a"),
+                        after: None,
+                        resolution: None,
+                        left: vec![],
+                        right: vec![],
+                        emptied_syllable: None,
+                    },
+                ],
+                blocked: vec![],
+            }],
+        };
+        // The third syllable `la` occupies origin span [4, 6); its final `a` (origin
+        // 5) is deleted, so only `l` survives — and the earlier deletion at 1 did
+        // not perturb that, because the span is addressed by origin, not by index.
+        let span: Vec<&str> = derivation
+            .surface_of_input_span(4, 6)
+            .iter()
+            .map(|s| s.as_str())
+            .collect();
+        assert_eq!(span, ["ph_l"], "the deleted final vowel is gone from the span");
+    }
+
+    /// With no steps, the span reader is a pure slice of the input — the regular,
+    /// pre-sound-change allomorph.
+    #[test]
+    fn surface_of_input_span_of_an_untouched_form_is_the_raw_input_slice() {
+        let derivation = Derivation {
+            input: takala_like(),
+            steps: vec![],
+        };
+        let span: Vec<&str> = derivation
+            .surface_of_input_span(2, 4)
+            .iter()
+            .map(|s| s.as_str())
+            .collect();
+        assert_eq!(span, ["ph_k", "ph_a"]);
     }
 
     #[test]

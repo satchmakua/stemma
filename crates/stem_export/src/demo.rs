@@ -428,6 +428,7 @@ mod tests {
             cognate_set: CognateSetId::new(set),
             source: WordSource::Authored,
             trace: None,
+            morphemes: Vec::new(),
         }
     }
 
