@@ -275,6 +275,7 @@ mod tests {
             cognate_set: stem_core::CognateSetId::new("cog_x_0001"),
             source: stem_lexicon::WordSource::Authored,
             trace: None,
+            morphemes: Vec::new(),
         }])
     }
 

@@ -67,6 +67,7 @@ fn canary() -> LanguageGenome {
             cognate_set: CognateSetId::new("cog_demo_0001"),
             source: WordSource::Generated,
             trace: None,
+            morphemes: Vec::new(),
         },
         WordEntry {
             id: WordId::new("w_0002"),
@@ -82,6 +83,7 @@ fn canary() -> LanguageGenome {
             cognate_set: CognateSetId::new("cog_demo_0002"),
             source: WordSource::Generated,
             trace: None,
+            morphemes: Vec::new(),
         },
     ]))
 }

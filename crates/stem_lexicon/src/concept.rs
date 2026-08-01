@@ -133,6 +133,12 @@ pub enum PartOfSpeech {
 }
 
 impl PartOfSpeech {
+    /// `Noun` — the serde default for a morpheme's part of speech (M8): nouns
+    /// inflect for number in the reference paradigm, and most stems are nouns.
+    pub fn noun_default() -> Self {
+        Self::Noun
+    }
+
     /// The lowercase name, as it appears in RON and in exports.
     pub fn name(self) -> &'static str {
         match self {

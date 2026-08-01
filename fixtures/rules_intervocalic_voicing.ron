@@ -1,0 +1,27 @@
+// Intervocalic voicing, alone — the one-rule set for the M8 morphology
+// demonstration.
+//
+// A voiceless stop voices between two vowels (the `r_ivv` body, verbatim from
+// rules_coastal.ron). One rule, so "a regular paradigm becomes irregular purely
+// as a consequence of an ordered sound change" is unconfoundable: the plural
+// suffix /-ka/ voices to /-ɡa/ after a vowel-final stem and stays /-ka/ after a
+// consonant-final one, and nothing else can be blamed.
+(
+    id: "rules_intervocalic_voicing",
+    name: "Intervocalic voicing",
+    description: "Voiceless stops voice between vowels.",
+    rules: [
+        (
+            id: "r_ivv",
+            name: "Intervocalic voicing",
+            description: "Voiceless stops voice between vowels.",
+            chronology_years: 250,
+            target: (features: ["-sonorant", "-continuant", "-voice"]),
+            environment: (
+                before: [segment((features: ["+syllabic"]))],
+                after: [segment((features: ["+syllabic"]))],
+            ),
+            change: set(["+voice"]),
+        ),
+    ],
+)

@@ -644,6 +644,7 @@ mod tests {
             cognate_set: CognateSetId::new("cog_proto_asterian_0001"),
             source: WordSource::Authored,
             trace: None,
+            morphemes: Vec::new(),
         };
         genome.lexicon = Lexicon::from_entries([entry]);
         genome

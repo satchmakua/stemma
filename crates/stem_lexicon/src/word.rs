@@ -34,6 +34,9 @@ pub enum WordSource {
     /// something true. A generated lexicon always writes `generated` explicitly.
     #[default]
     Authored,
+    /// Built by inflection from morphemes (M8's `inflect`). The variant `word.rs`
+    /// reserved for morphology now has its producer.
+    Derived,
 }
 
 impl WordSource {
@@ -42,6 +45,7 @@ impl WordSource {
         match self {
             Self::Generated => "generated",
             Self::Authored => "authored",
+            Self::Derived => "derived",
         }
     }
 }
@@ -148,6 +152,21 @@ pub struct WordEntry {
     /// every file that never evolved.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub trace: Option<crate::trace::Derivation>,
+
+    /// The morphemes this word is composed of (`docs/adr/0007`'s deferred
+    /// `morphemes`, arriving at M8). Empty for a monomorphemic root — every M0–M7
+    /// entry and both reference fixtures — so `#[serde(default)]` keeps every
+    /// saved file loading and `skip_serializing_if` keeps them byte-identical.
+    ///
+    /// The §3.3 obligation made concrete: a *composed* form with an empty
+    /// `morphemes` would be a form with no recorded composition — the same bug
+    /// class as a transformed form with no `RuleApplicationTrace`. `inflect`
+    /// always writes it; `apply_rules`/`fork` carry it verbatim (`entry.clone()`).
+    /// It records the decomposition (which morpheme, which span), never surface
+    /// segments — those live in `phonemic_form`, and storing them twice is the
+    /// desync `docs/adr/0007` forbids.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub morphemes: Vec<crate::morpheme::MorphemeRef>,
 }
 
 impl WordEntry {
