@@ -127,11 +127,15 @@ explosion is the top risk to this project._
   80-consonant inventory, a `CCCVCC` template — each still `is_ok()`) and stay
   quiet on Proto-Asterian and all three of its daughters.
 
-- [ ] **M8 — Morphology v0.** Morphemes, simple affixation, sound change applied
+- [x] **M8 — Morphology v0.** Morphemes, simple affixation, sound change applied
   across morpheme boundaries, and the irregular paradigms that fall out of it
   (`DESIGN.md` §7.3).
   **Test:** a regular paradigm becomes irregular purely as a consequence of an
-  ordered sound change, and the trace explains why.
+  ordered sound change, and the trace explains why. ✅ `stemma inflect
+  fixtures/morphology_asterian.ron --paradigm NUMBER` gives a regular `-ka` plural;
+  after `apply-rules … rules_intervocalic_voicing.ron`, `stemma paradigm` shows it
+  split into `-ɡa` (after `tira`, `mena`) / `-ka` (after `tan`, `sul`), each cell's
+  trace naming the rule that fired or "did not apply". 457 tests green.
 
 - [ ] **M9 — Semantics v0.** Semantic nodes instead of English gloss strings, plus
   drift events (§7.5).

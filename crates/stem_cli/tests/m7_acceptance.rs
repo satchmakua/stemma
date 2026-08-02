@@ -141,7 +141,13 @@ fn stemma_profile_prints_the_scored_block_and_stays_quiet_for_the_proto() {
     assert!(text.contains("typical"), "{text}");
     assert!(text.contains("simple"), "{text}");
     assert!(text.contains("not yet modelled"), "{text}");
-    assert!(text.contains("M8"), "names the deferred milestone: {text}");
+    // M8 filled the morphological-irregularity row: it is a scored band now (the
+    // proto has no affixation → "none"), and the deferred milestones start at M9.
+    assert!(
+        text.contains("Morphological irregularity"),
+        "morphology is a scored dimension now: {text}"
+    );
+    assert!(text.contains("M9"), "names a deferred milestone: {text}");
     // Honest: no fabricated percentage, no syntax dimension, no new warning.
     assert!(!text.contains('%'), "no fabricated percentage: {text}");
     for code in NEW_M7_CODES {

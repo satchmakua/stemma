@@ -437,12 +437,13 @@ mod tests {
                 blocked: vec![],
             }],
         };
-        let span: Vec<&str> = derivation
-            .surface_of_input_span(2, 4)
-            .iter()
-            .map(|s| s.as_str())
-            .collect();
-        assert_eq!(span, ["ph_g", "ph_a"], "the /k/ surfaces as /ɡ/ in its span");
+        let surface = derivation.surface_of_input_span(2, 4);
+        let span: Vec<&str> = surface.iter().map(|s| s.as_str()).collect();
+        assert_eq!(
+            span,
+            ["ph_g", "ph_a"],
+            "the /k/ surfaces as /ɡ/ in its span"
+        );
     }
 
     /// A deletion inside the span drops that segment from the recovered allomorph,
@@ -482,12 +483,13 @@ mod tests {
         // The third syllable `la` occupies origin span [4, 6); its final `a` (origin
         // 5) is deleted, so only `l` survives — and the earlier deletion at 1 did
         // not perturb that, because the span is addressed by origin, not by index.
-        let span: Vec<&str> = derivation
-            .surface_of_input_span(4, 6)
-            .iter()
-            .map(|s| s.as_str())
-            .collect();
-        assert_eq!(span, ["ph_l"], "the deleted final vowel is gone from the span");
+        let surface = derivation.surface_of_input_span(4, 6);
+        let span: Vec<&str> = surface.iter().map(|s| s.as_str()).collect();
+        assert_eq!(
+            span,
+            ["ph_l"],
+            "the deleted final vowel is gone from the span"
+        );
     }
 
     /// With no steps, the span reader is a pure slice of the input — the regular,
@@ -498,11 +500,8 @@ mod tests {
             input: takala_like(),
             steps: vec![],
         };
-        let span: Vec<&str> = derivation
-            .surface_of_input_span(2, 4)
-            .iter()
-            .map(|s| s.as_str())
-            .collect();
+        let surface = derivation.surface_of_input_span(2, 4);
+        let span: Vec<&str> = surface.iter().map(|s| s.as_str()).collect();
         assert_eq!(span, ["ph_k", "ph_a"]);
     }
 

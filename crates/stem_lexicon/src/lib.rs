@@ -41,12 +41,17 @@
 pub mod build;
 pub mod concept;
 pub mod lexicon;
+pub mod morpheme;
 pub mod trace;
 pub mod word;
 
 pub use build::{build_proto_lexicon, scoped_cognate_set};
 pub use concept::{CONCEPT_COUNT, CONCEPTS, Concept, ConceptKey, PartOfSpeech, SWADESH_COUNT};
 pub use lexicon::{Lexicon, check_against_inventory, is_portable_id};
+pub use morpheme::{
+    AllomorphSet, HIGH_ALLOMORPH_COUNT, Morpheme, MorphemeRef, MorphemeRole, Morphology, Paradigm,
+    ParadigmCell, compose, inflect, morphological_irregularity,
+};
 pub use trace::{
     BlockReason, BlockedSite, Derivation, RuleApplication, SiteTrace, SymbolResolution,
 };
@@ -264,6 +269,9 @@ mod tests {
             ("word.rs", include_str!("word.rs")),
             ("concept.rs", include_str!("concept.rs")),
             ("trace.rs", include_str!("trace.rs")),
+            // M8: `inflect` mints a set per cell, but only ever via
+            // `scoped_cognate_set` — never a bare `CognateSetId::new`.
+            ("morpheme.rs", include_str!("morpheme.rs")),
         ];
         for (name, src) in sources {
             for (n, line) in src.lines().enumerate() {

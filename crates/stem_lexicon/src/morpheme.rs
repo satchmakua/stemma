@@ -400,23 +400,17 @@ pub fn morphological_irregularity(lexicon: &Lexicon) -> Vec<AllomorphSet> {
             if reference.role == MorphemeRole::Stem {
                 continue;
             }
-            let (start, end) = (reference.start as usize, reference.end as usize);
-            let surface = match &entry.trace {
-                // Evolved: walk the morpheme's span through the recorded rules.
-                Some(derivation) => derivation.surface_of_input_span(start, end),
-                // Regular, never evolved: the composition form IS the surface form,
-                // so the span is a raw slice of `phonemic_form`.
-                None => entry
-                    .phonemic_form
-                    .segments()
-                    .skip(start)
-                    .take(end.saturating_sub(start))
-                    .cloned()
-                    .collect(),
-            };
+            // The affix's realised allomorph in this word. `morpheme_surface`
+            // carries the "trace ? walk-the-span : raw-slice" invariant in one
+            // place, shared with `render_paradigm`, so the two cannot disagree
+            // about a count (`docs/adr/0009`).
+            let surface = entry.morpheme_surface(reference.start as usize, reference.end as usize);
 
             // Find or create this affix's set, preserving first-appearance order.
-            let slot = match sets.iter_mut().position(|s| s.morpheme == reference.morpheme) {
+            let slot = match sets
+                .iter_mut()
+                .position(|s| s.morpheme == reference.morpheme)
+            {
                 Some(i) => &mut sets[i],
                 None => {
                     sets.push(AllomorphSet {
@@ -517,7 +511,10 @@ mod tests {
     #[test]
     fn compose_concatenates_a_suffix_after_the_stem_with_a_correct_span() {
         let (form, refs) = compose(&stem_tira(), &[&suffix_plural()]);
-        assert_eq!(segs(&form), ["ph_t", "ph_i", "ph_r", "ph_a", "ph_k", "ph_a"]);
+        assert_eq!(
+            segs(&form),
+            ["ph_t", "ph_i", "ph_r", "ph_a", "ph_k", "ph_a"]
+        );
         assert_eq!(refs.len(), 2, "one ref for the stem, one for the suffix");
         // Surface order: stem then suffix.
         assert_eq!(refs[0].morpheme.as_str(), "m_tira");
@@ -573,12 +570,8 @@ mod tests {
     #[test]
     fn inflect_materialises_one_entry_per_stem_times_cell_stem_major() {
         let morphemes = vec![stem_tira(), stem_tan(), suffix_plural()];
-        let cells = inflect(
-            &number_paradigm(),
-            &morphemes,
-            &LanguageId::new("proto_x"),
-        )
-        .expect("inflects");
+        let cells =
+            inflect(&number_paradigm(), &morphemes, &LanguageId::new("proto_x")).expect("inflects");
         assert_eq!(cells.len(), 4, "2 stems × 2 cells");
         // Stem-major / cell-minor: tira-SG, tira-PL, tan-SG, tan-PL.
         assert_eq!(cells[0].glosses, ["star SG"]);
@@ -586,15 +579,21 @@ mod tests {
         assert_eq!(cells[2].glosses, ["man SG"]);
         assert_eq!(cells[3].glosses, ["man PL"]);
         // The regular forms, before any sound change: -ka everywhere.
-        assert_eq!(segs(&cells[1].phonemic_form).join(""), "ph_tph_iph_rph_aph_kph_a");
-        assert_eq!(segs(&cells[3].phonemic_form).join(""), "ph_tph_aph_nph_kph_a");
+        assert_eq!(
+            segs(&cells[1].phonemic_form).join(""),
+            "ph_tph_iph_rph_aph_kph_a"
+        );
+        assert_eq!(
+            segs(&cells[3].phonemic_form).join(""),
+            "ph_tph_aph_nph_kph_a"
+        );
     }
 
     #[test]
     fn inflect_stamps_derived_and_records_the_composition_and_mints_distinct_sets() {
         let morphemes = vec![stem_tira(), stem_tan(), suffix_plural()];
-        let cells = inflect(&number_paradigm(), &morphemes, &LanguageId::new("proto_x"))
-            .expect("inflects");
+        let cells =
+            inflect(&number_paradigm(), &morphemes, &LanguageId::new("proto_x")).expect("inflects");
         for cell in &cells {
             assert_eq!(cell.source, WordSource::Derived);
             assert!(
@@ -650,8 +649,8 @@ mod tests {
     #[test]
     fn a_regular_paradigm_reports_one_allomorph_per_affix() {
         let morphemes = vec![stem_tira(), stem_tan(), suffix_plural()];
-        let cells = inflect(&number_paradigm(), &morphemes, &LanguageId::new("x"))
-            .expect("inflects");
+        let cells =
+            inflect(&number_paradigm(), &morphemes, &LanguageId::new("x")).expect("inflects");
         let lexicon = Lexicon::from_entries(cells);
         let measure = morphological_irregularity(&lexicon);
         assert_eq!(measure.len(), 1, "one affix in play: the plural");
@@ -668,8 +667,8 @@ mod tests {
     #[test]
     fn a_conditioned_sound_change_makes_the_measure_report_two_allomorphs() {
         let morphemes = vec![stem_tira(), stem_tan(), suffix_plural()];
-        let mut cells = inflect(&number_paradigm(), &morphemes, &LanguageId::new("x"))
-            .expect("inflects");
+        let mut cells =
+            inflect(&number_paradigm(), &morphemes, &LanguageId::new("x")).expect("inflects");
 
         // tira-PL (index 1): suffix /k/ at flat index 4 voices to /ɡ/.
         let tira_pl = &mut cells[1];
