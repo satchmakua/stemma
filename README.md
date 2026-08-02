@@ -12,15 +12,17 @@ The name comes from textual criticism: a *stemma* is the reconstructed family tr
 showing how surviving manuscripts descend from a lost original. That is exactly
 this program's core data structure.
 
-**Status:** **Phase 1 complete (M0–M6); Phase 2 underway (M7 done)** — the
+**Status:** **Phase 1 complete (M0–M6); Phase 2 underway (M7–M8 done)** — the
 diachronic kernel runs end to end. Languages get a feature-based phonology,
 generate seeded roots, undergo ordered sound change, fork into daughters with their
 own histories, and line up in a comparative cognate table; `stemma demo` tells the
 whole story as one Markdown document, and `stemma profile` scores a language
-against real typological ranges without policing it. 427 tests pass, and every step
-is deterministic and traced. Morphology and semantics are next. See
-[ROADMAP.md](ROADMAP.md) for the plan and [PROGRESS.md](PROGRESS.md) for what has
-shipped.
+against real typological ranges without policing it. Morphology has landed:
+`stemma inflect` builds a paradigm and `stemma paradigm` shows a regular suffix
+**split into irregular allomorphs by an ordered sound change**, with each cell's
+trace naming the rule. 457 tests pass, and every step is deterministic and traced.
+Semantics is next. See [ROADMAP.md](ROADMAP.md) for the plan and
+[PROGRESS.md](PROGRESS.md) for what has shipped.
 
 ---
 
@@ -169,6 +171,46 @@ per site. Ordering is real, too — the fixture's `*taka` becomes `tag` under th
 declared order but `tak` with the rules swapped, which is the classic
 bleeding/counterbleeding contrast from historical linguistics.
 
+### Inflect it, then let a sound change make it irregular
+
+Morphology (M8) is where the engine pays off twice. A paradigm inflects **regularly**
+— one suffix, attached to every stem. Then an ordinary sound change fires in some
+cells' environments and not others, and the regular suffix splits into irregular
+allomorphs, with each cell's trace explaining exactly why.
+
+```bash
+# Attach the plural suffix -ka to every stem: a regular paradigm.
+cargo run -p stem_cli -- inflect fixtures/morphology_asterian.ron \
+    --paradigm NUMBER --out out/number_proto.ron
+# Run intervocalic voicing across the morpheme boundary.
+cargo run -p stem_cli -- apply-rules out/number_proto.ron \
+    --rules fixtures/rules_intervocalic_voicing.ron \
+    --id early --name "Early" --years 250 --out out/number_early.ron
+cargo run -p stem_cli -- paradigm out/number_early.ron --paradigm NUMBER
+```
+
+```
+Paradigm — Number (NUMBER)  ·  Early
+
+         SG     PL
+  tira   tira   tiraga
+  mena   mena   menaga
+  tan    tan    tanka
+  sul    sul    sulka
+
+Exponents:
+  ∅   zero exponent (the bare stem)
+  PL   -ga / -ka   — 2 allomorphs (irregular)
+    -ga   after tira, mena   ← Intervocalic voicing fired
+    -ka   after tan, sul   ← the conditioning rule did not apply here
+```
+
+The suffix `/-ka/` voiced to `/-ɡa/` between vowels (after the vowel-final stems
+`tira`, `mena`) but stayed `/-ka/` after a consonant (`tan`, `sul`) — the `/k/`
+there is not intervocalic. Nothing declared the paradigm irregular; the irregularity
+*fell out of* an ordered sound change, and `stemma trace out/number_early.ron w_0002`
+walks the plural of `tira` back through the exact rule that split it.
+
 ### Fork it into a family
 
 One proto-language, three daughters, three different histories:
@@ -258,6 +300,8 @@ Phase 1 capstone. (The exact bytes are pinned as a snapshot at
 | `stemma export-md <file>` | Write the lexicon as a Markdown dictionary |
 | `stemma export-csv <file>` | Write the lexicon as CLDF-shaped CSV |
 | `stemma apply-rules <file>` | Apply an ordered rule set, producing a descendant language |
+| `stemma inflect <file> --paradigm <id>` | Materialise a paradigm's cells into the lexicon — the regular forms (`--out`) |
+| `stemma paradigm <file> --paradigm <id>` | Render a paradigm: regular on a proto, irregular after sound change, with each cell's why |
 | `stemma fork <parent>` | Fork a daughter (`--id`, `--name`, `--rules`, `--years`, `--out`) |
 | `stemma family <files>…` | Assemble a lineage; print the family tree, cognate coverage, and report |
 | `stemma cognates <files>… --meanings <m>…` | Print the comparative table of each meaning's reflexes across the family |

@@ -229,6 +229,38 @@ enum Command {
         meaning: String,
     },
 
+    /// Materialise a paradigm's cells into the lexicon — the regular, pre-sound-
+    /// change forms (M8). The morphology analogue of `new-lexicon`.
+    ///
+    /// Prints the regular paradigm table; with `--out`, writes the language with
+    /// its inflected lexicon (each cell recording its morphemes, `source: derived`)
+    /// so `apply-rules` can then evolve the cells and split a regular suffix into
+    /// conditioned allomorphs. Replaces any existing lexicon (the `new-lexicon`
+    /// rule): appending would duplicate word ids.
+    Inflect {
+        /// Path to a language file (`.ron` or `.json`) carrying a `morphology`.
+        path: PathBuf,
+        /// The paradigm to inflect, by id (`NUMBER`).
+        #[arg(long)]
+        paradigm: String,
+        /// Write the language with its inflected lexicon here; omitted, only print
+        /// the table.
+        #[arg(long)]
+        out: Option<PathBuf>,
+    },
+
+    /// Render a paradigm from the language's inflected cells (M8): regular on a
+    /// proto, **irregular** after `apply-rules`, with each affix's allomorphs and
+    /// the sound change that conditioned each. The morphology analogue of
+    /// `trace-word`; per-cell derivations are one `stemma trace <id>` away.
+    Paradigm {
+        /// Path to a language file whose lexicon holds the inflected cells.
+        path: PathBuf,
+        /// The paradigm to render, by id (`NUMBER`).
+        #[arg(long)]
+        paradigm: String,
+    },
+
     /// Produce the "Growing a Language Family in 90 Seconds" artefact (§21) as one
     /// self-contained Markdown document.
     ///
@@ -298,6 +330,12 @@ fn run() -> Result<ExitCode> {
         Command::Family { files } => family(&files),
         Command::Cognates { files, meanings } => cognates(&files, &meanings),
         Command::TraceWord { path, meaning } => trace_word(&path, &meaning),
+        Command::Inflect {
+            path,
+            paradigm,
+            out,
+        } => inflect(&path, &paradigm, out.as_deref()),
+        Command::Paradigm { path, paradigm } => show_paradigm(&path, &paradigm),
         Command::Demo { out } => demo(out.as_deref()),
     }
 }
@@ -748,6 +786,88 @@ fn trace_word(path: &std::path::Path, meaning: &str) -> Result<ExitCode> {
             .with_context(|| format!("rendering the derivation of `{}`", entry.id))?;
     print!("{rendered}");
 
+    Ok(ExitCode::SUCCESS)
+}
+
+/// Resolves a paradigm by id, failing with a message that lists what *is* there —
+/// the shared lookup for both morphology verbs, so they agree on the error.
+fn resolve_paradigm<'a>(
+    genome: &'a LanguageGenome,
+    paradigm_id: &str,
+) -> Result<&'a stem_lexicon::Paradigm> {
+    genome.morphology.paradigm(paradigm_id).ok_or_else(|| {
+        let available: Vec<&str> = genome
+            .morphology
+            .paradigms
+            .iter()
+            .map(|p| p.id.as_str())
+            .collect();
+        if available.is_empty() {
+            anyhow::anyhow!(
+                "`{}` declares no morphology; nothing to inflect. Add a `morphology` block \
+                     with morphemes and a paradigm.",
+                genome.name
+            )
+        } else {
+            anyhow::anyhow!(
+                "no paradigm `{paradigm_id}` in `{}`; it has: {}",
+                genome.name,
+                available.join(", ")
+            )
+        }
+    })
+}
+
+/// `stemma inflect` — materialise a paradigm's regular cells into the lexicon.
+fn inflect(
+    path: &std::path::Path,
+    paradigm_id: &str,
+    out: Option<&std::path::Path>,
+) -> Result<ExitCode> {
+    let mut genome = load_genome(path)?;
+
+    // Clone the paradigm out before mutating the lexicon (which the render reads).
+    let paradigm = resolve_paradigm(&genome, paradigm_id)?.clone();
+
+    let cells = stem_lexicon::inflect(&paradigm, &genome.morphology.morphemes, &genome.id)
+        .with_context(|| format!("inflecting `{}` in `{}`", paradigm.id, genome.name))?;
+
+    // Replace, never append — the `new-lexicon` rule: appending would collide the
+    // sequential word ids and duplicate cognate sets.
+    if !genome.lexicon.is_empty() {
+        eprintln!(
+            "note: replacing the existing lexicon of {}",
+            genome.lexicon.summary()
+        );
+    }
+    genome.lexicon = stem_lexicon::Lexicon::from_entries(cells);
+
+    // The regular table to stdout (the data); anything explanatory to stderr.
+    print!("{}", stem_genome::render_paradigm(&genome, &paradigm)?);
+
+    if let Some(destination) = out {
+        stem_io::save(destination, &genome)
+            .with_context(|| format!("writing `{}`", destination.display()))?;
+        eprintln!(
+            "inflected {} cells of `{}` -> {}",
+            genome.lexicon.len(),
+            paradigm.id,
+            destination.display()
+        );
+    }
+
+    Ok(ExitCode::SUCCESS)
+}
+
+/// `stemma paradigm` — render a paradigm from the language's inflected cells.
+fn show_paradigm(path: &std::path::Path, paradigm_id: &str) -> Result<ExitCode> {
+    let genome = load_genome(path)?;
+    let paradigm = resolve_paradigm(&genome, paradigm_id)?;
+    print!(
+        "{}",
+        stem_genome::render_paradigm(&genome, paradigm)
+            .with_context(|| format!("rendering paradigm `{}`", paradigm.id))?
+    );
     Ok(ExitCode::SUCCESS)
 }
 

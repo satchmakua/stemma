@@ -222,4 +222,29 @@ impl WordEntry {
     pub fn segments(&self) -> impl Iterator<Item = &stem_core::PhonemeId> {
         self.phonemic_form.segments()
     }
+
+    /// The surface segments of the morpheme occupying the composition span
+    /// `[start, end)` — one morpheme's realised allomorph in this word (M8).
+    ///
+    /// **This is the single place that encodes the invariant `Derivation.input` IS
+    /// the composition form.** When the word has evolved, the span is walked through
+    /// the recorded rules by [`crate::trace::Derivation::surface_of_input_span`];
+    /// when it has not, `phonemic_form` *is* the composition form (no rule has moved
+    /// a segment), so the span is a raw slice of it. Both the allomorph measure
+    /// ([`crate::morphological_irregularity`]) and the paradigm renderer read a
+    /// morpheme's surface through here, so the allomorph counts they report cannot
+    /// diverge — the shared-source discipline `docs/adr/0009` requires of any two
+    /// values that must agree.
+    pub fn morpheme_surface(&self, start: usize, end: usize) -> Vec<stem_core::PhonemeId> {
+        match &self.trace {
+            Some(trace) => trace.surface_of_input_span(start, end),
+            None => self
+                .phonemic_form
+                .segments()
+                .skip(start)
+                .take(end.saturating_sub(start))
+                .cloned()
+                .collect(),
+        }
+    }
 }

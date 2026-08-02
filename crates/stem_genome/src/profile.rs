@@ -19,6 +19,7 @@
 //! §17's composite percentage is deliberately dropped (any number would overclaim
 //! or average over dimensions that do not exist).
 
+use stem_lexicon::{HIGH_ALLOMORPH_COUNT, morphological_irregularity};
 use stem_phonology::{Complexity, Rarity};
 
 use crate::LanguageGenome;
@@ -36,12 +37,36 @@ pub enum HistoricalDepth {
     Deep,
 }
 
+/// How irregular this language's affixal morphology is, measured directly (M8) as
+/// the largest number of distinct surface shapes any one affix takes across the
+/// lexicon — the row §17 called "morphological irregularity", filled by the real
+/// [`morphological_irregularity`] measure rather than deferred.
+///
+/// A band, not a number, like every other profile dimension. `None` is honest for
+/// a language with no affixation — a proto with a monomorphemic lexicon has nothing
+/// to be irregular *about*, which is a fact, not a low score (the `HistoricalDepth`
+/// precedent). The threshold between `Allomorphic` and `HighlyAllomorphic` is the
+/// shared [`HIGH_ALLOMORPH_COUNT`], so this band is `HighlyAllomorphic` exactly when
+/// the `high_morphological_irregularity` validation Note fires (`docs/adr/0009`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MorphologicalIrregularity {
+    /// No affix appears in the lexicon — nothing to measure.
+    None,
+    /// Every affix surfaces one way — a fully regular paradigm.
+    Regular,
+    /// Some affix surfaces in 2..[`HIGH_ALLOMORPH_COUNT`] shapes — an ordinary
+    /// conditioned split (the M8 demo's `-ɡa`/`-ka`).
+    Allomorphic,
+    /// Some affix surfaces in [`HIGH_ALLOMORPH_COUNT`] or more shapes — extreme
+    /// allomorphy, the band the validation Note is paired to.
+    HighlyAllomorphic,
+}
+
 /// A §17 dimension no shipped milestone can measure yet. Carried explicitly so the
 /// profile is transparent about its own coverage rather than silently omitting
 /// four of §17's rows — or, worse, fabricating a number for them.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NotModelled {
-    MorphologicalIrregularity,
     SemanticPlausibility,
     ScriptHistoryCoherence,
     AlienEmbodimentDependence,
@@ -51,7 +76,6 @@ impl NotModelled {
     /// The §17 dimension name.
     pub fn label(self) -> &'static str {
         match self {
-            Self::MorphologicalIrregularity => "Morphological irregularity",
             Self::SemanticPlausibility => "Semantic plausibility",
             Self::ScriptHistoryCoherence => "Script-history coherence",
             Self::AlienEmbodimentDependence => "Alien embodiment dependence",
@@ -61,7 +85,6 @@ impl NotModelled {
     /// The milestone that will make it measurable.
     pub fn milestone(self) -> &'static str {
         match self {
-            Self::MorphologicalIrregularity => "M8",
             Self::SemanticPlausibility => "M9",
             Self::ScriptHistoryCoherence => "M9+",
             Self::AlienEmbodimentDependence => "§18",
@@ -69,12 +92,12 @@ impl NotModelled {
     }
 }
 
-/// The §17 dimensions M7 defers, in §17's listed order — one list the renderer and
-/// future milestones share, so a renumber is a one-line change. Syntax / word
+/// The §17 dimensions still deferred, in §17's listed order — one list the renderer
+/// and future milestones share, so a renumber is a one-line change. Morphological
+/// irregularity **left** this list at M8 (it is now a scored band); syntax / word
 /// order is deliberately absent: §20.1 forbids a syntax engine, and a
 /// "not modelled" line would invite the build.
 pub const NOT_MODELLED: &[NotModelled] = &[
-    NotModelled::MorphologicalIrregularity,
     NotModelled::SemanticPlausibility,
     NotModelled::ScriptHistoryCoherence,
     NotModelled::AlienEmbodimentDependence,
@@ -94,6 +117,13 @@ pub struct PlausibilityProfile {
     pub recorded_changes: usize,
     /// Simulated years since the lineage root.
     pub elapsed_years: i32,
+    /// How irregular the affixal morphology is (M8).
+    pub morphological_irregularity: MorphologicalIrregularity,
+    /// The raw basis for `morphological_irregularity`: each affix's distinct-shape
+    /// count, by gloss, in first-appearance order — shown beside the band for
+    /// honesty, exactly as `recorded_changes` is shown beside `historical_depth`.
+    /// An ordered `Vec`, never a map (§9.4).
+    pub affix_allomorphy: Vec<(String, usize)>,
 }
 
 impl LanguageGenome {
@@ -120,12 +150,35 @@ impl LanguageGenome {
             HistoricalDepth::Shallow
         };
 
+        // M8: the direct allomorph measure, bucketed. `None` when no affix appears
+        // (a monomorphemic proto has nothing to be irregular about — the
+        // `HistoricalDepth::None` precedent); otherwise the worst affix's count
+        // decides the band, against the same shared threshold the validation Note
+        // reads, so band and Note cannot disagree (`docs/adr/0009`).
+        let affix_allomorphy: Vec<(String, usize)> = morphological_irregularity(&self.lexicon)
+            .into_iter()
+            .map(|set| {
+                let count = set.count();
+                (set.gloss, count)
+            })
+            .collect();
+        let morphological_irregularity = match affix_allomorphy.iter().map(|(_, n)| *n).max() {
+            None => MorphologicalIrregularity::None,
+            Some(max) if max >= HIGH_ALLOMORPH_COUNT => {
+                MorphologicalIrregularity::HighlyAllomorphic
+            }
+            Some(max) if max > 1 => MorphologicalIrregularity::Allomorphic,
+            Some(_) => MorphologicalIrregularity::Regular,
+        };
+
         PlausibilityProfile {
             rarity: self.phonemes.rarity(),
             complexity: self.phonotactics.complexity(),
             historical_depth,
             recorded_changes,
             elapsed_years: years,
+            morphological_irregularity,
+            affix_allomorphy,
         }
     }
 }
@@ -157,7 +210,8 @@ pub fn render_profile(profile: &PlausibilityProfile, name: &str) -> String {
     const RARITY: &str = "Typological rarity";
     const COMPLEXITY: &str = "Phonotactic complexity";
     const DEPTH: &str = "Historical depth";
-    let width = [RARITY, COMPLEXITY, DEPTH]
+    const MORPH: &str = "Morphological irregularity";
+    let width = [RARITY, COMPLEXITY, DEPTH, MORPH]
         .iter()
         .map(|l| l.chars().count())
         .max()
@@ -185,6 +239,28 @@ pub fn render_profile(profile: &PlausibilityProfile, name: &str) -> String {
         ),
     };
 
+    // The morphology line: a band plus its raw basis, the `depth_line` shape.
+    // `None` reads honestly as "no affixation" rather than as a zero score.
+    let morph_line = match profile.morphological_irregularity {
+        MorphologicalIrregularity::None => "none  (no affixation)".to_owned(),
+        band => {
+            let label = match band {
+                MorphologicalIrregularity::Regular => "regular",
+                MorphologicalIrregularity::Allomorphic => "allomorphic",
+                MorphologicalIrregularity::HighlyAllomorphic => "highly allomorphic",
+                MorphologicalIrregularity::None => unreachable!(),
+            };
+            // Each affix's distinct-shape count, e.g. `PL: 2` — the basis, by gloss.
+            let detail = profile
+                .affix_allomorphy
+                .iter()
+                .map(|(gloss, n)| format!("{gloss}: {n}"))
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!("{label}  ({detail})")
+        }
+    };
+
     let mut out = String::new();
     out.push_str(&format!("Plausibility profile — {name}\n\n"));
     out.push_str(&format!(
@@ -198,6 +274,7 @@ pub fn render_profile(profile: &PlausibilityProfile, name: &str) -> String {
         complexity_label(profile.complexity)
     ));
     out.push_str(&format!("  {DEPTH}{}  {depth_line}\n", pad(DEPTH)));
+    out.push_str(&format!("  {MORPH}{}  {morph_line}\n", pad(MORPH)));
 
     out.push_str("\n  not yet modelled:\n");
     // The unbuilt §17 dimensions, in NOT_MODELLED order — no fabricated score.
@@ -377,17 +454,134 @@ mod tests {
     }
 
     #[test]
-    fn render_profile_is_deterministic_and_names_the_unmodelled_dimensions() {
+    fn render_profile_is_deterministic_and_names_the_scored_and_deferred_dimensions() {
         let genome = reference_shaped();
         let a = render_profile(&genome.plausibility_profile(), &genome.name);
         let b = render_profile(&genome.plausibility_profile(), &genome.name);
         assert_eq!(a, b, "the renderer is a pure function");
+        // M8 filled the morphological-irregularity row: it is now a SCORED band
+        // (the reference proto has no affixation → "none"), not a deferred line.
+        assert!(
+            a.contains("Morphological irregularity"),
+            "the scored morphology dimension appears: {a}"
+        );
+        assert!(
+            !a.contains("M8"),
+            "morphology left the not-yet-modelled block at M8: {a}"
+        );
         assert!(a.contains("not yet modelled"), "{a}");
-        assert!(a.contains("M8"), "names the milestone: {a}");
+        assert!(a.contains("M9"), "the M9 dimensions remain deferred: {a}");
         assert!(!a.contains('%'), "no fabricated percentage: {a}");
         assert!(
             !a.to_lowercase().contains("word order") && !a.to_lowercase().contains("syntax"),
             "no syntax/word-order row: {a}"
+        );
+    }
+
+    /// A proto with a monomorphemic (or empty) lexicon has no affixation, so the
+    /// band is honestly `None` — a fact, not a zero score.
+    #[test]
+    fn a_language_with_no_affixation_scores_no_morphological_irregularity() {
+        let profile = reference_shaped().plausibility_profile();
+        assert_eq!(
+            profile.morphological_irregularity,
+            MorphologicalIrregularity::None
+        );
+        assert!(profile.affix_allomorphy.is_empty());
+    }
+
+    /// Builds a genome whose lexicon records one affix `m_pl` realised by the given
+    /// distinct surface segment sequences (one word each), so the measure reads
+    /// exactly that many allomorphs. Synthetic by design — it exercises the
+    /// band/Note projection, not a realistic derivation.
+    fn genome_with_affix_allomorphs(surfaces: &[&[&str]]) -> LanguageGenome {
+        use stem_core::{CognateSetId, PhonemeId, WordId};
+        use stem_lexicon::{
+            Lexicon, MorphemeRef, MorphemeRole, PartOfSpeech, WordEntry, WordSource,
+        };
+        use stem_phonology::{Root, Syllable};
+
+        let entries = surfaces.iter().enumerate().map(|(i, segs)| {
+            let ordinal = i + 1;
+            WordEntry {
+                id: WordId::sequential(ordinal),
+                concept: None,
+                phonemic_form: Root {
+                    syllables: vec![Syllable {
+                        pattern: "X".to_owned(),
+                        segments: segs.iter().map(|s| PhonemeId::new(*s)).collect(),
+                        stress: None,
+                    }],
+                },
+                glosses: vec!["thing PL".to_owned()],
+                part_of_speech: PartOfSpeech::Noun,
+                cognate_set: CognateSetId::new(format!("cog_x_{ordinal:04}")),
+                source: WordSource::Derived,
+                trace: None,
+                // The whole form IS the affix, so its span is the whole word — the
+                // measure reads `segs` as this occurrence's surface allomorph.
+                morphemes: vec![MorphemeRef {
+                    morpheme: stem_core::MorphemeId::new("m_pl"),
+                    role: MorphemeRole::Suffix,
+                    gloss: "PL".to_owned(),
+                    start: 0,
+                    end: segs.len() as u32,
+                }],
+            }
+        });
+        reference_shaped().with_lexicon(Lexicon::from_entries(entries))
+    }
+
+    /// The ADR-0009 projection: the `HighlyAllomorphic` band holds **exactly** when
+    /// the `high_morphological_irregularity` validation Note fires — both read the
+    /// one shared `HIGH_ALLOMORPH_COUNT`, so they can never disagree.
+    #[test]
+    fn the_highly_allomorphic_band_and_the_note_are_the_same_threshold() {
+        use stem_core::Validate;
+
+        // In-inventory segments (`reference_shaped` declares ph_c0.. and ph_v0..),
+        // so the only issue in play is the morphology Note we are pinning.
+        // Two allomorphs: Allomorphic band, and the Note must stay silent.
+        let two = genome_with_affix_allomorphs(&[&["ph_c0", "ph_v0"], &["ph_c1", "ph_v0"]]);
+        assert_eq!(
+            two.plausibility_profile().morphological_irregularity,
+            MorphologicalIrregularity::Allomorphic
+        );
+        assert!(
+            !two.validate()
+                .issues
+                .iter()
+                .any(|i| i.code == "high_morphological_irregularity"),
+            "a two-way split is ordinary and must not fire the Note"
+        );
+
+        // Three allomorphs: HighlyAllomorphic band, and the Note must fire.
+        let three = genome_with_affix_allomorphs(&[
+            &["ph_c0", "ph_v0"],
+            &["ph_c1", "ph_v0"],
+            &["ph_c2", "ph_v0"],
+        ]);
+        assert_eq!(
+            three.plausibility_profile().morphological_irregularity,
+            MorphologicalIrregularity::HighlyAllomorphic
+        );
+        let report = three.validate();
+        assert!(
+            report
+                .issues
+                .iter()
+                .any(|i| i.code == "high_morphological_irregularity"),
+            "the band is HighlyAllomorphic, so the paired Note must fire: {report}"
+        );
+        // Report, do not police (§17): the morphology check contributes no Error —
+        // extreme allomorphy is unusual, not broken. (Asserted on this check
+        // specifically, since `reference_shaped`'s toy inventory carries its own
+        // unrelated `duplicate_ipa` Error.)
+        assert!(
+            !report
+                .errors()
+                .any(|i| i.code == "high_morphological_irregularity"),
+            "morphological irregularity must never be an Error: {report}"
         );
     }
 }

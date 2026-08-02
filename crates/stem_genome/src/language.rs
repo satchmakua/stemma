@@ -2,7 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 use stem_core::{LanguageId, Result, Severity, StemmaError, Validate, ValidationReport};
-use stem_lexicon::Lexicon;
+use stem_lexicon::{HIGH_ALLOMORPH_COUNT, Lexicon, Morphology, morphological_irregularity};
 use stem_phonology::{PhonemeInventory, Phonotactics, Prosody};
 use stem_soundchange::{RuleSet, SoundChangeRule};
 
@@ -105,6 +105,19 @@ pub struct LanguageGenome {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub applied_rules: Vec<SoundChangeRule>,
 
+    /// This language's morphology — its morphemes and paradigms (ROADMAP M8,
+    /// `DESIGN.md` §8.1).
+    ///
+    /// `#[serde(default)]` per this type's own contract, and the default is
+    /// **empty** — every pre-M8 file, the reference fixtures included, loads and
+    /// round-trips byte-identically because `skip_serializing_if` keeps an empty
+    /// morphology out of the file. `evolve` and `fork` carry it verbatim, so a
+    /// daughter knows its own paradigms and can re-inflect them; the sound changes
+    /// that made a suffix irregular already live in each cell's `trace`, so nothing
+    /// here needs to record them a second time.
+    #[serde(default, skip_serializing_if = "Morphology::is_empty")]
+    pub morphology: Morphology,
+
     /// Free-form authorial notes. Not interpreted by the engine.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub notes: Vec<String>,
@@ -124,6 +137,7 @@ impl LanguageGenome {
             lexicon: Lexicon::new(),
             prosody: Prosody::new(),
             applied_rules: Vec::new(),
+            morphology: Morphology::default(),
             notes: Vec::new(),
         }
     }
@@ -160,6 +174,13 @@ impl LanguageGenome {
     #[must_use]
     pub fn with_lexicon(mut self, lexicon: Lexicon) -> Self {
         self.lexicon = lexicon;
+        self
+    }
+
+    /// Sets the morphology (M8), replacing any existing one.
+    #[must_use]
+    pub fn with_morphology(mut self, morphology: Morphology) -> Self {
+        self.morphology = morphology;
         self
     }
 
@@ -223,8 +244,10 @@ impl Validate for LanguageGenome {
         }
 
         // §17's "extreme irregularity after only 100 years" names MORPHOLOGICAL
-        // irregularity, which is M8 and does not exist. What M7 can honestly read
-        // is the sound-change LOG — rules per century. A Note, not a Warning: it
+        // irregularity, now measured directly by `high_morphological_irregularity`
+        // below (M8). This distinct, coarser signal reads the sound-change LOG —
+        // rules per century — and is kept because it says something the allomorph
+        // count does not: how fast the *history* moved. A Note, not a Warning: it
         // is a coarse proxy over an authoring artifact (`applied_rules.len()`
         // counts *authored* rules — one author's "voicing" is another's three), so
         // the register is "consider", and the threshold is a deliberately loose
@@ -245,7 +268,34 @@ impl Validate for LanguageGenome {
                          creolization); if that is not the intent, consider more time depth \
                          or fewer strata. (This counts authored rules, an editorial \
                          granularity, and reads only the sound-change log — morphological \
-                         irregularity itself is not modelled until M8.)"
+                         irregularity is measured separately, below.)"
+                    ),
+                );
+            }
+        }
+
+        // M8's direct measure of §17's "extreme irregularity": an affix that
+        // surfaces in `HIGH_ALLOMORPH_COUNT` or more distinct shapes. A Note, never
+        // an Error — a wildly irregular paradigm is unusual, not broken, and the
+        // tool reports rather than polices (§17). The FIRING is single-sourced on
+        // the allomorph count via the shared `HIGH_ALLOMORPH_COUNT` constant, so it
+        // holds exactly when the profile's band is `HighlyAllomorphic` — a
+        // projection test pins the agreement (`docs/adr/0009`). The M8 demo's
+        // two-way `-ɡa`/`-ka` alternation is `Allomorphic`, below this bar, and
+        // correctly does not trip it: a single conditioned split is ordinary.
+        for allomorphs in morphological_irregularity(&self.lexicon) {
+            if allomorphs.count() >= HIGH_ALLOMORPH_COUNT {
+                report.note(
+                    "high_morphological_irregularity",
+                    format!(
+                        "the affix `{}` (\"{}\") surfaces in {} distinct shapes across this \
+                         lexicon — extreme allomorphy by this tool's counting. Deep, ordered \
+                         sound change genuinely produces this (think strong verbs); if it was \
+                         not intended, a conditioning rule may be firing more broadly than \
+                         meant.",
+                        allomorphs.morpheme,
+                        allomorphs.gloss,
+                        allomorphs.count()
                     ),
                 );
             }
@@ -354,6 +404,9 @@ impl LanguageGenome {
             lexicon: self.lexicon.clone(),
             prosody: self.prosody,
             applied_rules: self.applied_rules.clone(),
+            // Carried verbatim: a fork is a statement about lineage, and the
+            // daughter keeps the same morphemes and paradigms it inherited.
+            morphology: self.morphology.clone(),
             notes: self.notes.clone(),
         }
     }
@@ -421,6 +474,10 @@ impl LanguageGenome {
             lexicon: evolution.lexicon,
             prosody: self.prosody,
             applied_rules,
+            // Carried verbatim: the sound changes that made a paradigm irregular
+            // are recorded in each evolved cell's `trace`, not here — the morphemes
+            // and paradigms themselves are unchanged by a rule run.
+            morphology: self.morphology.clone(),
             notes: self.notes.clone(),
         };
 

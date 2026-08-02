@@ -1,0 +1,131 @@
+// Asterian morphology v0 — the M8 acceptance fixture.
+//
+// A proto-language carrying the REFERENCE ASTERIAN INVENTORY VERBATIM (the same
+// 15 phonemes and initial-stress prosody as asterian_attested.ron / proto_asterian.ron,
+// so the sound-change engine behaves identically) plus a small `morphology`: four
+// noun stems and one plural suffix, over a NUMBER paradigm (SG, PL).
+//
+// THE POINT (ROADMAP M8): a regular paradigm becomes irregular purely as a
+// consequence of an ordered sound change. The four stems are chosen so the plural
+// suffix /-ka/ is the ONLY intervocalic voiceless stop in play — none has an
+// internal `…V k V…`:
+//   vowel-final:      tira /tira/, mena /mena/   → …a-ka…  → the /k/ IS intervocalic
+//   consonant-final:  tan  /tan/,  sul  /sul/    → …n-ka, …l-ka → the /k/ is NOT
+// Inflect this file (`stemma inflect … --paradigm NUMBER`) and every plural is a
+// regular `-ka`. Then apply fixtures/rules_intervocalic_voicing.ron: the suffix
+// voices to `-ɡa` after the vowel-final stems and stays `-ka` after the
+// consonant-final ones — one suffix, two surface allomorphs, and each cell's trace
+// says which rule fired where. Nothing else can be blamed: the rule set is one rule.
+//
+// The base lexicon is empty; `inflect` fills it (replace, never append), so the
+// sequential cell ids never collide.
+(
+    id: "asterian_morph",
+    name: "Asterian (morphology v0)",
+    lineage_depth_years: 0,
+    seed: 42,
+
+    phonemes: [
+        // --- Stops ---
+        (id: "ph_p", ipa: "p", kind: consonant, frequency_weight: 30,
+         features: ["-syllabic", "+consonantal", "-sonorant", "-approximant", "-continuant", "-nasal", "-lateral", "-trill", "-voice", "+labial", "-coronal", "-dorsal", "-round"]),
+        (id: "ph_t", ipa: "t", kind: consonant, frequency_weight: 50,
+         features: ["-syllabic", "+consonantal", "-sonorant", "-approximant", "-continuant", "-nasal", "-lateral", "-trill", "-voice", "-labial", "+coronal", "-dorsal"]),
+        (id: "ph_k", ipa: "k", kind: consonant, frequency_weight: 45,
+         features: ["-syllabic", "+consonantal", "-sonorant", "-approximant", "-continuant", "-nasal", "-lateral", "-trill", "-voice", "-labial", "-coronal", "+dorsal", "+high", "-low", "+back", "-round"]),
+
+        // --- Nasals ---
+        (id: "ph_m", ipa: "m", kind: consonant, frequency_weight: 35,
+         features: ["-syllabic", "+consonantal", "+sonorant", "-approximant", "-continuant", "+nasal", "-lateral", "-trill", "+voice", "+labial", "-coronal", "-dorsal", "-round"]),
+        (id: "ph_n", ipa: "n", kind: consonant, frequency_weight: 40,
+         features: ["-syllabic", "+consonantal", "+sonorant", "-approximant", "-continuant", "+nasal", "-lateral", "-trill", "+voice", "-labial", "+coronal", "-dorsal"]),
+
+        // --- Fricative ---
+        (id: "ph_s", ipa: "s", kind: consonant, frequency_weight: 35,
+         features: ["-syllabic", "+consonantal", "-sonorant", "-approximant", "+continuant", "-nasal", "-lateral", "-trill", "-voice", "-labial", "+coronal", "-dorsal"]),
+
+        // --- Liquids ---
+        (id: "ph_l", ipa: "l", kind: consonant, frequency_weight: 30,
+         features: ["-syllabic", "+consonantal", "+sonorant", "+approximant", "+continuant", "-nasal", "+lateral", "-trill", "+voice", "-labial", "+coronal", "-dorsal"]),
+        (id: "ph_r", ipa: "r", kind: consonant, frequency_weight: 25,
+         features: ["-syllabic", "+consonantal", "+sonorant", "-approximant", "+continuant", "-nasal", "-lateral", "+trill", "+voice", "-labial", "+coronal", "-dorsal"]),
+
+        // --- Glides ---
+        (id: "ph_w", ipa: "w", kind: consonant, frequency_weight: 20,
+         features: ["-syllabic", "-consonantal", "+sonorant", "+approximant", "+continuant", "-nasal", "-lateral", "-trill", "+voice", "+labial", "-coronal", "+dorsal", "+high", "-low", "+back", "+round"]),
+        (id: "ph_j", ipa: "j", romanization: "y", kind: consonant, frequency_weight: 10,
+         features: ["-syllabic", "-consonantal", "+sonorant", "+approximant", "+continuant", "-nasal", "-lateral", "-trill", "+voice", "-labial", "-coronal", "+dorsal", "+high", "-low", "-back", "-round"]),
+
+        // --- Vowels ---
+        (id: "ph_a", ipa: "a", kind: vowel, frequency_weight: 60,
+         features: ["+syllabic", "-consonantal", "+sonorant", "+approximant", "+continuant", "-nasal", "-lateral", "-trill", "+voice", "-labial", "-coronal", "+dorsal", "-high", "+low", "+back", "-round"]),
+        (id: "ph_e", ipa: "e", kind: vowel, frequency_weight: 35,
+         features: ["+syllabic", "-consonantal", "+sonorant", "+approximant", "+continuant", "-nasal", "-lateral", "-trill", "+voice", "-labial", "-coronal", "+dorsal", "-high", "-low", "-back", "-round"]),
+        (id: "ph_i", ipa: "i", kind: vowel, frequency_weight: 40,
+         features: ["+syllabic", "-consonantal", "+sonorant", "+approximant", "+continuant", "-nasal", "-lateral", "-trill", "+voice", "-labial", "-coronal", "+dorsal", "+high", "-low", "-back", "-round"]),
+        (id: "ph_o", ipa: "o", kind: vowel, frequency_weight: 30,
+         features: ["+syllabic", "-consonantal", "+sonorant", "+approximant", "+continuant", "-nasal", "-lateral", "-trill", "+voice", "+labial", "-coronal", "+dorsal", "-high", "-low", "+back", "+round"]),
+        (id: "ph_u", ipa: "u", kind: vowel, frequency_weight: 35,
+         features: ["+syllabic", "-consonantal", "+sonorant", "+approximant", "+continuant", "-nasal", "-lateral", "-trill", "+voice", "+labial", "-coronal", "+dorsal", "+high", "-low", "+back", "+round"]),
+    ],
+
+    phonotactics: (
+        templates: [
+            (pattern: "CV",  weight: 45),
+            (pattern: "CVC", weight: 35),
+            (pattern: "V",   weight: 12),
+            (pattern: "VC",  weight: 8),
+        ],
+        syllables_per_root: [
+            (count: 1, weight: 25),
+            (count: 2, weight: 55),
+            (count: 3, weight: 20),
+        ],
+    ),
+
+    prosody: (stress: fixed(from: left, offset: 0)),
+
+    morphology: (
+        morphemes: [
+            // --- Stems: two vowel-final, two consonant-final, none with an
+            //     internal intervocalic voiceless stop. ---
+            (id: "m_tira", role: stem, gloss: "star", form: (syllables: [
+                (pattern: "CV", segments: ["ph_t", "ph_i"]),
+                (pattern: "CV", segments: ["ph_r", "ph_a"]),
+            ])),
+            (id: "m_mena", role: stem, gloss: "moon", form: (syllables: [
+                (pattern: "CV", segments: ["ph_m", "ph_e"]),
+                (pattern: "CV", segments: ["ph_n", "ph_a"]),
+            ])),
+            (id: "m_tan", role: stem, gloss: "man", form: (syllables: [
+                (pattern: "CVC", segments: ["ph_t", "ph_a", "ph_n"]),
+            ])),
+            (id: "m_sul", role: stem, gloss: "salt", form: (syllables: [
+                (pattern: "CVC", segments: ["ph_s", "ph_u", "ph_l"]),
+            ])),
+
+            // --- The plural suffix /-ka/. One morpheme; the sound change is what
+            //     will split it into /-ɡa/ ~ /-ka/. ---
+            (id: "m_plural", role: suffix, gloss: "PL", form: (syllables: [
+                (pattern: "CV", segments: ["ph_k", "ph_a"]),
+            ])),
+        ],
+        paradigms: [
+            (
+                id: "NUMBER",
+                name: "Number",
+                stems: ["m_tira", "m_mena", "m_tan", "m_sul"],
+                cells: [
+                    // The singular is the bare stem — a zero-exponent cell.
+                    (label: "SG"),
+                    // The plural adds the suffix.
+                    (label: "PL", affixes: ["m_plural"]),
+                ],
+            ),
+        ],
+    ),
+
+    notes: [
+        "The M8 acceptance fixture: inflect the NUMBER paradigm, then apply fixtures/rules_intervocalic_voicing.ron to turn a regular -ka plural into the irregular -ɡa/-ka allomorphy.",
+    ],
+)

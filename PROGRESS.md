@@ -5,21 +5,84 @@ A build log of what shipped and the notable decisions behind it. **Keep it hones
 acceptance tests live in [ROADMAP.md](ROADMAP.md); this is the backward-looking
 "what got done and why" companion.
 
-**Current phase:** Phase 2 — depth. M7 shipped; next milestone: **M8 —
-morphology v0**.
+**Current phase:** Phase 2 — depth. M7 and M8 shipped; next milestone: **M9 —
+semantics v0**.
 
 ## State of the tree
 
 | Crate | Holds | Status |
 |---|---|---|
-| `stem_core` | typed IDs, `StemmaError`, `Validate` / `ValidationReport`, `rng`, `suggest` | working |
+| `stem_core` | typed IDs (`MorphemeId` since M8), `StemmaError`, `Validate` / `ValidationReport`, `rng`, `suggest` | working |
 | `stem_phonology` | features, `Phoneme`, inventory, phonotactics, root generation | working |
-| `stem_lexicon` | `WordEntry`, `Lexicon`, the 103-concept list, cognate-set minting | working |
-| `stem_soundchange` | rules, matching, ordered application, resolution, traces | working |
-| `stem_genome` | `LanguageGenome`, `fork`, `LineageGraph`, family validation, `render_family` | working |
+| `stem_lexicon` | `WordEntry`, `Lexicon`, the 103-concept list, cognate-set minting, **morphemes / `compose` / `inflect` / allomorph measure** | working |
+| `stem_soundchange` | rules, matching, ordered application, resolution, traces | working — **untouched by M8** |
+| `stem_genome` | `LanguageGenome`, `fork`, `LineageGraph`, family validation, `render_family`, **`render_paradigm`**, plausibility profile | working |
 | `stem_io` | RON/JSON load & save | working — **untouched since M0** |
-| `stem_export` | Markdown dictionaries, CLDF CSV, cognate table, family demo | working |
-| `stem_cli` | the `stemma` binary | …M6's commands, plus `profile` |
+| `stem_export` | Markdown dictionaries, CLDF CSV, cognate table, family demo | working — **untouched by M8** |
+| `stem_cli` | the `stemma` binary | …plus `profile`, `inflect`, `paradigm` |
+
+---
+
+## M8 — Morphology v0 · built 2026-08-01 · ✓ verified
+
+Stemma grows morphemes. A `morphology` block (stems, affixes, paradigms) attaches to
+a genome; `stemma inflect --paradigm NUMBER` materialises the paradigm's cells as
+ordinary `WordEntry`s (the regular, pre-sound-change forms); `apply-rules` evolves
+them; `stemma paradigm` renders the result. **457 tests pass**; clippy clean under
+`-D warnings`; fmt applied.
+
+**The acceptance, run end-to-end:** `inflect fixtures/morphology_asterian.ron
+--paradigm NUMBER` gives a regular `-ka` plural (`tiraka, menaka, tanka, sulka`).
+After `apply-rules … rules_intervocalic_voicing.ron`, `stemma paradigm` shows the
+suffix split into **two allomorphs** — `-ɡa` after the vowel-final stems (`tiraɡa`,
+`menaɡa`), `-ka` after the consonant-final ones (`tanka`, `sulka`) — with each cell
+naming the rule that fired or "did not apply". `stemma trace w_0002` shows the
+`r_ivv` step voicing `k > ɡ` at `[4,5)` in `a _ a`; `stemma trace w_0006` shows
+`r_ivv … — did not apply`. `stemma profile` scores `Morphological irregularity
+allomorphic (PL: 2)`. That is a regular paradigm made irregular *purely* by an
+ordered sound change, with the trace explaining why.
+
+### Decisions worth knowing
+
+**No new crate; the engine does not change (`docs/adr/0010`).** A morpheme's `form`
+is a `Root`; `compose` concatenates syllable lists, so a morpheme boundary is a
+segment adjacency and the engine's cross-boundary environment scan gives conditioned
+allomorphy for free. An inflected cell is an ordinary `WordEntry`, so `apply-rules`,
+`fork`, `trace`, `cognates`, and export all work on it unchanged — `apply.rs` stays
+pure and RNG-free. A source-scan guard test (`the_engine_never_references_morphology`)
+catches any morphology type or operation creeping into `stem_soundchange`.
+
+**The composition record is spans, not surface segments.** `WordEntry.morphemes`
+stores a `MorphemeRef { morpheme, role, gloss, start, end }` per morpheme — the flat
+span in the composition form (= `Derivation.input`, which never changes). The surface
+allomorph is recovered by `Derivation::surface_of_input_span`, which replays the
+trace carrying each segment's origin index. Storing surface segments would be the
+`docs/adr/0007` desync. This discharges §3.3 for composed forms: a composed form with
+empty `morphemes` is a form with no recorded composition.
+
+**Each (stem, cell) mints its own cognate set.** `inflect` calls `scoped_cognate_set`
+(the sole mint site; `morpheme.rs` joined the source-scan). `tira-SG` and `tira-PL`
+are different entries, so different sets — and `fork` copies each verbatim, so two
+daughters' `tira-PL` stay cognate while SG ≠ PL (`docs/adr/0007`).
+
+**Irregularity is measured and joins the profile the M7 way (`docs/adr/0009`).**
+`morphological_irregularity` counts each affix's distinct surface allomorphs; it
+fills M7's `NotModelled::MorphologicalIrregularity`, which leaves the deferred list
+and becomes a scored `MorphologicalIrregularity` band. The `HighlyAllomorphic` band
+and the `high_morphological_irregularity` validation **Note** read one shared
+`HIGH_ALLOMORPH_COUNT` (= 3), so they agree by construction — a projection test pins
+it. The demo's two-way split is `Allomorphic`, below the Note. Never an Error (§17).
+`high_change_density` stays as a distinct coarse signal; only its *claim* to stand in
+for morphological irregularity is retired.
+
+**One deviation from `M8-SPEC` §3:** `compose` takes `&[&Morpheme]` and reads each
+affix's own `role`, not the spec's redundant `&[(&Morpheme, MorphemeRole)]` tuple —
+the stored role is authoritative and the tuple could contradict it.
+
+**Scope fenced hard (§20.1).** v0 is concatenative (prefix\* · stem · suffix\*) and
+nothing else: no non-concatenative or fusional exponence, no grammaticalization, no
+typed feature system, no typological profile, no syntax, no resyllabifier, no
+semantics, no paradigm export/UI, no append-inflection. All named in `docs/adr/0010`.
 
 ---
 

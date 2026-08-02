@@ -41,3 +41,57 @@ pub use apply::{Evolution, apply_rules};
 pub use check::{check_against_language, check_applied_log};
 pub use rule::{Change, EnvItem, Environment, Position, RuleSet, SegmentPattern, SoundChangeRule};
 pub use view::{MatchView, TraceView, render_derivation, view};
+
+#[cfg(test)]
+mod guard {
+    /// **The engine is the source of truth, and morphology must not leak into it**
+    /// (`CLAUDE.md`; `docs/adr/0010`). M8 keeps `apply_rules` a pure phonological
+    /// function by making an inflected cell an *ordinary* `WordEntry`: the engine
+    /// gains conditioned allomorphy for free precisely because it never learns what
+    /// a morpheme is. This scan enforces that by reading the sources — crude, and
+    /// honest about being so, the same shape as `stem_export`'s clock/map/float
+    /// scan and the cognate-mint scan.
+    ///
+    /// The banned tokens are the morphology *types and operations* in
+    /// `stem_lexicon::morpheme`. The `WordEntry.morphemes` field (lowercase) is
+    /// **allowed** — the engine clones it verbatim, which is how a cell's
+    /// composition survives evolution — so the capitalised type names and the
+    /// lowercase verb names are matched, never the field.
+    #[test]
+    fn the_engine_never_references_morphology() {
+        for (name, src) in [
+            ("apply.rs", include_str!("apply.rs")),
+            ("check.rs", include_str!("check.rs")),
+            ("resolve.rs", include_str!("resolve.rs")),
+            ("rule.rs", include_str!("rule.rs")),
+            ("view.rs", include_str!("view.rs")),
+            ("lib.rs", include_str!("lib.rs")),
+        ] {
+            for (n, line) in src.lines().enumerate() {
+                // This module names the banned tokens itself (as string literals and
+                // prose); stop scanning `lib.rs` at the guard so it cannot flag its
+                // own source.
+                if line.contains("mod guard") {
+                    break;
+                }
+                let code = line.split("//").next().unwrap_or("");
+                for banned in [
+                    "compose",
+                    "inflect",
+                    "Morpheme", // catches Morpheme, MorphemeId, MorphemeRef, MorphemeRole
+                    "Morphology",
+                    "Paradigm",
+                    "morphological",
+                ] {
+                    assert!(
+                        !code.contains(banned),
+                        "{name}:{} references morphology (`{banned}`); the engine must stay \
+                         phonology-only so `apply_rules` keeps giving cross-boundary sound \
+                         change for free (`docs/adr/0010`)",
+                        n + 1
+                    );
+                }
+            }
+        }
+    }
+}
