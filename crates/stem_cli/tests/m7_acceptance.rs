@@ -79,18 +79,21 @@ fn the_asterian_daughters_stay_quiet_on_every_new_plausibility_check() {
             name: "Coastal",
             rules: &coastal,
             years: 470,
+            drift: None,
         },
         BranchSpec {
             id: "highland",
             name: "Highland",
             rules: &highland,
             years: 460,
+            drift: None,
         },
         BranchSpec {
             id: "riverine",
             name: "Riverine",
             rules: &riverine,
             years: 420,
+            drift: None,
         },
     ];
     let (graph, _) = grow_family(&proto, &branches).expect("the family grows");
@@ -147,7 +150,17 @@ fn stemma_profile_prints_the_scored_block_and_stays_quiet_for_the_proto() {
         text.contains("Morphological irregularity"),
         "morphology is a scored dimension now: {text}"
     );
-    assert!(text.contains("M9"), "names a deferred milestone: {text}");
+    // M9 did the same for the semantic row. The deferred block now names design
+    // sections (§7.6 script history, §18 alien modality) rather than milestone
+    // numbers, because neither sits at a numbered milestone.
+    assert!(
+        text.contains("Semantic drift"),
+        "semantics is a scored dimension now: {text}"
+    );
+    assert!(
+        text.contains("§7.6") || text.contains("§18"),
+        "names a deferred dimension: {text}"
+    );
     // Honest: no fabricated percentage, no syntax dimension, no new warning.
     assert!(!text.contains('%'), "no fabricated percentage: {text}");
     for code in NEW_M7_CODES {

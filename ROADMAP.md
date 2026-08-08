@@ -137,10 +137,16 @@ explosion is the top risk to this project._
   split into `-ɡa` (after `tira`, `mena`) / `-ka` (after `tan`, `sul`), each cell's
   trace naming the rule that fired or "did not apply". 457 tests green.
 
-- [ ] **M9 — Semantics v0.** Semantic nodes instead of English gloss strings, plus
+- [x] **M9 — Semantics v0.** Semantic nodes instead of English gloss strings, plus
   drift events (§7.5).
   **Test:** reproduce the design's worked example — `*takala` "star" becomes
-  "omen" in Coastal while staying "star" in Highland.
+  "omen" in Coastal while staying "star" in Highland. ✅ `stemma drift out/coastal.ron
+  --drift fixtures/drift_coastal.ron …` turns Coastal's reflex into "omen" through
+  two recorded shifts (metaphor, then metonymy, both priestly register) while
+  Highland's still means "star" — and `stemma cognates` shows all three on **one
+  row**, because the join is ancestry: `star | *takala | taal "omen" | tagal`.
+  `stemma trace-word … omen` prints §10.2's worked trace in full, both halves.
+  504 tests green.
 
 - [ ] **M10 — Sound-change DSL.** Only now, with the semantics settled, add the
   readable rule syntax of §11.1 as a parser over the M3 structs — plus "why did

@@ -167,6 +167,33 @@ pub struct WordEntry {
     /// desync `docs/adr/0007` forbids.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub morphemes: Vec<crate::morpheme::MorphemeRef>,
+
+    /// The senses this word currently holds, **most salient first** (M9).
+    ///
+    /// The meaning twin of [`Self::phonemic_form`]: the current state, stored, with
+    /// the record that produced it in [`Self::sense_history`]. That the two are
+    /// redundant is deliberate, and it is the same redundancy `phonemic_form` and
+    /// `trace` already carry — pinned by the §16.3 property that
+    /// `sense_history.final_senses()` equals these ids as a set.
+    ///
+    /// Empty for every pre-M9 word — both reference fixtures included — so
+    /// `skip_serializing_if` keeps their bytes identical. §8.3 sketches a bare
+    /// `semantic_nodes: Vec<SemanticNodeId>`; this ships the id *with its gloss*
+    /// echoed, so [`Self::display_gloss`] stays context-free and the sound-change
+    /// engine never has to name a semantic type (`docs/adr/0011`).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub senses: Vec<crate::semantics::SenseRef>,
+
+    /// This word's recorded semantic history (§3.3, for meaning — M9).
+    ///
+    /// `None` means no drift event has ever named this word. Unlike [`Self::trace`]
+    /// there is **no empty-steps third state**: a sound-change rule is word-general,
+    /// so every word in the lexicon was *exposed* to it and an empty derivation says
+    /// something true ("exposed, unchanged"). A drift event names **one word**, so a
+    /// word no event named was never exposed, and an empty history on it would be a
+    /// claim that never happened.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sense_history: Option<crate::semantics::SenseHistory>,
 }
 
 impl WordEntry {
@@ -177,18 +204,45 @@ impl WordEntry {
         self.concept.as_ref().and_then(concept)
     }
 
-    /// The gloss to display: this entry's first non-blank override, else the
-    /// concept's own.
+    /// The gloss to display: this entry's first non-blank **sense** (M9), else its
+    /// first non-blank override, else the concept's own.
     ///
-    /// `Option`, not a `""` fallback. An entry with neither is the one genuinely
-    /// broken state here — a dictionary headword with no meaning — and it is an
-    /// Error (`lexicon.no_gloss`), so a caller that must render is entitled to fail
-    /// loudly rather than print a blank. No `unwrap_or_default`.
+    /// `Option`, not a `""` fallback. An entry with none of the three is the one
+    /// genuinely broken state here — a dictionary headword with no meaning — and it
+    /// is an Error (`lexicon.no_gloss`), so a caller that must render is entitled to
+    /// fail loudly rather than print a blank. No `unwrap_or_default`.
+    ///
+    /// # Why the sense outranks the override (M9)
+    ///
+    /// A daughter inherits `glosses` **verbatim** through `fork`, so if the authored
+    /// override won, a drifted meaning would be invisible in every view that reads
+    /// this — the cognate table, `by_meaning`, the dictionary. Drift must be able to
+    /// shadow an inherited label, and shadowing is already this method's pinned
+    /// behaviour (an override shadows the concept's gloss, which is how `*rekan`
+    /// displays "king" over concept MAN).
+    ///
+    /// It **shadows, never overwrites**: `apply_drift` does not touch `glosses`, so
+    /// the authored label is still on disk and still wins the moment the sense is
+    /// removed. An engine that clobbered an authored field would be indistinguishable
+    /// afterwards from the author.
+    ///
+    /// # Why it takes no context
+    ///
+    /// `stem_soundchange::render_derivation` calls this. A signature taking a
+    /// `&SemanticSpace` would make the sound-change engine name a semantic type,
+    /// spending exactly the separation `docs/adr/0010` bought — which is why a
+    /// [`crate::semantics::SenseRef`] echoes its gloss.
     pub fn display_gloss(&self) -> Option<&str> {
-        self.glosses
+        self.senses
             .iter()
-            .map(String::as_str)
+            .map(|s| s.gloss.as_str())
             .find(|g| !g.trim().is_empty())
+            .or_else(|| {
+                self.glosses
+                    .iter()
+                    .map(String::as_str)
+                    .find(|g| !g.trim().is_empty())
+            })
             .or_else(|| self.concept().map(|c| c.gloss))
     }
 

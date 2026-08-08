@@ -20,17 +20,19 @@ pub mod language;
 pub mod lineage;
 pub mod paradigm;
 pub mod profile;
+pub mod semantics_view;
 
 pub use language::LanguageGenome;
 pub use lineage::{
-    BranchSpec, CognateColumn, CognateCoverage, CognateRow, CognateTable, LineageEdge,
+    BranchSpec, CognateCell, CognateColumn, CognateCoverage, CognateRow, CognateTable, LineageEdge,
     LineageGraph, grow_family, render_cognate_table, render_family,
 };
 pub use paradigm::render_paradigm;
 pub use profile::{
     HistoricalDepth, MorphologicalIrregularity, NOT_MODELLED, NotModelled, PlausibilityProfile,
-    render_profile,
+    SemanticDrift, render_profile,
 };
+pub use semantics_view::{render_sense_history, render_word_history};
 // The phonology bands the profile is built from, re-exported so a consumer needs
 // one crate (the `render_family`/`CognateTable` convenience).
 pub use stem_phonology::{Complexity, Rarity};

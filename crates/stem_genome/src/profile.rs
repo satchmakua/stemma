@@ -19,7 +19,9 @@
 //! §17's composite percentage is deliberately dropped (any number would overclaim
 //! or average over dimensions that do not exist).
 
-use stem_lexicon::{HIGH_ALLOMORPH_COUNT, morphological_irregularity};
+use stem_lexicon::{
+    HIGH_ALLOMORPH_COUNT, LONG_SENSE_CHAIN, morphological_irregularity, sense_chains,
+};
 use stem_phonology::{Complexity, Rarity};
 
 use crate::LanguageGenome;
@@ -62,12 +64,41 @@ pub enum MorphologicalIrregularity {
     HighlyAllomorphic,
 }
 
+/// How far this language's meanings have travelled (M9), measured as the longest
+/// **recorded** sense chain any one word has undergone.
+///
+/// # Deliberately not called "semantic plausibility"
+///
+/// It fills §17's semantic row, but judging whether `star → omen` is a *plausible
+/// pathway* needs a typology of attested shifts this project does not have and
+/// §20.1 fences out. Emitting a number for that would be exactly the fabrication
+/// `docs/adr/0009` forbids. This measures what the engine can actually see —
+/// distance travelled — and the renderer says so. The count is of **authored drift
+/// events**, an editorial granularity: one author's single metaphor is another's
+/// two steps.
+///
+/// The threshold between [`Self::Drifted`] and [`Self::HighlyDrifted`] is the shared
+/// [`LONG_SENSE_CHAIN`], so this band reads `HighlyDrifted` exactly when the
+/// `long_semantic_drift_chain` validation Note fires.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SemanticDrift {
+    /// No sense declared and no history recorded — nothing to measure. A fact, not
+    /// a low score (the [`HistoricalDepth::None`] precedent).
+    None,
+    /// Senses are modelled and no shift is recorded.
+    Stable,
+    /// Some word records 1..[`LONG_SENSE_CHAIN`] shifts — an ordinary chain.
+    Drifted,
+    /// Some word records [`LONG_SENSE_CHAIN`] or more — the band the Note is paired
+    /// to.
+    HighlyDrifted,
+}
+
 /// A §17 dimension no shipped milestone can measure yet. Carried explicitly so the
 /// profile is transparent about its own coverage rather than silently omitting
 /// four of §17's rows — or, worse, fabricating a number for them.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NotModelled {
-    SemanticPlausibility,
     ScriptHistoryCoherence,
     AlienEmbodimentDependence,
 }
@@ -76,29 +107,33 @@ impl NotModelled {
     /// The §17 dimension name.
     pub fn label(self) -> &'static str {
         match self {
-            Self::SemanticPlausibility => "Semantic plausibility",
             Self::ScriptHistoryCoherence => "Script-history coherence",
             Self::AlienEmbodimentDependence => "Alien embodiment dependence",
         }
     }
 
-    /// The milestone that will make it measurable.
+    /// The design section that would make it measurable.
+    ///
+    /// A **section** reference, not a milestone number: both remaining dimensions
+    /// sit in ROADMAP's "Beyond" list rather than at a numbered milestone, and
+    /// naming a milestone that does not exist would be a schedule claim the project
+    /// has not made.
     pub fn milestone(self) -> &'static str {
         match self {
-            Self::SemanticPlausibility => "M9",
-            Self::ScriptHistoryCoherence => "M9+",
+            Self::ScriptHistoryCoherence => "§7.6",
             Self::AlienEmbodimentDependence => "§18",
         }
     }
 }
 
 /// The §17 dimensions still deferred, in §17's listed order — one list the renderer
-/// and future milestones share, so a renumber is a one-line change. Morphological
-/// irregularity **left** this list at M8 (it is now a scored band); syntax / word
-/// order is deliberately absent: §20.1 forbids a syntax engine, and a
-/// "not modelled" line would invite the build.
+/// and future milestones share, so a renumber is a one-line change.
+///
+/// Morphological irregularity left this list at M8 and **semantic plausibility left
+/// it at M9**; both are scored bands now. Syntax / word order is deliberately
+/// absent: §20.1 forbids a syntax engine, and a "not modelled" line would invite the
+/// build.
 pub const NOT_MODELLED: &[NotModelled] = &[
-    NotModelled::SemanticPlausibility,
     NotModelled::ScriptHistoryCoherence,
     NotModelled::AlienEmbodimentDependence,
 ];
@@ -124,6 +159,12 @@ pub struct PlausibilityProfile {
     /// honesty, exactly as `recorded_changes` is shown beside `historical_depth`.
     /// An ordered `Vec`, never a map (§9.4).
     pub affix_allomorphy: Vec<(String, usize)>,
+    /// How far the meanings have travelled (M9).
+    pub semantic_drift: SemanticDrift,
+    /// The raw basis for `semantic_drift`: each drifted word's (displayed gloss,
+    /// recorded shift count), in lexicon order — the `affix_allomorphy` shape, and
+    /// shown beside the band for the same honesty reason.
+    pub sense_chains: Vec<(String, usize)>,
 }
 
 impl LanguageGenome {
@@ -171,6 +212,22 @@ impl LanguageGenome {
             Some(_) => MorphologicalIrregularity::Regular,
         };
 
+        // M9: the longest RECORDED chain, bucketed. `None` when nothing semantic
+        // is modelled at all (a fact, not a zero); otherwise the worst chain picks
+        // the band, against the same shared threshold the validation Note reads, so
+        // band and Note cannot disagree (`docs/adr/0009`).
+        let chains: Vec<(String, usize)> = sense_chains(&self.lexicon)
+            .into_iter()
+            .map(|c| (c.gloss, c.shifts))
+            .collect();
+        let semantic_drift = match chains.iter().map(|(_, n)| *n).max() {
+            _ if self.semantics.is_empty() && chains.is_empty() => SemanticDrift::None,
+            None => SemanticDrift::Stable,
+            Some(max) if max >= LONG_SENSE_CHAIN => SemanticDrift::HighlyDrifted,
+            Some(max) if max > 0 => SemanticDrift::Drifted,
+            Some(_) => SemanticDrift::Stable,
+        };
+
         PlausibilityProfile {
             rarity: self.phonemes.rarity(),
             complexity: self.phonotactics.complexity(),
@@ -179,6 +236,8 @@ impl LanguageGenome {
             elapsed_years: years,
             morphological_irregularity,
             affix_allomorphy,
+            semantic_drift,
+            sense_chains: chains,
         }
     }
 }
@@ -211,7 +270,8 @@ pub fn render_profile(profile: &PlausibilityProfile, name: &str) -> String {
     const COMPLEXITY: &str = "Phonotactic complexity";
     const DEPTH: &str = "Historical depth";
     const MORPH: &str = "Morphological irregularity";
-    let width = [RARITY, COMPLEXITY, DEPTH, MORPH]
+    const SEMANTIC: &str = "Semantic drift";
+    let width = [RARITY, COMPLEXITY, DEPTH, MORPH, SEMANTIC]
         .iter()
         .map(|l| l.chars().count())
         .max()
@@ -261,6 +321,29 @@ pub fn render_profile(profile: &PlausibilityProfile, name: &str) -> String {
         }
     };
 
+    // The semantics line: a band plus its raw basis, the `morph_line` shape.
+    // `None` ("nothing declared") and `Stable` ("declared, and it has not moved")
+    // are two different facts and must read differently — neither is a zero score.
+    let semantic_line = match profile.semantic_drift {
+        SemanticDrift::None => "none  (no senses declared)".to_owned(),
+        SemanticDrift::Stable => "stable  (no recorded shift)".to_owned(),
+        band => {
+            let label = match band {
+                SemanticDrift::Drifted => "drifted",
+                SemanticDrift::HighlyDrifted => "highly drifted",
+                SemanticDrift::None | SemanticDrift::Stable => unreachable!(),
+            };
+            // Each drifted word's recorded shift count, e.g. `omen: 2`.
+            let detail = profile
+                .sense_chains
+                .iter()
+                .map(|(gloss, n)| format!("{gloss}: {n}"))
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!("{label}  ({detail})")
+        }
+    };
+
     let mut out = String::new();
     out.push_str(&format!("Plausibility profile — {name}\n\n"));
     out.push_str(&format!(
@@ -275,6 +358,7 @@ pub fn render_profile(profile: &PlausibilityProfile, name: &str) -> String {
     ));
     out.push_str(&format!("  {DEPTH}{}  {depth_line}\n", pad(DEPTH)));
     out.push_str(&format!("  {MORPH}{}  {morph_line}\n", pad(MORPH)));
+    out.push_str(&format!("  {SEMANTIC}{}  {semantic_line}\n", pad(SEMANTIC)));
 
     out.push_str("\n  not yet modelled:\n");
     // The unbuilt §17 dimensions, in NOT_MODELLED order — no fabricated score.
@@ -469,8 +553,25 @@ mod tests {
             !a.contains("M8"),
             "morphology left the not-yet-modelled block at M8: {a}"
         );
+        // M9 filled the semantic row the same way. Asserted as an ABSENCE, and
+        // deliberately: the old `contains("M9")` would have kept passing on
+        // `ScriptHistoryCoherence`'s "M9+" long after semantics shipped, so the
+        // test would have gone quietly dishonest. The surviving dimensions name
+        // design sections (`§7.6`, `§18`) because neither sits at a numbered
+        // milestone.
+        assert!(
+            a.contains("Semantic drift"),
+            "the scored semantic dimension appears: {a}"
+        );
+        assert!(
+            !a.contains("M9"),
+            "semantics left the not-yet-modelled block at M9: {a}"
+        );
         assert!(a.contains("not yet modelled"), "{a}");
-        assert!(a.contains("M9"), "the M9 dimensions remain deferred: {a}");
+        assert!(
+            a.contains("§7.6") && a.contains("§18"),
+            "script history and alien modality remain deferred: {a}"
+        );
         assert!(!a.contains('%'), "no fabricated percentage: {a}");
         assert!(
             !a.to_lowercase().contains("word order") && !a.to_lowercase().contains("syntax"),
@@ -527,6 +628,10 @@ mod tests {
                     start: 0,
                     end: segs.len() as u32,
                 }],
+                // This fixture exercises the morphology band; it declares no
+                // senses, so the semantic band reads `None`.
+                senses: Vec::new(),
+                sense_history: None,
             }
         });
         reference_shaped().with_lexicon(Lexicon::from_entries(entries))
@@ -582,6 +687,127 @@ mod tests {
                 .errors()
                 .any(|i| i.code == "high_morphological_irregularity"),
             "morphological irregularity must never be an Error: {report}"
+        );
+    }
+
+    /// Builds a genome whose single word records `shifts` drift steps, so the
+    /// semantic band and its paired Note can be exercised against one number.
+    /// Synthetic by design — it pins the projection, not a realistic history.
+    fn genome_with_sense_chain(shifts: usize) -> LanguageGenome {
+        use stem_core::{EventId, PhonemeId, SemanticNodeId, WordId};
+        use stem_lexicon::{
+            Lexicon, PartOfSpeech, SemanticNode, SemanticSpace, SenseHistory, SenseRef, SenseShift,
+            WordEntry, WordSource,
+        };
+        use stem_phonology::{Root, Syllable};
+
+        // `sn_0` is the inherited sense; each step swaps it for the next.
+        let nodes: Vec<SemanticNode> = (0..=shifts)
+            .map(|i| SemanticNode {
+                id: SemanticNodeId::new(format!("sn_{i}")),
+                gloss: format!("sense {i}"),
+                concept: None,
+                note: String::new(),
+            })
+            .collect();
+        let steps: Vec<SenseShift> = (0..shifts)
+            .map(|i| SenseShift {
+                event: EventId::sequential(i + 1),
+                index: i as u32,
+                removed: vec![SemanticNodeId::new(format!("sn_{i}"))],
+                added: vec![SemanticNodeId::new(format!("sn_{}", i + 1))],
+            })
+            .collect();
+
+        let entry = WordEntry {
+            id: WordId::sequential(1),
+            concept: None,
+            phonemic_form: Root {
+                syllables: vec![Syllable {
+                    pattern: "CV".to_owned(),
+                    segments: vec![PhonemeId::new("ph_c0"), PhonemeId::new("ph_v0")],
+                    stress: None,
+                }],
+            },
+            glosses: Vec::new(),
+            part_of_speech: PartOfSpeech::Noun,
+            cognate_set: stem_lexicon::scoped_cognate_set(&stem_core::LanguageId::new("ref"), 1),
+            source: WordSource::Authored,
+            trace: None,
+            morphemes: Vec::new(),
+            senses: vec![SenseRef {
+                node: SemanticNodeId::new(format!("sn_{shifts}")),
+                gloss: format!("sense {shifts}"),
+            }],
+            sense_history: Some(SenseHistory {
+                input: vec![SemanticNodeId::new("sn_0")],
+                steps,
+            }),
+        };
+        reference_shaped()
+            .with_lexicon(Lexicon::from_entries([entry]))
+            .with_semantics(SemanticSpace { nodes })
+    }
+
+    /// The ADR-0009 projection for M9: the `HighlyDrifted` band holds **exactly**
+    /// when `long_semantic_drift_chain` fires — both read the one
+    /// `LONG_SENSE_CHAIN`, so they can never disagree.
+    #[test]
+    fn the_highly_drifted_band_and_the_note_are_the_same_threshold() {
+        use stem_core::Validate;
+
+        // Two shifts — the M9 demo's own Coastal chain. Drifted, and quiet.
+        let ordinary = genome_with_sense_chain(2);
+        assert_eq!(
+            ordinary.plausibility_profile().semantic_drift,
+            SemanticDrift::Drifted
+        );
+        assert!(
+            !ordinary
+                .validate()
+                .issues
+                .iter()
+                .any(|i| i.code == "long_semantic_drift_chain"),
+            "the tool's own showcase must sit below the extreme bar"
+        );
+
+        // Three — the threshold. Band flips, Note fires, still not an Error.
+        let long = genome_with_sense_chain(LONG_SENSE_CHAIN);
+        assert_eq!(
+            long.plausibility_profile().semantic_drift,
+            SemanticDrift::HighlyDrifted
+        );
+        let report = long.validate();
+        assert!(
+            report
+                .issues
+                .iter()
+                .any(|i| i.code == "long_semantic_drift_chain"),
+            "the band is HighlyDrifted, so the paired Note must fire: {report}"
+        );
+        assert!(
+            !report
+                .errors()
+                .any(|i| i.code == "long_semantic_drift_chain"),
+            "a long chain is unusual, not broken (§17): {report}"
+        );
+    }
+
+    /// `None` and `Stable` are different facts: nothing declared versus declared
+    /// and unmoved. Neither is a fabricated low score.
+    #[test]
+    fn a_language_with_no_senses_scores_none_and_one_with_unmoved_senses_scores_stable() {
+        assert_eq!(
+            reference_shaped().plausibility_profile().semantic_drift,
+            SemanticDrift::None,
+            "nothing semantic is modelled at all"
+        );
+        assert_eq!(
+            genome_with_sense_chain(0)
+                .plausibility_profile()
+                .semantic_drift,
+            SemanticDrift::Stable,
+            "senses exist and have not moved"
         );
     }
 }

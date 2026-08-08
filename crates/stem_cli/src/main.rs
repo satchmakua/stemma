@@ -261,6 +261,41 @@ enum Command {
         paradigm: String,
     },
 
+    /// Apply an ordered set of semantic drift events, producing the next stage of
+    /// the lineage with new *meanings* (M9).
+    ///
+    /// The meaning twin of `apply-rules`: that verb changes forms and records a
+    /// derivation, this one changes senses and records a sense history. It never
+    /// touches a `cognate_set`, so a drifted reflex keeps its row in the comparative
+    /// table — a word can come to mean "omen" and still be visibly the same etymon
+    /// its sisters inherited as "star".
+    Drift {
+        /// Path to a language file (`.ron` or `.json`).
+        path: PathBuf,
+        /// Path to a drift-set file (`.ron` or `.json`).
+        #[arg(long)]
+        drift: PathBuf,
+        /// The drifted language's id.
+        #[arg(long)]
+        id: String,
+        /// The drifted language's display name.
+        #[arg(long)]
+        name: String,
+        /// Simulated years the shifts span, added to the parent's depth. Negatives
+        /// are rejected — time runs forwards, matching `apply-rules` and `fork`.
+        #[arg(long, default_value_t = 0, value_parser = clap::value_parser!(i32).range(0..))]
+        years: i32,
+        /// Write the drifted language here; omitted, print a summary only.
+        #[arg(long)]
+        out: Option<PathBuf>,
+    },
+
+    /// Validate and summarise a drift-set file. The mirror of `rules`.
+    Drifts {
+        /// Path to a drift-set file (`.ron` or `.json`).
+        path: PathBuf,
+    },
+
     /// Produce the "Growing a Language Family in 90 Seconds" artefact (§21) as one
     /// self-contained Markdown document.
     ///
@@ -336,6 +371,15 @@ fn run() -> Result<ExitCode> {
             out,
         } => inflect(&path, &paradigm, out.as_deref()),
         Command::Paradigm { path, paradigm } => show_paradigm(&path, &paradigm),
+        Command::Drift {
+            path,
+            drift,
+            id,
+            name,
+            years,
+            out,
+        } => apply_drift_verb(&path, &drift, &id, &name, years, out.as_deref()),
+        Command::Drifts { path } => drifts_summary(&path),
         Command::Demo { out } => demo(out.as_deref()),
     }
 }
@@ -781,9 +825,8 @@ fn trace_word(path: &std::path::Path, meaning: &str) -> Result<ExitCode> {
         }
     };
 
-    let rendered =
-        stem_soundchange::render_derivation(entry, &genome.applied_rules, &genome.phonemes)
-            .with_context(|| format!("rendering the derivation of `{}`", entry.id))?;
+    let rendered = stem_genome::render_word_history(&genome, entry)
+        .with_context(|| format!("rendering the derivation of `{}`", entry.id))?;
     print!("{rendered}");
 
     Ok(ExitCode::SUCCESS)
@@ -897,11 +940,24 @@ fn demo(out: Option<&std::path::Path>) -> Result<ExitCode> {
         Format::Ron,
     )
     .context("parsing the embedded Riverine rules")?;
+    // M9: Coastal's semantic history, compiled in beside the rule files so the
+    // demo still needs no fixture on disk.
+    let coastal_drift: stem_lexicon::DriftSet = stem_io::load_str(
+        include_str!("../../../fixtures/drift_coastal.ron"),
+        Format::Ron,
+    )
+    .context("parsing the embedded Coastal drift events")?;
 
     let mut document = String::new();
-    let report =
-        stem_export::write_asterian_demo(&mut document, &proto, &coastal, &highland, &riverine)
-            .context("assembling the family demo")?;
+    let report = stem_export::write_asterian_demo(
+        &mut document,
+        &proto,
+        &coastal,
+        &highland,
+        &riverine,
+        &coastal_drift,
+    )
+    .context("assembling the family demo")?;
     // The advisory report (the velar-chain rules' `target_matches_nothing` notes)
     // goes to stderr; the document alone to the file or stdout.
     for issue in &report.issues {
@@ -936,9 +992,8 @@ fn trace(path: &std::path::Path, word: &str) -> Result<ExitCode> {
 
     // The whole string is built by the library, so the M11 UI renders the same
     // text through the same function. The CLI contributes parsing and printing.
-    let rendered =
-        stem_soundchange::render_derivation(entry, &genome.applied_rules, &genome.phonemes)
-            .with_context(|| format!("rendering the derivation of `{word}`"))?;
+    let rendered = stem_genome::render_word_history(&genome, entry)
+        .with_context(|| format!("rendering the derivation of `{word}`"))?;
     print!("{rendered}");
 
     Ok(ExitCode::SUCCESS)
@@ -968,6 +1023,81 @@ fn rules_summary(path: &std::path::Path) -> Result<ExitCode> {
     } else {
         ExitCode::FAILURE
     })
+}
+
+/// `stemma drift` — apply a drift set, minting the next stage of the lineage.
+///
+/// Structurally identical to `apply_rules`, down to reusing the single write gate
+/// `write_descendant`: a language whose meanings moved is still just a descendant,
+/// and a file that fails its own validation is still never written.
+fn apply_drift_verb(
+    path: &std::path::Path,
+    drift_path: &std::path::Path,
+    id: &str,
+    name: &str,
+    years: i32,
+    out: Option<&std::path::Path>,
+) -> Result<ExitCode> {
+    let genome = load_genome(path)?;
+    let set: stem_lexicon::DriftSet = stem_io::load(drift_path)
+        .with_context(|| format!("loading drift events from `{}`", drift_path.display()))?;
+    let (drifted, report) = genome
+        .drift(id, name, &set, years)
+        .with_context(|| format!("drifting `{}` under `{}`", genome.name, set.name))?;
+    write_descendant(&genome, &drifted, &report, out)
+}
+
+/// `stemma drifts` — validate and summarise a drift file. The mirror of `rules`.
+fn drifts_summary(path: &std::path::Path) -> Result<ExitCode> {
+    let set: stem_lexicon::DriftSet = stem_io::load(path)
+        .with_context(|| format!("loading drift events from `{}`", path.display()))?;
+
+    println!("{} ({})", set.name, set.id);
+    if !set.description.is_empty() {
+        println!("{}", set.description);
+    }
+    println!();
+    if !set.nodes.is_empty() {
+        println!("Senses introduced:");
+        for node in &set.nodes {
+            println!("  {}  \"{}\"", node.id, node.gloss);
+        }
+        println!();
+    }
+    for (i, event) in set.events.iter().enumerate() {
+        let register = match &event.register {
+            Some(register) => format!(" · {register}"),
+            None => String::new(),
+        };
+        println!(
+            "  {i}  {}  {}  ({}{register}, {} years)",
+            event.id,
+            event.name,
+            event.mechanism.name(),
+            event.chronology_years
+        );
+        println!("       {} > {}", ids(&event.remove), ids(&event.add));
+    }
+    println!();
+
+    let report = set.validate();
+    print_report(&report);
+    Ok(if report.is_ok() {
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::FAILURE
+    })
+}
+
+/// A comma-separated id list, or `∅` for an empty delta (a pure gain or loss).
+fn ids(list: &[stem_core::SemanticNodeId]) -> String {
+    if list.is_empty() {
+        return "∅".to_owned();
+    }
+    list.iter()
+        .map(|id| id.as_str())
+        .collect::<Vec<_>>()
+        .join(", ")
 }
 
 /// Which document to render.

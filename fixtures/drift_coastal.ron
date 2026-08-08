@@ -1,0 +1,73 @@
+// The Coastal priestly semantic history — the M9 acceptance fixture.
+//
+// DESIGN.md §10.2's worked trace ends with a line the engine could not produce
+// until now: "Semantic shift: 'star' → 'omen' in priestly register ... Modern
+// Coastal: taal 'omen, royal sign'; Modern Highland: tazal 'star'." This file is
+// that shift, as data.
+//
+// THE POINT (ROADMAP M9): the reflex of *takala comes to mean something new on ONE
+// branch while its sisters keep the old sense — and it stays in the same cognate
+// set, so the comparative table still shows all three reflexes on one row. Meaning
+// diverges; ancestry does not. That is why `concept`, `cognate_set` and `senses`
+// have been three separate identities since M2 (docs/adr/0007).
+//
+// The chain is §7.5's own `star → divine sign → royal title`, in two typed steps,
+// each with the mechanism that drove it and the register it happened in. Two steps,
+// deliberately: it is a real chain (so `replay` has something to reconstruct) while
+// sitting BELOW `LONG_SENSE_CHAIN`, because the tool's own showcase must not trip
+// its own "remarkable" Note.
+//
+// Apply with:
+//   stemma drift out/coastal.ron --drift fixtures/drift_coastal.ron \
+//       --id coastal_modern --name "Modern Coastal" --years 30 --out out/coastal_modern.ron
+(
+    id: "drift_coastal",
+    name: "The Coastal priestly semantic history",
+    description: "DESIGN §10.2: the reflex of *takala becomes the sign, not the object.",
+
+    // The senses this stratum introduces. Declared here rather than in the
+    // language, so one drift file applies to any daughter — the semantic twin of a
+    // sound-change rule minting a phoneme the language did not have.
+    //
+    // None carries a `concept:` anchor: the built-in list has no OMEN, and claiming
+    // a Concepticon id these do not have would be false provenance. An unanchored
+    // sense is fully first-class.
+    nodes: [
+        (id: "sn_divine_sign", gloss: "divine sign",
+         note: "a star read as a message sent, not as an object seen"),
+        (id: "sn_omen", gloss: "omen",
+         note: "the reading itself — what the sign portends"),
+        (id: "sn_royal_sign", gloss: "royal sign",
+         note: "§7.5's 'star → divine sign → royal title', the title sense"),
+    ],
+
+    events: [
+        // METAPHOR: the object stands for the will behind it. The star is no longer
+        // the thing in the sky; it is the message.
+        (
+            id: "ev_0001",
+            name: "The star stands for the will behind it",
+            description: "§7.5's star -> divine sign, one step: the object read as intent.",
+            word: "w_0001",
+            mechanism: metaphor,
+            chronology_years: 180,
+            register: "priestly",
+            remove: ["sn_star"],
+            add: ["sn_divine_sign"],
+        ),
+        // METONYMY: the sign for the thing signified. Two senses at once, which is
+        // why the event primitive is a set delta rather than a from/to pair — real
+        // polysemy is one event producing two readings.
+        (
+            id: "ev_0002",
+            name: "The sign for the thing signified",
+            description: "The royal house claimed the reading; §7.5's 'royal title'.",
+            word: "w_0001",
+            mechanism: metonymy,
+            chronology_years: 340,
+            register: "priestly",
+            remove: ["sn_divine_sign"],
+            add: ["sn_omen", "sn_royal_sign"],
+        ),
+    ],
+)

@@ -13,7 +13,7 @@ use std::fmt::Write;
 
 use stem_core::{Result, StemmaError, ValidationReport};
 use stem_genome::{BranchSpec, CognateTable, LanguageGenome, LineageGraph, grow_family};
-use stem_soundchange::{RuleSet, render_derivation};
+use stem_soundchange::RuleSet;
 
 use crate::cognate_table::write_cognate_table_markdown;
 use crate::markdown::{escape, fmt_err};
@@ -213,12 +213,11 @@ pub fn write_family_demo(
         .map_err(fmt_err)?;
         writeln!(out).map_err(fmt_err)?;
         writeln!(out, "```text").map_err(fmt_err)?;
-        // render_derivation returns a newline-terminated block; push it verbatim.
-        out.push_str(&render_derivation(
-            entry,
-            &daughter.applied_rules,
-            &daughter.phonemes,
-        )?);
+        // `render_word_history` is `render_derivation` plus the M9 semantic block,
+        // and the semantic half is **empty** for a word that never drifted — so an
+        // undrifted etymology renders exactly the bytes it did at M6, and the M6
+        // canary stays frozen. Newline-terminated; pushed verbatim.
+        out.push_str(&stem_genome::render_word_history(daughter, entry)?);
         writeln!(out, "```").map_err(fmt_err)?;
         writeln!(out).map_err(fmt_err)?;
     }
@@ -264,6 +263,7 @@ pub fn write_asterian_demo(
     coastal: &RuleSet,
     highland: &RuleSet,
     riverine: &RuleSet,
+    coastal_drift: &stem_lexicon::DriftSet,
 ) -> Result<ValidationReport> {
     // Branch years equal each rule file's last `chronology_years` (absolute from
     // the root), keeping `lineage_depth_years` and the timeline agreed.
@@ -273,18 +273,26 @@ pub fn write_asterian_demo(
             name: "Coastal Asterian",
             rules: coastal,
             years: 470,
+            // The one branch whose MEANINGS moved (M9): the priestly reading of
+            // *takala. Applied within the stage, so Coastal stays one column.
+            drift: Some(coastal_drift),
         },
         BranchSpec {
             id: "highland",
             name: "Highland Asterian",
             rules: highland,
             years: 460,
+            // No drift file at all: absence is the honest expression of "this
+            // branch did not innovate here", and it is what makes Highland's
+            // unmoved "star" a real contrast rather than a claim.
+            drift: None,
         },
         BranchSpec {
             id: "riverine",
             name: "Riverine Asterian",
             rules: riverine,
             years: 420,
+            drift: None,
         },
     ];
     let (graph, reports) = grow_family(proto, &branches)?;
@@ -318,9 +326,13 @@ pub fn write_asterian_demo(
         table_reading: "One etymon, `*takala`, takes three roads — `taal`, `tagal`, `tala`: \
                         the comparative method in a single row.",
         traces: &[
+            // NOT a workaround — the feature. After the drift, Coastal's reflex
+            // no longer means "star", so `by_meaning("star")` is empty there and
+            // "omen" is what resolves. The heading this produces is §10.2's
+            // worked trace verbatim, engine-produced rather than prose.
             TracePick {
                 language: "coastal",
-                meaning: "star",
+                meaning: "omen",
             },
             TracePick {
                 language: "riverine",
@@ -344,10 +356,14 @@ pub fn write_asterian_demo(
                  target is on the record. The table joins by cognate set — shared ancestry — so \
                  a reflex keeps its row no matter what its meaning later does. And the whole \
                  document is a pure function of one proto-language and three rule files: same \
-                 inputs, identical bytes.\n\nStill ahead, and named honestly rather than faked: \
-                 **meaning drift** (a reflex coming to mean something new on one branch while \
-                 its sisters keep the old sense), **morphology and a grammar sketch**, a \
-                 readable rule notation, and a visual explorer. For the full dictionary as \
+                 inputs, identical bytes.\n\n**Meaning has a history too.** Coastal's reflex of \
+                 *takala came to mean \"omen\" through two recorded shifts — a metaphor, then a \
+                 metonymy, both in the priestly register — while Highland's still means \
+                 \"star\". They keep the same cognate set, which is exactly why they share a \
+                 row in the table above: the comparative view joins by ancestry, so a word can \
+                 change what it means without changing what it descends from.\n\nStill ahead, \
+                 and named honestly rather than faked: a readable rule notation, a syntax \
+                 sketch, script evolution, and a visual explorer. For the full dictionary as \
                  Markdown or CLDF-shaped CSV, run `stemma export-md` or `stemma export-csv`.",
     };
 
@@ -429,6 +445,8 @@ mod tests {
             source: WordSource::Authored,
             trace: None,
             morphemes: Vec::new(),
+            senses: Vec::new(),
+            sense_history: None,
         }
     }
 
@@ -481,7 +499,18 @@ mod tests {
             rows: vec![CognateRow {
                 meaning: "star".to_owned(),
                 cognate_set: Some(CognateSetId::new("cog_1")),
-                cells: vec![Some("ta".to_owned()), Some("ta".to_owned())],
+                cells: vec![
+                    Some(stem_genome::CognateCell {
+                        form: "ta".to_owned(),
+                        gloss: None,
+                        drifted: false,
+                    }),
+                    Some(stem_genome::CognateCell {
+                        form: "ta".to_owned(),
+                        gloss: None,
+                        drifted: false,
+                    }),
+                ],
             }],
             notes: Vec::new(),
         }
