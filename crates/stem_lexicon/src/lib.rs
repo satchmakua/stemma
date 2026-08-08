@@ -42,6 +42,7 @@ pub mod build;
 pub mod concept;
 pub mod lexicon;
 pub mod morpheme;
+pub mod semantics;
 pub mod trace;
 pub mod word;
 
@@ -51,6 +52,11 @@ pub use lexicon::{Lexicon, check_against_inventory, is_portable_id};
 pub use morpheme::{
     AllomorphSet, HIGH_ALLOMORPH_COUNT, Morpheme, MorphemeRef, MorphemeRole, Morphology, Paradigm,
     ParadigmCell, compose, inflect, morphological_irregularity,
+};
+pub use semantics::{
+    DriftEvent, DriftMechanism, DriftOutcome, DriftSet, LONG_SENSE_CHAIN, SemanticNode,
+    SemanticSpace, SenseChain, SenseHistory, SenseRef, SenseShift, apply_drift,
+    check_against_semantics, check_drift_against_language, sense_chains,
 };
 pub use trace::{
     BlockReason, BlockedSite, Derivation, RuleApplication, SiteTrace, SymbolResolution,
@@ -231,6 +237,8 @@ mod tests {
             source: WordSource::Authored,
             trace: None,
             morphemes: Vec::new(),
+            senses: Vec::new(),
+            sense_history: None,
         };
         let text = ron::ser::to_string(&entry).expect("serialise");
         let back: WordEntry = ron::from_str(&text).expect("deserialise");
@@ -272,6 +280,10 @@ mod tests {
             // M8: `inflect` mints a set per cell, but only ever via
             // `scoped_cognate_set` — never a bare `CognateSetId::new`.
             ("morpheme.rs", include_str!("morpheme.rs")),
+            // M9: drift rewrites a word's MEANING and must never touch its
+            // ancestry — the star→omen reflex keeps its set, which is the whole
+            // acceptance. This module must not name `CognateSetId` at all.
+            ("semantics.rs", include_str!("semantics.rs")),
         ];
         for (name, src) in sources {
             for (n, line) in src.lines().enumerate() {
@@ -312,6 +324,8 @@ mod tests {
             source: WordSource::Authored,
             trace: None,
             morphemes: Vec::new(),
+            senses: Vec::new(),
+            sense_history: None,
         }])
     }
 
@@ -342,6 +356,8 @@ mod tests {
             source: WordSource::Authored,
             trace: None,
             morphemes: Vec::new(),
+            senses: Vec::new(),
+            sense_history: None,
         }
     }
 
@@ -478,6 +494,8 @@ mod tests {
             source: WordSource::Authored,
             trace: None,
             morphemes: Vec::new(),
+            senses: Vec::new(),
+            sense_history: None,
         });
 
         let report = check_against_inventory(&lexicon, &inventory());
@@ -509,6 +527,8 @@ mod tests {
             source: WordSource::Authored,
             trace: None,
             morphemes: Vec::new(),
+            senses: Vec::new(),
+            sense_history: None,
         }]);
         let report = check_against_inventory(&lexicon, &inventory());
         assert!(
@@ -552,6 +572,8 @@ mod tests {
             source: WordSource::Authored,
             trace: None,
             morphemes: Vec::new(),
+            senses: Vec::new(),
+            sense_history: None,
         };
         let lexicon = Lexicon::from_entries([
             word("w_0001", "ph_k", "cog_x_0001"),

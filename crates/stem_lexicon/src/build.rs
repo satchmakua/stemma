@@ -107,6 +107,8 @@ pub fn build_proto_lexicon(
                 source: WordSource::Generated,
                 trace: None,
                 morphemes: Vec::new(),
+                senses: Vec::new(),
+                sense_history: None,
             }
         })
         .collect();

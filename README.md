@@ -12,17 +12,18 @@ The name comes from textual criticism: a *stemma* is the reconstructed family tr
 showing how surviving manuscripts descend from a lost original. That is exactly
 this program's core data structure.
 
-**Status:** **Phase 1 complete (M0–M6); Phase 2 underway (M7–M8 done)** — the
+**Status:** **Phase 1 complete (M0–M6); Phase 2 underway (M7–M9 done)** — the
 diachronic kernel runs end to end. Languages get a feature-based phonology,
 generate seeded roots, undergo ordered sound change, fork into daughters with their
 own histories, and line up in a comparative cognate table; `stemma demo` tells the
 whole story as one Markdown document, and `stemma profile` scores a language
-against real typological ranges without policing it. Morphology has landed:
-`stemma inflect` builds a paradigm and `stemma paradigm` shows a regular suffix
-**split into irregular allomorphs by an ordered sound change**, with each cell's
-trace naming the rule. 457 tests pass, and every step is deterministic and traced.
-Semantics is next. See [ROADMAP.md](ROADMAP.md) for the plan and
-[PROGRESS.md](PROGRESS.md) for what has shipped.
+against real typological ranges without policing it. Morphology landed at M8:
+`stemma paradigm` shows a regular suffix **split into irregular allomorphs by an
+ordered sound change**. And meaning now has a history too — `stemma drift` makes a
+word come to mean something new on one branch while its sisters keep the old sense,
+**without breaking the cognate row that proves they are the same etymon**. 504 tests
+pass, and every step is deterministic and traced. See [ROADMAP.md](ROADMAP.md) for
+the plan and [PROGRESS.md](PROGRESS.md) for what has shipped.
 
 ---
 
@@ -211,6 +212,58 @@ there is not intervocalic. Nothing declared the paradigm irregular; the irregula
 *fell out of* an ordered sound change, and `stemma trace out/number_early.ron w_0002`
 walks the plural of `tira` back through the exact rule that split it.
 
+### Let a meaning drift — without losing the family thread
+
+Sound change moves *forms*. Semantic drift (M9) moves *meanings* — and the two are
+independent. A word can come to mean something completely new on one branch while
+its sisters keep the old sense, and the comparative table still shows them together,
+because the table joins by **ancestry**, not by meaning.
+
+```bash
+cargo run -p stem_cli -- apply-rules fixtures/asterian_attested.ron     --rules fixtures/rules_coastal.ron     --id coastal --name "Coastal Asterian" --years 470 --out out/coastal.ron
+# Two authored shifts: a metaphor, then a metonymy, both in the priestly register.
+cargo run -p stem_cli -- drift out/coastal.ron     --drift fixtures/drift_coastal.ron     --id coastal_modern --name "Modern Coastal" --years 30 --out out/coastal_modern.ron
+cargo run -p stem_cli -- cognates fixtures/asterian_attested.ron     out/coastal.ron out/coastal_modern.ron out/highland.ron --meanings star
+```
+
+```
+meaning  asterian_attested  coastal  coastal_modern  highland
+star     *takala            taal     taal "omen"     tagal
+```
+
+The form `taal` is **identical** between the two Coastal stages — only the meaning
+moved. All four cells are the same cognate set, which is why they share a row.
+`stemma trace-word out/coastal_modern.ron omen` then prints the whole story, both
+halves:
+
+```
+*takala  "omen"  cog_asterian_attested_0001
+
+  proto      takala        /takala/
+  │ stress   TA.ka.la
+  │
+  0  r_ivv  Intervocalic voicing
+  │    k > g  [2,3)   environment  a _ a
+  ⋮
+  modern     taal          /taal/
+
+  sense      star                  sn_star
+  │
+  0  ev_0001  metaphor · priestly · 180y
+  │    star > divine sign
+  │    "§7.5's star -> divine sign, one step: the object read as intent."
+  │
+  1  ev_0002  metonymy · priestly · 340y
+  │    divine sign > omen, royal sign
+  │    "The royal house claimed the reading; §7.5's 'royal title'."
+  │
+  means      omen, royal sign      sn_omen, sn_royal_sign
+```
+
+Drift never touches `cognate_set`, `concept`, or the phonemic form — it writes
+meaning and only meaning. That separation is what lets a dictionary say *this word
+descends from `*takala` and no longer means "star"* without contradiction.
+
 ### Fork it into a family
 
 One proto-language, three daughters, three different histories:
@@ -302,6 +355,8 @@ Phase 1 capstone. (The exact bytes are pinned as a snapshot at
 | `stemma apply-rules <file>` | Apply an ordered rule set, producing a descendant language |
 | `stemma inflect <file> --paradigm <id>` | Materialise a paradigm's cells into the lexicon — the regular forms (`--out`) |
 | `stemma paradigm <file> --paradigm <id>` | Render a paradigm: regular on a proto, irregular after sound change, with each cell's why |
+| `stemma drift <file> --drift <f>` | Apply authored semantic shifts, producing a language with new *meanings* |
+| `stemma drifts <file>` | Validate and summarise a drift-set file |
 | `stemma fork <parent>` | Fork a daughter (`--id`, `--name`, `--rules`, `--years`, `--out`) |
 | `stemma family <files>…` | Assemble a lineage; print the family tree, cognate coverage, and report |
 | `stemma cognates <files>… --meanings <m>…` | Print the comparative table of each meaning's reflexes across the family |

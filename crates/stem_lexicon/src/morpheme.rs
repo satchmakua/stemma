@@ -311,6 +311,12 @@ pub fn inflect(
                 source: WordSource::Derived,
                 trace: None,
                 morphemes: refs,
+                // An inflected cell starts with no modelled sense and no drift
+                // history — its gloss comes from the stem's own label. M9 drift
+                // then acts on it like any other entry (`docs/adr/0010`: a
+                // `Derived` cell is an ordinary word, never a special case).
+                senses: Vec::new(),
+                sense_history: None,
             });
         }
     }

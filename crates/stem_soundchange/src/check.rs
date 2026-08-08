@@ -276,6 +276,8 @@ mod tests {
             source: stem_lexicon::WordSource::Authored,
             trace: None,
             morphemes: Vec::new(),
+            senses: Vec::new(),
+            sense_history: None,
         }])
     }
 

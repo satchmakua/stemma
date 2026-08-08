@@ -44,10 +44,22 @@ pub fn write_cognate_table_markdown(out: &mut String, table: &CognateTable) -> R
         write!(out, "| {}", escape(&row.meaning)).map_err(fmt_err)?;
         for (column, cell) in table.columns.iter().zip(&row.cells) {
             let rendered = match cell {
-                // A root column's reflex is a reconstruction — starred inside the
-                // cell so a copied cell stays self-describing.
-                Some(form) if column.is_root => format!("*{}", escape(form)),
-                Some(form) => escape(form),
+                Some(cell) => {
+                    // A root column's reflex is a reconstruction — starred inside
+                    // the cell so a copied cell stays self-describing.
+                    let form = if column.is_root {
+                        format!("*{}", escape(&cell.form))
+                    } else {
+                        escape(&cell.form)
+                    };
+                    // M9: only a cell whose sense moved away from the reference's
+                    // shows its meaning, so an undrifted table keeps its frozen
+                    // bytes. Both halves are escaped — a gloss is free text.
+                    match (&cell.gloss, cell.drifted) {
+                        (Some(gloss), true) => format!("{form} \"{}\"", escape(gloss)),
+                        _ => form,
+                    }
+                }
                 None => "—".to_owned(),
             };
             write!(out, " | {rendered}").map_err(fmt_err)?;
@@ -69,7 +81,17 @@ pub fn write_cognate_table_markdown(out: &mut String, table: &CognateTable) -> R
 #[cfg(test)]
 mod tests {
     use super::*;
-    use stem_genome::{CognateColumn, CognateRow};
+    use stem_genome::{CognateCell, CognateColumn, CognateRow};
+
+    /// An undrifted cell — no gloss annotation, so the canary's frozen bytes are
+    /// exactly what they were before M9.
+    fn cell(form: &str) -> Option<CognateCell> {
+        Some(CognateCell {
+            form: form.to_owned(),
+            gloss: None,
+            drifted: false,
+        })
+    }
 
     /// A hand-built table with a root column, a daughter, a gap, and a
     /// `|`-bearing meaning — the renderer's tripwire. Engine-independent:
@@ -95,12 +117,12 @@ mod tests {
                 CognateRow {
                     meaning: "a|b".to_owned(),
                     cognate_set: Some(stem_core::CognateSetId::new("cog_1")),
-                    cells: vec![Some("taka".to_owned()), Some("taga".to_owned())],
+                    cells: vec![cell("taka"), cell("taga")],
                 },
                 CognateRow {
                     meaning: "gone".to_owned(),
                     cognate_set: Some(stem_core::CognateSetId::new("cog_2")),
-                    cells: vec![Some("mi".to_owned()), None],
+                    cells: vec![cell("mi"), None],
                 },
             ],
             notes: Vec::new(),

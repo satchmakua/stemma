@@ -2,7 +2,11 @@
 
 use serde::{Deserialize, Serialize};
 use stem_core::{LanguageId, Result, Severity, StemmaError, Validate, ValidationReport};
-use stem_lexicon::{HIGH_ALLOMORPH_COUNT, Lexicon, Morphology, morphological_irregularity};
+use stem_lexicon::{
+    DriftEvent, DriftSet, HIGH_ALLOMORPH_COUNT, LONG_SENSE_CHAIN, Lexicon, Morphology,
+    SemanticSpace, apply_drift, check_against_semantics, check_drift_against_language,
+    morphological_irregularity, sense_chains,
+};
 use stem_phonology::{PhonemeInventory, Phonotactics, Prosody};
 use stem_soundchange::{RuleSet, SoundChangeRule};
 
@@ -118,6 +122,32 @@ pub struct LanguageGenome {
     #[serde(default, skip_serializing_if = "Morphology::is_empty")]
     pub morphology: Morphology,
 
+    /// This language's senses (`DESIGN.md` §8.1's `semantics: SemanticSpace`,
+    /// ROADMAP M9).
+    ///
+    /// Default **empty**, so every pre-M9 file — both reference fixtures included —
+    /// loads and round-trips byte-identically. `fork` and `evolve` carry it
+    /// verbatim, which is what lets a daughter render "star → omen" from its own
+    /// file with no drift set on disk: the `seed` contract's "reproducible from the
+    /// file alone", applied to meaning.
+    #[serde(default, skip_serializing_if = "SemanticSpace::is_empty")]
+    pub semantics: SemanticSpace,
+
+    /// The semantic shifts that produced this language's current meanings (M9).
+    ///
+    /// **Past tense, and a log rather than a set** — `applied_rules`' contract
+    /// verbatim, for the same reasons: applying is an explicit operation over a
+    /// separate [`stem_lexicon::DriftSet`] file, ids may repeat across strata, and
+    /// `SenseShift::index` indexes into this `Vec`, so it is never re-sorted.
+    ///
+    /// Kept beside `applied_rules` rather than merged into §8.5's `HistoricalEvent`
+    /// union: migrating would renumber every `RuleApplication.index` in every stored
+    /// derivation, a format break the project forbids. §10.4's unified timeline is a
+    /// *derived* merge of the two ordered logs by `chronology_years` — computable,
+    /// and therefore never stored (`docs/adr/0008`).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub applied_drifts: Vec<DriftEvent>,
+
     /// Free-form authorial notes. Not interpreted by the engine.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub notes: Vec<String>,
@@ -138,6 +168,8 @@ impl LanguageGenome {
             prosody: Prosody::new(),
             applied_rules: Vec::new(),
             morphology: Morphology::default(),
+            semantics: SemanticSpace::new(),
+            applied_drifts: Vec::new(),
             notes: Vec::new(),
         }
     }
@@ -181,6 +213,13 @@ impl LanguageGenome {
     #[must_use]
     pub fn with_morphology(mut self, morphology: Morphology) -> Self {
         self.morphology = morphology;
+        self
+    }
+
+    /// Sets the semantic space (M9), replacing any existing one.
+    #[must_use]
+    pub fn with_semantics(mut self, semantics: SemanticSpace) -> Self {
+        self.semantics = semantics;
         self
     }
 
@@ -301,6 +340,29 @@ impl Validate for LanguageGenome {
             }
         }
 
+        // M9's direct measure of how far a meaning has travelled: a word carrying
+        // `LONG_SENSE_CHAIN` or more recorded shifts. A Note, never an Error — a
+        // long chain is unusual, not broken, and the tool reports rather than
+        // polices (§17). Single-sourced on the shared constant, so it fires exactly
+        // when the profile band reads `HighlyDrifted` (`docs/adr/0009`); a
+        // projection test pins the agreement. The M9 demo's own two-step Coastal
+        // chain sits below this bar and correctly stays quiet.
+        for chain in sense_chains(&self.lexicon) {
+            if chain.shifts >= LONG_SENSE_CHAIN {
+                report.note(
+                    "long_semantic_drift_chain",
+                    format!(
+                        "the word `{}` (\"{}\") records {} meaning shifts — a long chain by this \
+                         tool's counting. Long chains are real (hand > control > authority > \
+                         power is attested); if it was not intended, an intermediate sense may \
+                         be doing no work. (This counts authored drift events, an editorial \
+                         granularity.)",
+                        chain.word, chain.gloss, chain.shifts
+                    ),
+                );
+            }
+        }
+
         // A `LanguageId` reaches every minted `CognateSetId` verbatim and every CSV
         // cell. A non-portable id does not break Stemma — only interchange — so it
         // warns rather than erroring (§17).
@@ -336,6 +398,15 @@ impl Validate for LanguageGenome {
         report.absorb(
             "lexicon",
             stem_lexicon::check_against_inventory(&self.lexicon, &self.phonemes),
+        );
+
+        // M9, the same shape and for the same reason: it needs the lexicon *and*
+        // the semantic space, and `Validate::validate` takes no context. Every
+        // check inside is gated on non-empty senses / history / space, so a pre-M9
+        // language absorbs an empty report and gains no scope line.
+        report.absorb(
+            "semantics",
+            check_against_semantics(&self.lexicon, &self.semantics, &self.applied_drifts),
         );
 
         // Not optional: putting the rule checks only in a free function the gate
@@ -407,6 +478,10 @@ impl LanguageGenome {
             // Carried verbatim: a fork is a statement about lineage, and the
             // daughter keeps the same morphemes and paradigms it inherited.
             morphology: self.morphology.clone(),
+            // Likewise its senses and their recorded history: a daughter means what
+            // its parent meant until a drift event says otherwise (M9).
+            semantics: self.semantics.clone(),
+            applied_drifts: self.applied_drifts.clone(),
             notes: self.notes.clone(),
         }
     }
@@ -478,10 +553,86 @@ impl LanguageGenome {
             // are recorded in each evolved cell's `trace`, not here — the morphemes
             // and paradigms themselves are unchanged by a rule run.
             morphology: self.morphology.clone(),
+            // A sound change moves forms, never meanings. The senses and their
+            // history ride along untouched — and each word's `senses` /
+            // `sense_history` survive because `apply_rules` clones the entry whole
+            // (M9; the free ride M8's `morphemes` got).
+            semantics: self.semantics.clone(),
+            applied_drifts: self.applied_drifts.clone(),
             notes: self.notes.clone(),
         };
 
         Ok((descendant, report))
+    }
+
+    /// Applies a drift set **within this stage**: same id, name, parent, depth,
+    /// seed, phonology, forms, `applied_rules` and morphology. Only `lexicon`,
+    /// `semantics` and `applied_drifts` change (M9).
+    ///
+    /// This is the in-place-shaped operation — what `grow_family` uses, so a
+    /// drifted branch stays **one node and one column** rather than sprouting a
+    /// phantom stage in the family tree. A caller that wants drift to *mint a
+    /// stage* wants [`Self::drift`].
+    ///
+    /// `apply_drift` never touches `cognate_set`, so the §8.6 obligation is
+    /// discharged by construction — the drifted reflex keeps its row in the
+    /// comparative table, which is exactly the M9 acceptance.
+    pub fn with_drift(&self, set: &DriftSet) -> Result<(LanguageGenome, ValidationReport)> {
+        let mut report = ValidationReport::new();
+        report.absorb("drift", set.validate());
+        report.absorb(
+            "drift",
+            check_drift_against_language(
+                set,
+                &self.semantics,
+                &self.lexicon,
+                self.lineage_depth_years,
+            ),
+        );
+        if !report.is_ok() {
+            return Err(StemmaError::Invalid(
+                format!("the drift set `{}` cannot be applied", set.id),
+                report,
+            ));
+        }
+
+        let outcome = apply_drift(
+            set,
+            self.applied_drifts.len() as u32,
+            &self.semantics,
+            &self.lexicon,
+        )?;
+        report.absorb("drift", outcome.report);
+
+        let mut applied_drifts = self.applied_drifts.clone();
+        applied_drifts.extend(set.events.iter().cloned());
+
+        Ok((
+            LanguageGenome {
+                lexicon: outcome.lexicon,
+                semantics: outcome.space,
+                applied_drifts,
+                ..self.clone()
+            },
+            report,
+        ))
+    }
+
+    /// Drift as the **next stage of this lineage** — literally
+    /// `self.fork(id, name, elapsed_years)` followed by [`Self::with_drift`].
+    ///
+    /// No new copy logic: `fork` already clones verbatim and discharges the cognate
+    /// obligation by construction. This is what the CLI's `drift` verb uses, because
+    /// a `--out` file sharing its input's [`LanguageId`] would be the
+    /// `duplicate_language_id` Error (`docs/adr/0003`).
+    pub fn drift(
+        &self,
+        id: impl Into<LanguageId>,
+        name: impl Into<String>,
+        set: &DriftSet,
+        elapsed_years: i32,
+    ) -> Result<(LanguageGenome, ValidationReport)> {
+        self.fork(id, name, elapsed_years).with_drift(set)
     }
 }
 
@@ -702,6 +853,8 @@ mod tests {
             source: WordSource::Authored,
             trace: None,
             morphemes: Vec::new(),
+            senses: Vec::new(),
+            sense_history: None,
         };
         genome.lexicon = Lexicon::from_entries([entry]);
         genome

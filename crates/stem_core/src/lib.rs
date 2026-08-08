@@ -22,6 +22,8 @@ pub mod suggest;
 pub mod validate;
 
 pub use errors::{Result, StemmaError};
-pub use ids::{CognateSetId, EventId, LanguageId, MorphemeId, PhonemeId, RuleId, WordId};
+pub use ids::{
+    CognateSetId, EventId, LanguageId, MorphemeId, PhonemeId, RuleId, SemanticNodeId, WordId,
+};
 pub use rng::{RngDomain, StemmaRng, rng_for};
 pub use validate::{Issue, Severity, Validate, ValidationReport};

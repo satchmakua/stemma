@@ -68,6 +68,8 @@ fn canary() -> LanguageGenome {
             source: WordSource::Generated,
             trace: None,
             morphemes: Vec::new(),
+            senses: Vec::new(),
+            sense_history: None,
         },
         WordEntry {
             id: WordId::new("w_0002"),
@@ -84,6 +86,8 @@ fn canary() -> LanguageGenome {
             source: WordSource::Generated,
             trace: None,
             morphemes: Vec::new(),
+            senses: Vec::new(),
+            sense_history: None,
         },
     ]))
 }
@@ -378,10 +382,19 @@ fn asterian_demo() -> String {
         stem_io::load(fixture("rules_highland.ron")).expect("highland rules load");
     let riverine: stem_soundchange::RuleSet =
         stem_io::load(fixture("rules_riverine.ron")).expect("riverine rules load");
+    let coastal_drift: stem_lexicon::DriftSet =
+        stem_io::load(fixture("drift_coastal.ron")).expect("coastal drift loads");
 
     let mut out = String::new();
-    write_asterian_demo(&mut out, &proto, &coastal, &highland, &riverine)
-        .expect("the demo renders");
+    write_asterian_demo(
+        &mut out,
+        &proto,
+        &coastal,
+        &highland,
+        &riverine,
+        &coastal_drift,
+    )
+    .expect("the demo renders");
     out
 }
 
@@ -401,14 +414,107 @@ fn rendering_the_demo_twice_produces_identical_bytes() {
     assert_eq!(asterian_demo(), asterian_demo());
 }
 
-/// The anti-fabrication fence: the demo shows the engine's real `tagal`, and
-/// never DESIGN §21's unreachable `tazal` nor any M9 drifted gloss.
+/// The anti-fabrication fence, **rewritten at M9**. The demo shows the engine's
+/// real `tagal` and never DESIGN §21's unreachable `tazal`.
+///
+/// `omen` left this list when M9 made it producible — but only under the conditions
+/// [`the_demo_shows_only_glosses_the_engine_can_account_for`] enforces. The two
+/// tests together are strictly stronger than the M6 blanket ban: that one merely
+/// said "this string must not appear", these say "every gloss printed must be one
+/// the engine can account for".
 #[test]
-fn the_demo_never_prints_the_unreachable_tazal_or_a_drifted_gloss() {
+fn the_demo_never_prints_the_unreachable_tazal() {
     let doc = asterian_demo();
     assert!(doc.contains("tagal"), "the real Highland form is present");
-    for faked in ["tazal", "omen", "royal sign", "night-signal"] {
+    for faked in ["tazal", "night-signal"] {
         assert!(!doc.contains(faked), "the demo fabricated `{faked}`");
+    }
+}
+
+/// **The generalised fence (M9).** Every gloss the demo prints must be traceable to
+/// something the engine holds: a built-in concept's gloss, or a semantic node
+/// declared by a language in the rendered family.
+///
+/// This replaces M6's hard-coded string ban with the *rule* that ban was standing in
+/// for. A future session that invents a pretty gloss and puts it in the prose fails
+/// here even though the string was never on any list.
+#[test]
+fn the_demo_shows_only_glosses_the_engine_can_account_for() {
+    use stem_lexicon::CONCEPTS;
+
+    let doc = asterian_demo();
+
+    // Glosses are extracted from the two GLOSS POSITIONS the document has, not from
+    // every quote — the prose legitimately quotes phrases like "drop the last
+    // vowel", and treating those as glosses would make this test noise.
+    //
+    //   1. a cognate cell:  `| taal "omen" |`
+    //   2. a trace header:  `*takala  "omen"  cog_asterian_attested_0001`
+    //
+    // Both are `<form> "<gloss>"`, so one scan finds them: a quoted run whose line
+    // also carries a form. The dictionary's `| gloss | form | IPA |` column is
+    // unquoted and is covered by `write_lexicon_markdown`'s own tests.
+    let mut quoted: Vec<String> = Vec::new();
+    for line in doc.lines() {
+        let is_cognate_cell = line.starts_with('|') && line.contains('"');
+        let is_trace_header = line.starts_with('*') && line.contains("  \"");
+        if !(is_cognate_cell || is_trace_header) {
+            continue;
+        }
+        let mut rest = line;
+        while let Some(open) = rest.find('"') {
+            rest = &rest[open + 1..];
+            match rest.find('"') {
+                Some(close) => {
+                    quoted.push(rest[..close].to_owned());
+                    rest = &rest[close + 1..];
+                }
+                None => break,
+            }
+        }
+    }
+    assert!(
+        !quoted.is_empty(),
+        "the scan found no gloss at all — it has stopped testing anything:\n{doc}"
+    );
+
+    // What the engine can account for: the built-in concept glosses, plus every
+    // sense declared by the fixture family (read from the files, not hard-coded).
+    let fixture = |name: &str| {
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../fixtures")
+            .join(name)
+    };
+    let mut accountable: Vec<String> = CONCEPTS.iter().map(|c| c.gloss.to_owned()).collect();
+    let drift: stem_lexicon::DriftSet =
+        stem_io::load(fixture("drift_coastal.ron")).expect("drift loads");
+    accountable.extend(drift.nodes.iter().map(|n| n.gloss.clone()));
+    let proto: LanguageGenome =
+        stem_io::load(fixture("asterian_attested.ron")).expect("proto loads");
+    accountable.extend(proto.semantics.nodes.iter().map(|n| n.gloss.clone()));
+
+    for gloss in &quoted {
+        // Only check strings that look like a gloss (a short lowercase phrase);
+        // the document also quotes prose fragments and rule names.
+        let looks_like_a_gloss = !gloss.is_empty()
+            && gloss.len() < 24
+            && gloss
+                .chars()
+                .all(|c| c.is_ascii_lowercase() || c == ' ' || c == '-' || c == ',');
+        if !looks_like_a_gloss {
+            continue;
+        }
+        // A comma-joined multi-sense label ("omen, royal sign") is accountable when
+        // each half is.
+        let all_parts_known = gloss
+            .split(',')
+            .map(str::trim)
+            .all(|part| accountable.iter().any(|a| a == part));
+        assert!(
+            all_parts_known,
+            "the demo printed the gloss `{gloss}`, which no concept and no declared \
+             sense accounts for — a fabricated meaning"
+        );
     }
 }
 

@@ -92,6 +92,18 @@
 
     prosody: (stress: fixed(from: left, offset: 0)),
 
+    // SEMANTICS (M9). One node: the inherited sense of *takala. Its gloss is
+    // "star", identical to what concept STAR already displays, so adding this block
+    // moves no rendered byte anywhere — it exists so that Coastal's drift has a
+    // REAL sense to remove, and so `SenseHistory.input` is literally true rather
+    // than inferred. Highland and Riverine never drift, so they simply keep it.
+    semantics: (
+        nodes: [
+            (id: "sn_star", gloss: "star", concept: "STAR",
+             note: "DESIGN §10.2's *takala 'star, bright thing' — the inherited sense."),
+        ],
+    ),
+
     lexicon: [
         // §10.2's worked example: *takala 'star'.
         (
@@ -102,6 +114,9 @@
                 (pattern: "CV", segments: ["ph_k", "ph_a"]),
                 (pattern: "CV", segments: ["ph_l", "ph_a"]),
             ]),
+            // The sense M9's drift acts on. Same displayed gloss as concept STAR,
+            // so every existing golden is byte-unchanged.
+            senses: [(node: "sn_star", gloss: "star")],
             part_of_speech: noun,
             cognate_set: "cog_asterian_attested_0001",
             source: authored,

@@ -5,8 +5,8 @@ A build log of what shipped and the notable decisions behind it. **Keep it hones
 acceptance tests live in [ROADMAP.md](ROADMAP.md); this is the backward-looking
 "what got done and why" companion.
 
-**Current phase:** Phase 2 — depth. M7 and M8 shipped; next milestone: **M9 —
-semantics v0**.
+**Current phase:** Phase 2 — depth. M7, M8 and M9 shipped; next milestone: **M10 —
+the sound-change DSL**.
 
 ## State of the tree
 
@@ -19,7 +19,81 @@ semantics v0**.
 | `stem_genome` | `LanguageGenome`, `fork`, `LineageGraph`, family validation, `render_family`, **`render_paradigm`**, plausibility profile | working |
 | `stem_io` | RON/JSON load & save | working — **untouched since M0** |
 | `stem_export` | Markdown dictionaries, CLDF CSV, cognate table, family demo | working — **untouched by M8** |
-| `stem_cli` | the `stemma` binary | …plus `profile`, `inflect`, `paradigm` |
+| `stem_cli` | the `stemma` binary | …plus `profile`, `inflect`, `paradigm`, `drift`, `drifts` |
+
+---
+
+## M9 — Semantics v0 · built 2026-08-07 · ✓ verified
+
+Meaning gets a history. A `semantics` block (senses) attaches to a genome, a
+`DriftSet` file carries authored, typed semantic shifts, and `stemma drift` applies
+them — recording, per word, exactly which event moved which sense and why.
+**504 tests pass**; clippy clean under `-D warnings`; fmt applied.
+
+**The acceptance, run end-to-end.** `stemma drift out/coastal.ron --drift
+fixtures/drift_coastal.ron …` turns Coastal's reflex of `*takala` into **"omen"**
+through two recorded shifts — a metaphor (`star → divine sign`, priestly, 180y) then
+a metonymy (`divine sign → omen, royal sign`, 340y) — while Highland's reflex still
+means **"star"**. And `stemma cognates` puts all three on **one row**:
+
+```
+meaning  asterian_attested  coastal  coastal_modern  highland
+star     *takala            taal     taal "omen"     tagal
+```
+
+The form `taal` is *identical* between the two Coastal stages: only the meaning
+moved. `stemma trace-word out/coastal_modern.ron omen` now prints §10.2's worked
+trace **in full** — the four sound changes, then the two semantic shifts with their
+mechanisms and register — which is the first time the program has rendered that
+example end to end. `stemma profile` scores `Semantic drift  drifted  (omen: 2)`.
+
+### Decisions worth knowing
+
+**Meaning is modelled exactly as form is (`docs/adr/0011`).** `senses` : `sense_history`
+:: `phonemic_form` : `trace`, field for field — `input` never rewritten, deltas only,
+`replay()`/`final_senses()`, a genome-level `applied_drifts` log beside
+`applied_rules`, and the same §16.3 property that the record reconstructs the state.
+Nothing new was invented for a job the project already had a mechanism for.
+
+**Drift writes `senses` and nothing else — above all not `cognate_set`.** That is the
+milestone: the drifted reflex keeps its row because the comparative table joins by
+*ancestry*. M5 shipped `the_cognate_table_joins_by_cognate_set_not_by_meaning` with a
+hand-built "omen" daughter to prove the table would survive this; M9 made that
+fiction real **without changing its assertion**.
+
+**The engine still does not know what a meaning is.** `evolve`'s signature is
+unchanged and `apply_rules` is still a pure RNG-free function of five arguments; a
+drifted word survives later sound change because `apply.rs` clones each entry whole.
+A second source-scan guard (`the_engine_never_references_semantics`) keeps it that
+way, the twin of M8's.
+
+**`display_gloss` gained one prepended tier and shadows, never overwrites.** Sense →
+authored override → concept gloss. Drift never touches `glosses`, so `*rekan`'s
+authored "king" survives and would return the moment its sense were removed.
+
+**The band measures distance travelled, and says so.** Deliberately named
+`SemanticDrift`, not §17's "semantic plausibility": scoring whether `star → omen` is
+a *plausible pathway* needs a typology the project does not have, and inventing one
+is the fabrication ADR-0009 forbids. `HighlyDrifted` and the
+`long_semantic_drift_chain` Note read one shared `LONG_SENSE_CHAIN = 3`; the demo's
+own two-step chain sits below it.
+
+**A dishonest test was caught and fixed.** `render_profile`'s `contains("M9")`
+assertion would have kept passing on `ScriptHistoryCoherence`'s `"M9+"` after the
+semantic row was filled. The deferred dimensions now name design *sections* (`§7.6`,
+`§18`) and the assertion is inverted.
+
+**The demo's anti-fabrication fence was rewritten stronger, not retired.** `tazal`
+and `night-signal` stay banned forever; `omen` is allowed only when a real event
+produced it, the mechanism is named, and the closer stops promising what shipped. A
+new general guard replaces the string list with the rule it stood for: every gloss
+printed must be a concept gloss or a declared sense.
+
+**Scope fenced (§20.1).** No LLM or probabilistic drift — v0 *applies* authored
+drift as M3 applies authored rules. No syntax, no script history, no polysemy graph,
+no sociolinguistics beyond a free-text register label, no `HistoricalEvent` union
+(it would renumber every stored `RuleApplication.index`). `EventId`, declared at M0
+and unused since, finally has a producer.
 
 ---
 

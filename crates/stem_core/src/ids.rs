@@ -113,8 +113,23 @@ define_id!(
 );
 define_id!(
     /// Identifies an entry in a language's history timeline.
+    ///
+    /// Declared at M0 and unused until M9, when `DriftEvent` became its first
+    /// producer (`docs/adr/0011`) — a semantic shift is §8.5's first
+    /// `HistoricalEventKind` to ship as data.
     EventId,
     "ev"
+);
+define_id!(
+    /// Identifies one sense — a meaning a word can hold — within one language (M9).
+    ///
+    /// Language-scoped like [`PhonemeId`] and [`MorphemeId`], and readable
+    /// (`docs/adr/0003`): `sn_star`, `sn_omen`. Two sisters both declaring
+    /// `sn_omen` is correct and is precisely how they agree about a shared sense —
+    /// cross-language identity of *meaning* is by this string, exactly as
+    /// cross-language identity of *ancestry* is by [`CognateSetId`].
+    SemanticNodeId,
+    "sn"
 );
 define_id!(
     /// Identifies a morpheme — a stem or an affix — within one language (M8).

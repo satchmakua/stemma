@@ -39,6 +39,14 @@ pub struct BranchSpec<'a> {
     pub name: &'a str,
     pub rules: &'a RuleSet,
     pub years: i32,
+    /// Semantic drift this branch also underwent (M9), or `None` for a branch
+    /// whose meanings did not move.
+    ///
+    /// Applied with `with_drift` **within the same stage**, so a drifted branch is
+    /// still **one node and one column** — the family tree and the comparative
+    /// table keep their shape, and the drift shows up as a changed meaning rather
+    /// than as a phantom extra language. Borrowed, so `BranchSpec` stays `Copy`.
+    pub drift: Option<&'a stem_lexicon::DriftSet>,
 }
 
 /// Grows each daughter off `proto` with [`LanguageGenome::evolve`] and assembles
@@ -58,8 +66,19 @@ pub fn grow_family(
     let mut reports = Vec::with_capacity(branches.len());
     nodes.push(proto.clone());
     for branch in branches {
-        let (daughter, report) =
+        let (daughter, mut report) =
             proto.evolve(branch.id, branch.name, branch.rules, branch.years)?;
+        // Forms first, then meanings — the order history ran them in, and the order
+        // §10.2's trace prints them. `with_drift` keeps the daughter's identity, so
+        // this stays one node per branch (M9).
+        let daughter = match branch.drift {
+            Some(set) => {
+                let (drifted, drift_report) = daughter.with_drift(set)?;
+                report.absorb("drift", drift_report);
+                drifted
+            }
+            None => daughter,
+        };
         nodes.push(daughter);
         reports.push(report);
     }
@@ -127,9 +146,34 @@ pub struct CognateRow {
     /// The cognate set of the reference word this meaning resolved to. `None` =
     /// the meaning named no word in the reference language (an all-gap row).
     pub cognate_set: Option<CognateSetId>,
-    /// `Some(written form)` per column, or `None` for a genuine gap (word death,
-    /// or a daughter that never inherited the set); renders as `—`.
-    pub cells: Vec<Option<String>>,
+    /// `Some(cell)` per column, or `None` for a genuine gap (word death, or a
+    /// daughter that never inherited the set); renders as `—`.
+    pub cells: Vec<Option<CognateCell>>,
+}
+
+/// One filled cell of the §10.3 table: the reflex, and what it means **in that
+/// column's own language** (M9).
+///
+/// # Why this is not a second join
+///
+/// The gloss is read off the entry `by_cognate_set` **already returned** — zero
+/// extra lookups. This crate's standing rule is that the table never *re-resolves a
+/// meaning per column*, because M9's drift would then drop a daughter out of its own
+/// row (the reflex means "omen" now, so a meaning join on "star" would miss it). A
+/// projection of the already-joined cell is not a resolution, and it is what lets
+/// the table show the drift it was designed to survive.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CognateCell {
+    /// The written form, rendered against this column's own inventory.
+    pub form: String,
+    /// This entry's displayed gloss in its own language.
+    pub gloss: Option<String>,
+    /// True when this cell's gloss differs from the **reference** cell's.
+    ///
+    /// Always false in the reference column. Renderers annotate only when this is
+    /// set, so a family whose meanings have not diverged renders byte-identically
+    /// to its pre-M9 output.
+    pub drifted: bool,
 }
 
 /// DESIGN.md §10.3's comparative table: reflexes of each meaning across a
@@ -431,13 +475,34 @@ impl LineageGraph {
             }
             let set = word.cognate_set.clone();
 
+            // The meaning the reference column shows — what a drifted daughter is
+            // compared *against*. Read off the already-joined reference entry, so
+            // this is a projection of the join and not a second resolution.
+            let reference_gloss = reference_node
+                .lexicon
+                .by_cognate_set(&set)
+                .and_then(|e| e.display_gloss())
+                .map(str::to_owned);
+
             let mut cells = Vec::with_capacity(columns.len());
-            for node in &self.nodes {
+            for (i, node) in self.nodes.iter().enumerate() {
                 // Render each cell against its OWN inventory — Highland `tagal`
                 // carries `ph_g`, absent from the proto inventory, so rendering
                 // with the reference's would make `written` fail and abort.
                 let cell = match node.lexicon.by_cognate_set(&set) {
-                    Some(entry) => Some(entry.written(&node.phonemes)?),
+                    Some(entry) => {
+                        let gloss = entry.display_gloss().map(str::to_owned);
+                        // M9: has this column's sense moved away from the
+                        // reference's? Purely textual, so it also catches a
+                        // hand-authored divergence and needs no drift history. The
+                        // reference column is never "drifted" from itself.
+                        let drifted = i > 0 && gloss.is_some() && gloss != reference_gloss;
+                        Some(CognateCell {
+                            form: entry.written(&node.phonemes)?,
+                            gloss,
+                            drifted,
+                        })
+                    }
                     None => None,
                 };
                 cells.push(cell);
@@ -823,10 +888,24 @@ fn render_subtree(
 pub fn render_cognate_table(table: &CognateTable) -> String {
     // The first column is the meaning label; the rest are the languages.
     let meaning_header = "meaning";
+    // M9: a cell whose sense has moved away from the reference's shows what it
+    // means now, in quotes, after the form. Annotated **only** when drifted, so a
+    // family with no meaning divergence renders exactly the bytes it did pre-M9 —
+    // which is what keeps the M5 and M6 snapshot pins valid. Column widths derive
+    // from this closure, so the annotation is width-correct by construction.
     let cell_of = |row: &CognateRow, col: usize| -> String {
         match &row.cells[col] {
-            Some(form) if table.columns[col].is_root => format!("*{form}"),
-            Some(form) => form.clone(),
+            Some(cell) => {
+                let form = if table.columns[col].is_root {
+                    format!("*{}", cell.form)
+                } else {
+                    cell.form.clone()
+                };
+                match (&cell.gloss, cell.drifted) {
+                    (Some(gloss), true) => format!("{form} \"{gloss}\""),
+                    _ => form,
+                }
+            }
             None => "—".to_owned(),
         }
     };
@@ -951,6 +1030,8 @@ mod tests {
             source: WordSource::Authored,
             trace: None,
             morphemes: Vec::new(),
+            senses: Vec::new(),
+            sense_history: None,
         });
         genome.lexicon = Lexicon::from_entries(entries);
         genome
@@ -1266,6 +1347,8 @@ mod tests {
                 source: WordSource::Authored,
                 trace: None,
                 morphemes: Vec::new(),
+                senses: Vec::new(),
+                sense_history: None,
             });
         genome.lexicon = Lexicon::from_entries(entries);
         genome
@@ -1385,7 +1468,11 @@ mod tests {
         let graph = LineageGraph::assemble(vec![worded("p", None, &[("star", "cog_s", 1)])]);
         let mut table = graph.cognate_table(&["star".to_owned()]).unwrap();
         // Force a multi-byte reflex to exercise char-count padding.
-        table.rows[0].cells[0] = Some("ŋaŋ".to_owned());
+        table.rows[0].cells[0] = Some(CognateCell {
+            form: "ŋaŋ".to_owned(),
+            gloss: None,
+            drifted: false,
+        });
         let text = render_cognate_table(&table);
         // "star" (4 chars) is wider than the "*ŋaŋ" reflex (4 chars incl. star),
         // so the row and header meaning columns start the language column at the
@@ -1452,12 +1539,14 @@ mod tests {
                 name: "Coastal",
                 rules: &rc,
                 years: 100,
+                drift: None,
             },
             BranchSpec {
                 id: "highland",
                 name: "Highland",
                 rules: &rh,
                 years: 90,
+                drift: None,
             },
         ];
         let (graph, _reports) = grow_family(&proto, &branches).unwrap();
@@ -1480,12 +1569,14 @@ mod tests {
                 name: "Coastal",
                 rules: &rc,
                 years: 100,
+                drift: None,
             },
             BranchSpec {
                 id: "highland",
                 name: "Highland",
                 rules: &rh,
                 years: 90,
+                drift: None,
             },
         ];
         let (_graph, reports) = grow_family(&proto, &branches).unwrap();
