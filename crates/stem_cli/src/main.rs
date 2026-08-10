@@ -384,6 +384,29 @@ fn run() -> Result<ExitCode> {
     }
 }
 
+/// Loads a rule set from `.ron`, `.json`, or M10's `.sc` DSL.
+///
+/// The extension picks the reader and nothing else: a `.sc` file is parsed by
+/// `stem_soundchange::parse_rule_set` into the *same* `RuleSet` a `.ron` file
+/// deserialises to, and every caller downstream is identical either way. This
+/// dispatch lives here rather than in `stem_io` because `stem_io` is generic over
+/// serde and must never learn a domain type, and rather than in `stem_soundchange`
+/// because that crate sits below `stem_io` in the graph and does no file I/O. It is
+/// plumbing, not logic — the parser itself is a library.
+fn load_rule_set(path: &std::path::Path) -> Result<stem_soundchange::RuleSet> {
+    let is_dsl = path
+        .extension()
+        .is_some_and(|e| e.eq_ignore_ascii_case("sc"));
+    if !is_dsl {
+        return stem_io::load(path)
+            .with_context(|| format!("loading rules from `{}`", path.display()));
+    }
+    let source = std::fs::read_to_string(path)
+        .with_context(|| format!("reading rules from `{}`", path.display()))?;
+    stem_soundchange::parse_rule_set(&source, &path.display().to_string())
+        .with_context(|| format!("parsing rules from `{}`", path.display()))
+}
+
 /// Loads a genome, reporting which file failed if it does.
 fn load_genome(path: &std::path::Path) -> Result<LanguageGenome> {
     stem_io::load(path).with_context(|| format!("loading language from `{}`", path.display()))
@@ -675,8 +698,7 @@ fn evolve_with_rules(
     name: &str,
     years: i32,
 ) -> Result<(LanguageGenome, ValidationReport)> {
-    let rule_set: stem_soundchange::RuleSet = stem_io::load(rules_path)
-        .with_context(|| format!("loading rules from `{}`", rules_path.display()))?;
+    let rule_set = load_rule_set(rules_path)?;
     parent
         .evolve(id, name, &rule_set, years)
         .with_context(|| format!("evolving `{}` under `{}`", parent.name, rule_set.name))
@@ -1000,8 +1022,7 @@ fn trace(path: &std::path::Path, word: &str) -> Result<ExitCode> {
 }
 
 fn rules_summary(path: &std::path::Path) -> Result<ExitCode> {
-    let rule_set: stem_soundchange::RuleSet =
-        stem_io::load(path).with_context(|| format!("loading rules from `{}`", path.display()))?;
+    let rule_set = load_rule_set(path)?;
 
     println!("{} ({})", rule_set.name, rule_set.id);
     if !rule_set.description.is_empty() {

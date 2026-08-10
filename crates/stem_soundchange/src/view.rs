@@ -10,7 +10,7 @@ use std::fmt::Write;
 
 use serde::Serialize;
 use stem_core::{PhonemeId, Result, StemmaError, ValidationReport};
-use stem_lexicon::{RuleApplication, SymbolResolution, WordEntry};
+use stem_lexicon::{BlockReason, RuleApplication, SymbolResolution, WordEntry};
 use stem_phonology::prosody::Stress;
 use stem_phonology::{PhonemeInventory, Root};
 
@@ -247,10 +247,10 @@ pub fn render_derivation(
                     push(
                         &mut out,
                         &format!(
-                            "  │    matched at [{},{}) and was refused: {:?}",
+                            "  │    matched at [{},{}) and was refused: {}",
                             blocked.at,
                             blocked.at + 1,
-                            blocked.reason
+                            explain_refusal(&blocked.reason)
                         ),
                     )?;
                 }
@@ -287,6 +287,44 @@ pub fn render_derivation(
 }
 
 /// `TA.ka.la` — syllables joined with dots, the primary-stressed one uppercased.
+/// Why a matched site was refused, in prose (§20.4's "why did this not apply?").
+///
+/// The trace used to render [`BlockReason`] with `{:?}`, which showed a reader
+/// `Unnameable { bundle: "+syllabic -voice" }` — the *shape of the enum* rather than
+/// the answer to their question. Every arm now names the cause and, where there is
+/// one, the fix. A diagnostic that requires knowing the type definition is not a
+/// diagnostic. The variants remain the machine-readable record; this is the view.
+fn explain_refusal(reason: &BlockReason) -> String {
+    match reason {
+        BlockReason::Unnameable { bundle } => format!(
+            "the result `{bundle}` is a segment neither this language nor the reference \
+             table can name — declare a phoneme with those features to allow it"
+        ),
+        BlockReason::IllFormed { missing } => format!(
+            "the result would lack the required feature{} {} — a change writes cells and \
+             never repairs the outcome",
+            if missing.len() == 1 { "" } else { "s" },
+            missing.join(", ")
+        ),
+        BlockReason::SymbolHeld { ipa, by } => format!(
+            "the result would be spelled /{ipa}/, which `{by}` already holds with different \
+             features; minting it would make the inventory ambiguous"
+        ),
+        BlockReason::IdHeld { id } => format!(
+            "the result would be minted as `{id}`, already taken by a phoneme with different \
+             features"
+        ),
+        BlockReason::DonorHasNoNode { node, donor } => format!(
+            "the copy source `{donor}` values no {node} feature, so there was nothing to \
+             copy — a `copy` moves a node including its absence, and an absent source node \
+             cannot be read"
+        ),
+        BlockReason::WouldEmptyWord => "applying every deletion this rule matched would leave \
+             the word with no segments at all, so the whole set was refused"
+            .to_owned(),
+    }
+}
+
 fn stressed_syllabification(root: &Root, inventory: &PhonemeInventory) -> Result<String> {
     let mut parts = Vec::with_capacity(root.syllables.len());
     for syllable in &root.syllables {

@@ -148,11 +148,14 @@ explosion is the top risk to this project._
   `stemma trace-word … omen` prints §10.2's worked trace in full, both halves.
   504 tests green.
 
-- [ ] **M10 — Sound-change DSL.** Only now, with the semantics settled, add the
+- [x] **M10 — Sound-change DSL.** Only now, with the semantics settled, add the
   readable rule syntax of §11.1 as a parser over the M3 structs — plus "why did
   this rule not apply?" diagnostics (§20.4).
   **Test:** the M3 rule set expressed in the DSL produces byte-identical output to
-  the hand-built structs.
+  the hand-built structs. ✅ `fixtures/rules_asterian.sc` expresses the four M3 rules
+  in §11.1's syntax; `apply-rules` with the `.sc` and with the `.ron` produce files
+  that `cmp` reports identical, and `the_dsl_and_the_ron_set_produce_byte_identical_output`
+  pins it on the serialised bytes. 528 tests green.
 
 - [ ] **M11 — Visual explorer.** The first UI (§10), read-only to start. Not before
   the engine works — §20.5.
