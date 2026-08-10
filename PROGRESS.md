@@ -5,8 +5,8 @@ A build log of what shipped and the notable decisions behind it. **Keep it hones
 acceptance tests live in [ROADMAP.md](ROADMAP.md); this is the backward-looking
 "what got done and why" companion.
 
-**Current phase:** Phase 2 — depth. M7, M8 and M9 shipped; next milestone: **M10 —
-the sound-change DSL**.
+**Current phase:** Phase 2 — depth. M7–M10 shipped; next milestone: **M11 — the
+visual explorer**, the first UI (§10, §20.5).
 
 ## State of the tree
 
@@ -20,6 +20,71 @@ the sound-change DSL**.
 | `stem_io` | RON/JSON load & save | working — **untouched since M0** |
 | `stem_export` | Markdown dictionaries, CLDF CSV, cognate table, family demo | working |
 | `stem_cli` | the `stemma` binary | …plus `profile`, `inflect`, `paradigm`, `drift`, `drifts` |
+
+---
+
+## M10 — Sound-change DSL · built 2026-08-09 · ✓ verified
+
+Rules become readable. `fixtures/rules_asterian.sc` writes the four M3 sound changes
+in §11.1's syntax, and `stemma apply-rules`/`fork --rules`/`rules` accept a `.sc`
+wherever they accepted a `.ron`. **528 tests pass**; clippy clean under `-D warnings`.
+
+```text
+rule r_0001 "Intervocalic voicing":
+  note: "Voiceless stops voice between vowels."
+  at: 250
+  target: [-sonorant, -continuant, -voice]
+  environment: [+syllabic] _ [+syllabic]
+  change: set [+voice]
+```
+
+**The acceptance is the word "byte-identical", and it is checked as bytes.** Applying
+the `.sc` and applying the `.ron` produce files `cmp` reports identical — not
+equivalent-looking, identical — and `stemma trace` on the result prints §10.2's chain
+`takala → tagala → tagal → taɣal` exactly as the struct-driven pipeline does. That is
+what makes the parser a **front end** rather than a second engine (`docs/adr/0012`):
+if this syntax could express something the structs could not, or the same thing
+differently, the claim would be false.
+
+### Decisions worth knowing
+
+**The parser owns no semantics of its own.** Feature names go straight to
+`stem_phonology`'s existing `FeatureBundle::try_from` — there is no spelling the DSL
+accepts and the engine does not, because there is only one list. The "did you mean
+`syllabic`?" suggestion on a typo comes free from the same place.
+
+**Two acceptance tests, deliberately separate.** One compares the parsed structs to
+the deserialised ones; the other compares the evolved output as bytes. If the first
+passes and the second fails, the engine is nondeterministic; if the first fails, the
+parser is wrong. A single combined test would show the same red for two unrelated
+defects.
+
+**Three forced deviations from §11.1's sketch**, each argued in the ADR: a rule
+carries an id *and* a name (traces need a stable `RuleId`, humans need a name);
+`change: set [+voice]` rather than `voice = true` (the bracket already means "valued
+cells", and reusing it makes multi-cell changes fall out); and `copy` exists at all —
+§11.1 has no syntax for it, and without it the DSL could not express one of the four
+reference rules, putting the byte-identical claim out of reach.
+
+**`V` and `C` are bundle aliases, not letter classes.** §11.1 writes `V _ V`, so the
+shorthand ships, expanding to `[+syllabic]`/`[-syllabic]` with a test pinning the
+equality. §7.1 is intact: `V` is not "a, e, i, o, u" but a natural class — which is
+why a segment a *later rule invents* falls into it automatically.
+
+**The comment marker is `//`, because `#` is the word boundary.** A line-leading
+`# note` is indistinguishable from a standalone boundary by any local rule, and every
+heuristic separating them makes the lexer depend on the parser — which is how a
+comment starts silently changing a rule.
+
+**§20.4's "why did this rule not apply?" diagnostics were already built at M3**, at
+three levels: pre-flight, per run, and per word. M10's honest contribution was
+finding that refusal reasons rendered with `{:?}` — a reader saw
+`Unnameable { bundle: "+syllabic -voice" }`, the shape of the enum rather than the
+answer to their question. Now prose, naming the cause and the fix.
+
+**Deferred:** rule scopes (§11.3's "nouns only", "coastal dialect only" — they need
+struct fields that do not exist), probabilistic rules, exception patterns, imports
+between rule files, a `.ron` → `.sc` emitter, editor tooling.
 
 ---
 

@@ -33,12 +33,14 @@
 
 pub mod apply;
 pub mod check;
+pub mod dsl;
 mod resolve;
 pub mod rule;
 pub mod view;
 
 pub use apply::{Evolution, apply_rules};
 pub use check::{check_against_language, check_applied_log};
+pub use dsl::parse_rule_set;
 pub use rule::{Change, EnvItem, Environment, Position, RuleSet, SegmentPattern, SoundChangeRule};
 pub use view::{MatchView, TraceView, render_derivation, view};
 
