@@ -74,7 +74,15 @@ pub fn grow_family(
         let daughter = match branch.drift {
             Some(set) => {
                 let (drifted, drift_report) = daughter.with_drift(set)?;
-                report.absorb("drift", drift_report);
+                // Merged, NOT absorbed: `with_drift` has already scoped everything
+                // it reports under `drift`, so absorbing again would yield
+                // `drift.drift.no_effect` — and, once the caller adds the branch id,
+                // `coastal.drift.drift.no_effect`. The `evolve` arm above does not
+                // re-scope its `rules.*` / `soundchange.*` codes either; both halves
+                // of this loop treat the callee as the owner of its own scope.
+                for issue in drift_report.issues {
+                    report.push(issue);
+                }
                 drifted
             }
             None => daughter,
@@ -496,7 +504,15 @@ impl LineageGraph {
                         // reference's? Purely textual, so it also catches a
                         // hand-authored divergence and needs no drift history. The
                         // reference column is never "drifted" from itself.
-                        let drifted = i > 0 && gloss.is_some() && gloss != reference_gloss;
+                        //
+                        // `reference_gloss.is_some()` guards an asymmetry: with no
+                        // reference gloss to compare against there is no divergence
+                        // to claim, and without this every other column would be
+                        // annotated as drifted from nothing.
+                        let drifted = i > 0
+                            && gloss.is_some()
+                            && reference_gloss.is_some()
+                            && gloss != reference_gloss;
                         Some(CognateCell {
                             form: entry.written(&node.phonemes)?,
                             gloss,

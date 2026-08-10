@@ -129,8 +129,17 @@ mod guard {
                     "SenseShift",
                     "SenseChain",
                     "Drift", // DriftEvent, DriftSet, DriftMechanism, DriftOutcome
+                    // The lowercase *operations*, named in full. The capitalised
+                    // entries above are case-sensitive, so `check_against_semantics`
+                    // and `check_drift_against_language` would slip past them —
+                    // and those are precisely the functions that would signal the
+                    // engine had started reasoning about meaning. Bare `sense` is
+                    // deliberately NOT banned: the engine legitimately carries the
+                    // `senses` / `sense_history` fields through its entry clone.
                     "apply_drift",
                     "sense_chains",
+                    "check_against_semantics",
+                    "check_drift_against_language",
                 ] {
                     assert!(
                         !code.contains(banned),

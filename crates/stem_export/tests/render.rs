@@ -493,6 +493,7 @@ fn the_demo_shows_only_glosses_the_engine_can_account_for() {
         stem_io::load(fixture("asterian_attested.ron")).expect("proto loads");
     accountable.extend(proto.semantics.nodes.iter().map(|n| n.gloss.clone()));
 
+    let mut checked = 0usize;
     for gloss in &quoted {
         // Only check strings that look like a gloss (a short lowercase phrase);
         // the document also quotes prose fragments and rule names.
@@ -504,6 +505,7 @@ fn the_demo_shows_only_glosses_the_engine_can_account_for() {
         if !looks_like_a_gloss {
             continue;
         }
+        checked += 1;
         // A comma-joined multi-sense label ("omen, royal sign") is accountable when
         // each half is.
         let all_parts_known = gloss
@@ -516,6 +518,18 @@ fn the_demo_shows_only_glosses_the_engine_can_account_for() {
              sense accounts for — a fabricated meaning"
         );
     }
+
+    // The `looks_like_a_gloss` filter is an escape hatch — it skips anything with a
+    // capital or over 24 characters — so a fabricated `"Royal Sign"` would slip past
+    // unexamined. It cannot be dropped (the two scanned line shapes could grow other
+    // quoted content), but it CAN be stopped from silently swallowing everything:
+    // if it ever rejects every candidate, this test is asserting nothing and must
+    // say so rather than passing.
+    assert!(
+        checked > 0,
+        "every candidate was filtered out before being checked — the fence is no \
+         longer testing anything. Found these quoted strings: {quoted:?}"
+    );
 }
 
 #[test]

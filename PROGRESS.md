@@ -12,13 +12,13 @@ the sound-change DSL**.
 
 | Crate | Holds | Status |
 |---|---|---|
-| `stem_core` | typed IDs (`MorphemeId` since M8), `StemmaError`, `Validate` / `ValidationReport`, `rng`, `suggest` | working |
+| `stem_core` | typed IDs (`MorphemeId` M8, `SemanticNodeId` M9), `StemmaError`, `Validate` / `ValidationReport`, `rng`, `suggest` | working |
 | `stem_phonology` | features, `Phoneme`, inventory, phonotactics, root generation | working |
-| `stem_lexicon` | `WordEntry`, `Lexicon`, the 103-concept list, cognate-set minting, **morphemes / `compose` / `inflect` / allomorph measure** | working |
-| `stem_soundchange` | rules, matching, ordered application, resolution, traces | working — **untouched by M8** |
-| `stem_genome` | `LanguageGenome`, `fork`, `LineageGraph`, family validation, `render_family`, **`render_paradigm`**, plausibility profile | working |
+| `stem_lexicon` | `WordEntry`, `Lexicon`, the 103-concept list, cognate-set minting, morphemes / `compose` / `inflect`, **senses / `apply_drift` / sense history** | working |
+| `stem_soundchange` | rules, matching, ordered application, resolution, traces | working — **untouched by M8 and M9** |
+| `stem_genome` | `LanguageGenome`, `fork`, `LineageGraph`, family validation, `render_family`, `render_paradigm`, **`with_drift` / `render_word_history`**, plausibility profile | working |
 | `stem_io` | RON/JSON load & save | working — **untouched since M0** |
-| `stem_export` | Markdown dictionaries, CLDF CSV, cognate table, family demo | working — **untouched by M8** |
+| `stem_export` | Markdown dictionaries, CLDF CSV, cognate table, family demo | working |
 | `stem_cli` | the `stemma` binary | …plus `profile`, `inflect`, `paradigm`, `drift`, `drifts` |
 
 ---
@@ -28,7 +28,7 @@ the sound-change DSL**.
 Meaning gets a history. A `semantics` block (senses) attaches to a genome, a
 `DriftSet` file carries authored, typed semantic shifts, and `stemma drift` applies
 them — recording, per word, exactly which event moved which sense and why.
-**504 tests pass**; clippy clean under `-D warnings`; fmt applied.
+**509 tests pass**; clippy clean under `-D warnings`; fmt applied.
 
 **The acceptance, run end-to-end.** `stemma drift out/coastal.ron --drift
 fixtures/drift_coastal.ron …` turns Coastal's reflex of `*takala` into **"omen"**
@@ -46,6 +46,93 @@ moved. `stemma trace-word out/coastal_modern.ron omen` now prints §10.2's worke
 trace **in full** — the four sound changes, then the two semantic shifts with their
 mechanisms and register — which is the first time the program has rendered that
 example end to end. `stemma profile` scores `Semantic drift  drifted  (omen: 2)`.
+
+### Review status — panels unavailable on this plan; reviewed inline, 11 defects fixed
+
+**The adversarial panel has never fully run.** Attempt 1: five of nine agents died on
+a session limit, *including every verifier*. Attempt 2: five of six died; only the
+`simplification` finder completed. Both attempts reported "0 confirmed findings",
+and both times that meant **the review did not happen** — not that the code was
+clean. Recorded plainly because an unrun review reporting nothing is the most
+dangerous kind of green. The account is on a plan
+whose limit these panels reliably exhaust, so **the remaining four dimensions
+(correctness, constraints, edge cases, tests/docs/scope) were reviewed inline
+instead** — by reading the code directly rather than spawning agents. That is the
+standing arrangement for this project until the plan changes: panels are a luxury,
+the review still happens.
+
+Attempt 1 also revealed a defect *in the review harness itself*: its verify stage
+returned `(v && v.verified) || []`, so a dead verifier silently converted its
+dimension's findings into an empty list. **19 findings were thrown away.** They were
+recovered from the run journal afterwards; the rewritten script now carries raw
+findings through regardless of verifier fate.
+
+Between the recovered findings and a direct self-review, **seven real defects were
+found and fixed**:
+
+1. **`apply_drift` and `replay` could disagree, so the engine emitted genomes that
+   failed its own validation.** The applier filtered acquired senses against `held`
+   (survivors ∪ removed) while `replay` filters against the *growing* survivor set.
+   Two desyncs followed: `add: ["sn_x","sn_x"]` stored the sense twice but replayed
+   once, and a sense named in **both** `remove` and `add` was deleted by the applier
+   and restored by replay. Either tripped `semantics.sense_history_desync` — an
+   **Error** — on a file the engine had just written, reachable from an ordinary
+   authored fixture. Fixed by extracting `advance()`, now **the single definition of
+   what a drift step does**, called by both. The agreement is structural, not a
+   comment. Two regression tests fail under the old code.
+2. **`render_sense_history` resolved a step's event by id, not by its stored index**,
+   while `render_derivation` has always resolved by index. `applied_drifts` is a
+   *log* whose ids may repeat across strata, so a later step sharing an id rendered
+   the earlier event's mechanism, register and date. The accompanying `.filter()`
+   was dead logic — its closure ignored the element. Three independent finders and
+   the self-review converged on this one.
+3. **`grow_family` re-scoped an already-scoped drift report**, so `with_drift`'s
+   `drift.*` codes became `drift.drift.*` and, with the branch id,
+   `coastal.drift.drift.no_effect`. The `evolve` arm did not re-scope, so the two
+   halves of one loop disagreed about who owns the scope. Now merged, not absorbed.
+4. **`check_against_semantics` re-implemented `replay`'s fold verbatim** — the same
+   divergence class M8's review caught. It now consumes `replay()`.
+5. **`target_not_found` was emitted by both the pre-flight check and the applier**,
+   printing one fact twice under one code. The pre-flight is now
+   `target_not_in_lexicon`; the sound-change precedent keeps its pre-flight and run
+   codes disjoint for the same reason.
+6. **Padding was hand-rolled five times across `stem_genome`, with two different
+   underflow policies.** Three copies used bare `width - len`, safe only under an
+   invariant nothing stated or checked — a computed label would panic. Hoisted to
+   one `crate::pad`, char-counted and saturating.
+7. **The engine's semantics guard had a case-sensitivity hole**: banning `"Semantic"`
+   and `"Drift"` capitalized let `check_against_semantics` and
+   `check_drift_against_language` straight through — the two functions whose
+   appearance would *mean* the engine had started reasoning about meaning. A guard
+   that does not guard is worse than none.
+
+Four more from the inline pass:
+
+8. **`sense_history_desync` could not catch the thing it exists for.** It compared
+   `replayed.len() == held.len()` plus one-way containment, so `replayed = [A, A]`
+   against `held = [A, B]` passed — matching counts, every replayed id present, and
+   `B` a sense the word holds with **no recorded provenance at all**. Containment now
+   runs both ways.
+9. **Half an event could silently do nothing.** `no_effect` fires only when the
+   *whole* event is inert, so a removal naming a sense the word never held went
+   unreported whenever the same event's `add` succeeded. Now a
+   `removal_matched_nothing` Note — "why didn't my change apply here?" is the
+   question this project treats as always worth answering.
+10. **`CognateCell.drifted` was asymmetric**: with no reference gloss to compare
+    against, every other column was annotated as having drifted from nothing.
+11. **The generalised anti-fabrication fence had an unguarded escape hatch.** Its
+    `looks_like_a_gloss` filter skips anything capitalised or over 24 characters, so
+    a fabricated `"Royal Sign"` would pass unexamined — and nothing asserted the
+    filter wasn't rejecting *everything*. It now fails loudly if it ever stops
+    checking, the same protection the scan itself already had.
+
+Smaller fixes: the dead `fmt_err` kept alive by `#[allow(dead_code)]` (an attribute
+suppressing an accurate diagnostic); the `left_no_sense` message naming the wrong
+fallback (`display_gloss` prefers an authored override, not the concept); and the
+`semantic_drift` band's leading match arm that ignored its own scrutinee.
+
+Verified by hand throughout: the three serde/validation pins hold, and `stemma demo`
+and `stemma drift` are each byte-identical across two runs.
 
 ### Decisions worth knowing
 

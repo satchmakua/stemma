@@ -220,12 +220,19 @@ impl LanguageGenome {
             .into_iter()
             .map(|c| (c.gloss, c.shifts))
             .collect();
-        let semantic_drift = match chains.iter().map(|(_, n)| *n).max() {
-            _ if self.semantics.is_empty() && chains.is_empty() => SemanticDrift::None,
-            None => SemanticDrift::Stable,
-            Some(max) if max >= LONG_SENSE_CHAIN => SemanticDrift::HighlyDrifted,
-            Some(max) if max > 0 => SemanticDrift::Drifted,
-            Some(_) => SemanticDrift::Stable,
+        let semantic_drift = if self.semantics.is_empty() && chains.is_empty() {
+            // Nothing declared and nothing recorded: there is no meaning history to
+            // measure. A fact, not a low score.
+            SemanticDrift::None
+        } else {
+            match chains.iter().map(|(_, n)| *n).max() {
+                // Senses exist; no word has a recorded history.
+                None => SemanticDrift::Stable,
+                Some(max) if max >= LONG_SENSE_CHAIN => SemanticDrift::HighlyDrifted,
+                Some(max) if max > 0 => SemanticDrift::Drifted,
+                // Histories exist but record no shift — still stable.
+                Some(_) => SemanticDrift::Stable,
+            }
         };
 
         PlausibilityProfile {
@@ -276,7 +283,7 @@ pub fn render_profile(profile: &PlausibilityProfile, name: &str) -> String {
         .map(|l| l.chars().count())
         .max()
         .unwrap_or(0);
-    let pad = |label: &str| " ".repeat(width - label.chars().count());
+    let pad = |label: &str| crate::pad(label, width);
 
     let depth_line = match profile.historical_depth {
         HistoricalDepth::None => "none  (no recorded sound changes)".to_owned(),
@@ -368,7 +375,7 @@ pub fn render_profile(profile: &PlausibilityProfile, name: &str) -> String {
         .max()
         .unwrap_or(0);
     for dim in NOT_MODELLED {
-        let gap = " ".repeat(nm_width - dim.label().chars().count());
+        let gap = crate::pad(dim.label(), nm_width);
         out.push_str(&format!(
             "    {}{}  {}\n",
             dim.label(),

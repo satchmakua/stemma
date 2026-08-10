@@ -243,6 +243,42 @@ pub struct SenseShift {
     pub added: Vec<SemanticNodeId>,
 }
 
+/// Applies one step's deltas to `current`, returning what was **effectively**
+/// removed and added.
+///
+/// **This is the single definition of what a drift step does.** Both
+/// [`apply_drift`] (which performs a step) and [`SenseHistory::replay`] (which
+/// reconstructs one) go through here, so the state the engine stores and the state
+/// the record replays to cannot diverge — and `semantics.sense_history_desync` is an
+/// Error precisely for that divergence, so a second transcription of this fold would
+/// let the engine emit a genome that fails its own validation.
+///
+/// The two subtleties both fall out of using one implementation rather than needing
+/// to be restated as caveats: a sense named in **both** `remove` and `add` is
+/// dropped and then re-added (a re-assertion survives), and a repeated id inside
+/// `add` lands once (`current` grows as it goes).
+fn advance(
+    current: &mut Vec<SemanticNodeId>,
+    remove: &[SemanticNodeId],
+    add: &[SemanticNodeId],
+) -> (Vec<SemanticNodeId>, Vec<SemanticNodeId>) {
+    let removed: Vec<SemanticNodeId> = current
+        .iter()
+        .filter(|id| remove.contains(id))
+        .cloned()
+        .collect();
+    current.retain(|id| !remove.contains(id));
+
+    let mut added = Vec::new();
+    for id in add {
+        if !current.contains(id) {
+            current.push(id.clone());
+            added.push(id.clone());
+        }
+    }
+    (removed, added)
+}
+
 impl SenseHistory {
     /// Every intermediate sense set, one per step, folding `steps` over `input`.
     ///
@@ -254,12 +290,7 @@ impl SenseHistory {
         let mut current = self.input.clone();
         let mut states = Vec::with_capacity(self.steps.len());
         for step in &self.steps {
-            current.retain(|id| !step.removed.contains(id));
-            for id in &step.added {
-                if !current.contains(id) {
-                    current.push(id.clone());
-                }
-            }
+            advance(&mut current, &step.removed, &step.added);
             states.push(current.clone());
         }
         states
@@ -574,18 +605,12 @@ pub fn apply_drift(
         // this is the first event ever to name the word.
         let held: Vec<SemanticNodeId> = entry.senses.iter().map(|s| s.node.clone()).collect();
 
-        // Effective deltas: what actually happens, not what was asked for.
-        let removed: Vec<SemanticNodeId> = held
-            .iter()
-            .filter(|id| event.remove.contains(id))
-            .cloned()
-            .collect();
-        let added: Vec<SemanticNodeId> = event
-            .add
-            .iter()
-            .filter(|id| !held.contains(id))
-            .cloned()
-            .collect();
+        // The effective deltas — what actually happened, not what was asked for —
+        // computed by **the same `advance` the record's `replay` uses**. Sharing one
+        // implementation is what makes "the state the engine stores" and "the state
+        // the record replays to" agree by construction rather than by comment.
+        let mut current = held.clone();
+        let (removed, added) = advance(&mut current, &event.remove, &event.add);
 
         // Survivors keep their order; the acquired senses are appended.
         entry.senses.retain(|s| !removed.contains(&s.node));
@@ -613,6 +638,29 @@ pub fn apply_drift(
             removed: removed.clone(),
             added: added.clone(),
         });
+
+        // A declared removal that matched nothing. Reported even when the event
+        // *did* something else, because `no_effect` below only fires when the whole
+        // event was inert — so half an event silently doing nothing would otherwise
+        // pass unremarked, and "why didn't my change apply here?" is the question
+        // this project treats as the one worth always answering. A Note: naming a
+        // sense a word does not hold is odd, not broken.
+        for id in &event.remove {
+            if !removed.contains(id) {
+                report.push(
+                    Issue::new(
+                        Severity::Note,
+                        "removal_matched_nothing",
+                        format!(
+                            "event `{}` removes sense `{id}` from word `{}`, which did not hold \
+                             it; that half of the event changed nothing",
+                            event.id, event.word
+                        ),
+                    )
+                    .about(&event.id),
+                );
+            }
+        }
 
         if removed.is_empty() && added.is_empty() {
             report.push(
@@ -694,7 +742,12 @@ pub fn check_drift_against_language(
             report.push(
                 Issue::new(
                     Severity::Warning,
-                    "target_not_found",
+                    // A DISTINCT code from the applier's `target_not_found`: both
+                    // fire for one condition, and `with_drift` runs the check and
+                    // then the applier, so one shared code would print the same
+                    // fact twice and read as two problems. The sound-change
+                    // precedent keeps its pre-flight and run codes disjoint too.
+                    "target_not_in_lexicon",
                     format!(
                         "event `{}` names word `{}`, which this lexicon does not hold",
                         event.id, event.word
@@ -801,7 +854,14 @@ pub fn check_against_semantics(
         // SETS: salience order is authorial and carries no claim.
         let replayed = history.final_senses();
         let held: Vec<SemanticNodeId> = entry.senses.iter().map(|s| s.node.clone()).collect();
-        let same = replayed.len() == held.len() && replayed.iter().all(|id| held.contains(id));
+        // Containment **both ways**, not just replayed-in-held. A one-way check
+        // plus equal lengths passes on `replayed = [A, A]` against
+        // `held = [A, B]` — every replayed id is present, the counts agree, and `B`
+        // is a sense the word holds with no recorded provenance whatsoever, which
+        // is precisely what this Error exists to catch.
+        let same = replayed.len() == held.len()
+            && replayed.iter().all(|id| held.contains(id))
+            && held.iter().all(|id| replayed.contains(id));
         if !same {
             report.push(
                 Issue::new(
@@ -819,9 +879,21 @@ pub fn check_against_semantics(
 
         // Each step must act on what the previous one produced, or replay is
         // meaningless.
-        let mut current = history.input.clone();
-        for step in &history.steps {
-            if let Some(missing) = step.removed.iter().find(|id| !current.contains(id)) {
+        //
+        // The intermediates come from `replay` itself rather than being re-folded
+        // here: `replay` is documented as the single definition of what a step
+        // does, and a second hand-rolled copy of that fold would be free to drift
+        // from it — which would surface only as a spurious or missing
+        // `discontinuous_history`, i.e. this check silently lying about the very
+        // thing it exists to catch.
+        let states = history.replay();
+        for (i, step) in history.steps.iter().enumerate() {
+            let before = if i == 0 {
+                &history.input
+            } else {
+                &states[i - 1]
+            };
+            if let Some(missing) = step.removed.iter().find(|id| !before.contains(id)) {
                 report.push(
                     Issue::new(
                         Severity::Error,
@@ -834,12 +906,6 @@ pub fn check_against_semantics(
                     )
                     .about(&entry.id),
                 );
-            }
-            current.retain(|id| !step.removed.contains(id));
-            for id in &step.added {
-                if !current.contains(id) {
-                    current.push(id.clone());
-                }
             }
         }
     }
@@ -1142,6 +1208,119 @@ mod tests {
             "the record says what happened, not what was asked"
         );
         assert!(out.report.warnings().any(|i| i.code == "no_effect"));
+    }
+
+    /// **The applier and `replay` must never disagree**, or the engine emits a
+    /// genome that fails its own `sense_history_desync` Error.
+    ///
+    /// Regression: `add: ["sn_omen", "sn_omen"]` used to store the sense twice
+    /// while `replay` (which pushes only `if !current.contains`) reconstructed it
+    /// once — length 2 versus 1, so a fixture the engine itself produced validated
+    /// as broken.
+    #[test]
+    fn a_repeated_id_inside_one_add_is_stored_once_so_the_record_still_replays() {
+        let set = DriftSet {
+            events: vec![event("ev_x", &["sn_star"], &["sn_omen", "sn_omen"])],
+            ..coastal_set()
+        };
+        let out = apply_drift(&set, 0, &space(), &lexicon()).expect("applies");
+        let entry = out.lexicon.iter().next().unwrap();
+
+        assert_eq!(glosses_of(&out.lexicon), ["omen"], "stored once, not twice");
+        let history = entry.sense_history.as_ref().unwrap();
+        let replayed = history.final_senses();
+        let held: Vec<SemanticNodeId> = entry.senses.iter().map(|s| s.node.clone()).collect();
+        assert_eq!(
+            replayed, held,
+            "the record reconstructs exactly what is stored"
+        );
+
+        // And the genome it produced passes its own integrity check.
+        let report = check_against_semantics(&out.lexicon, &out.space, &set.events);
+        assert!(
+            !report.errors().any(|i| i.code == "sense_history_desync"),
+            "the engine must not emit a genome that fails its own validation: {report}"
+        );
+    }
+
+    /// The other half of the same invariant: a sense named in **both** `remove` and
+    /// `add` is a re-assertion. `replay` drops it then re-adds it, so the applier
+    /// must too — filtering `add` against the pre-event senses would delete it and
+    /// desync.
+    #[test]
+    fn a_sense_both_removed_and_added_survives_because_replay_restores_it() {
+        let set = DriftSet {
+            events: vec![event("ev_x", &["sn_star"], &["sn_star", "sn_omen"])],
+            ..coastal_set()
+        };
+        let out = apply_drift(&set, 0, &space(), &lexicon()).expect("applies");
+        let entry = out.lexicon.iter().next().unwrap();
+
+        assert_eq!(
+            glosses_of(&out.lexicon),
+            ["star", "omen"],
+            "re-asserted senses are kept, in the event's declared order"
+        );
+        let replayed = entry.sense_history.as_ref().unwrap().final_senses();
+        let held: Vec<SemanticNodeId> = entry.senses.iter().map(|s| s.node.clone()).collect();
+        assert_eq!(replayed, held, "applier and replay agree");
+    }
+
+    /// A sense the word holds with **no recorded provenance** must be caught. A
+    /// one-way containment check plus equal lengths lets it through: `[A, A]`
+    /// replayed against `[A, B]` has matching counts and every replayed id present,
+    /// while `B` came from nowhere.
+    #[test]
+    fn a_held_sense_with_no_provenance_is_caught_even_when_the_counts_agree() {
+        let mut entries: Vec<WordEntry> = lexicon().iter().cloned().collect();
+        entries[0].senses = vec![
+            SenseRef {
+                node: SemanticNodeId::new("sn_star"),
+                gloss: "star".to_owned(),
+            },
+            // Holds `sn_omen`, but the history below never adds it.
+            SenseRef {
+                node: SemanticNodeId::new("sn_omen"),
+                gloss: "omen".to_owned(),
+            },
+        ];
+        entries[0].sense_history = Some(SenseHistory {
+            input: vec![
+                SemanticNodeId::new("sn_star"),
+                SemanticNodeId::new("sn_star"),
+            ],
+            steps: Vec::new(),
+        });
+        let report = check_against_semantics(&Lexicon::from_entries(entries), &space(), &[]);
+        assert!(
+            report.errors().any(|i| i.code == "sense_history_desync"),
+            "a sense with no provenance must not hide behind a matching count: {report}"
+        );
+    }
+
+    /// Half an event doing nothing must still be said. `no_effect` only fires when
+    /// the *whole* event was inert, so a removal that matched nothing while the add
+    /// succeeded would otherwise pass unremarked.
+    #[test]
+    fn a_removal_that_matched_nothing_is_reported_even_when_the_add_succeeded() {
+        let set = DriftSet {
+            // The word holds sn_star, not sn_royal_sign.
+            events: vec![event("ev_x", &["sn_royal_sign"], &["sn_omen"])],
+            ..coastal_set()
+        };
+        let out = apply_drift(&set, 0, &space(), &lexicon()).expect("applies");
+        assert!(
+            out.report
+                .issues
+                .iter()
+                .any(|i| i.code == "removal_matched_nothing"),
+            "the inert half of the event must be reported: {}",
+            out.report
+        );
+        assert!(
+            !out.report.issues.iter().any(|i| i.code == "no_effect"),
+            "the event as a whole DID something, so `no_effect` must stay silent"
+        );
     }
 
     #[test]

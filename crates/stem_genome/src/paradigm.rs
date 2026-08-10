@@ -364,25 +364,17 @@ fn render_grid(
         header.push_str(&format!(
             "   {}{}",
             cell.label,
-            " ".repeat(col_widths[c] - cell.label.chars().count())
+            crate::pad(&cell.label, col_widths[c])
         ));
     }
     writeln!(out, "{}", header.trim_end()).map_err(fmt_err)?;
 
     // Data rows.
     for (r, label) in row_labels.iter().enumerate() {
-        let mut line = format!(
-            "  {}{}",
-            label,
-            " ".repeat(label_width - label.chars().count())
-        );
+        let mut line = format!("  {}{}", label, crate::pad(label, label_width));
         for (c, _) in paradigm.cells.iter().enumerate() {
             let form = &grid[r][c];
-            line.push_str(&format!(
-                "   {}{}",
-                form,
-                " ".repeat(col_widths[c] - form.chars().count())
-            ));
+            line.push_str(&format!("   {}{}", form, crate::pad(form, col_widths[c])));
         }
         writeln!(out, "{}", line.trim_end()).map_err(fmt_err)?;
     }
