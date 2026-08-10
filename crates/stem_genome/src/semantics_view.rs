@@ -28,7 +28,7 @@
 
 use std::fmt::Write;
 
-use stem_core::{Result, SemanticNodeId, StemmaError};
+use stem_core::{Result, SemanticNodeId};
 use stem_lexicon::WordEntry;
 
 use crate::LanguageGenome;
@@ -83,19 +83,26 @@ pub fn render_sense_history(genome: &LanguageGenome, entry: &WordEntry) -> Strin
     // view. Any error here would be an allocation failure, not a domain fault.
     let mut out = String::new();
     let _ = writeln!(out);
+    let from = glosses(&history.input);
     let _ = writeln!(
         out,
-        "  sense      {:<20}  {}",
-        glosses(&history.input),
+        "  sense      {from}{}  {}",
+        crate::pad(&from, 20),
         ids(&history.input)
     );
 
     for (i, step) in history.steps.iter().enumerate() {
+        // Resolved by **index**, exactly as `render_derivation` resolves a rule
+        // step against `applied_rules`. `applied_drifts` is a log, not a set — ids
+        // may repeat across strata — so an id-first lookup would render the *first*
+        // event's mechanism and date for a later step that happens to share its id.
+        // The id is then checked as a consistency guard: a mismatch means the log
+        // and the stored history disagree, and the `None` arm says so rather than
+        // printing a confident wrong line.
         let event = genome
             .applied_drifts
-            .iter()
-            .find(|e| e.id == step.event)
-            .filter(|_| (step.index as usize) < genome.applied_drifts.len());
+            .get(step.index as usize)
+            .filter(|e| e.id == step.event);
 
         let _ = writeln!(out, "  │");
         match event {
@@ -142,17 +149,14 @@ pub fn render_sense_history(genome: &LanguageGenome, entry: &WordEntry) -> Strin
 
     let held: Vec<SemanticNodeId> = entry.senses.iter().map(|s| s.node.clone()).collect();
     let _ = writeln!(out, "  │");
-    let _ = writeln!(out, "  means      {:<20}  {}", glosses(&held), ids(&held));
+    let now = glosses(&held);
+    let _ = writeln!(
+        out,
+        "  means      {now}{}  {}",
+        crate::pad(&now, 20),
+        ids(&held)
+    );
     out
-}
-
-/// A `std::fmt::Error` means an allocation failure, not a domain error.
-#[allow(dead_code)]
-fn fmt_err(_: std::fmt::Error) -> StemmaError {
-    StemmaError::Serialize {
-        format: "sense history",
-        message: "formatting a sense history into a string failed".to_owned(),
-    }
 }
 
 #[cfg(test)]
@@ -279,6 +283,46 @@ mod tests {
         assert_eq!(
             render_sense_history(&genome, &entry),
             render_sense_history(&genome, &entry)
+        );
+    }
+
+    /// **A log is not a set.** `applied_drifts` may hold the same event id twice —
+    /// two strata applying one drift file is exactly the case its "ids may repeat"
+    /// contract permits. A step must therefore resolve by its stored **index**, or a
+    /// later step renders the *earlier* event's mechanism, register and date.
+    ///
+    /// Regression test: an id-first lookup shows `metaphor · 180y` for both steps.
+    #[test]
+    fn a_repeated_event_id_across_strata_renders_each_step_from_its_own_index() {
+        let (mut genome, mut entry) = drifted();
+
+        // A second stratum reusing `ev_0001` for a genuinely different shift.
+        genome.applied_drifts.push(DriftEvent {
+            id: EventId::new("ev_0001"),
+            name: "a later, unrelated shift".to_owned(),
+            description: String::new(),
+            word: WordId::new("w_0001"),
+            mechanism: DriftMechanism::Pejoration,
+            chronology_years: 900,
+            register: None,
+            remove: Vec::new(),
+            add: Vec::new(),
+        });
+        // The word records it at index 2 — the position, not the name, is what
+        // identifies which event ran.
+        if let Some(history) = &mut entry.sense_history {
+            history.steps.push(SenseShift {
+                event: EventId::new("ev_0001"),
+                index: 2,
+                removed: vec![SemanticNodeId::new("sn_omen")],
+                added: Vec::new(),
+            });
+        }
+
+        let text = render_sense_history(&genome, &entry);
+        assert!(
+            text.contains("pejoration") && text.contains("900y"),
+            "step 2 must render from index 2, not from the first `ev_0001`:\n{text}"
         );
     }
 

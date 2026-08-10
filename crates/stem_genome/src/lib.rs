@@ -28,6 +28,24 @@ pub use lineage::{
     LineageGraph, grow_family, render_cognate_table, render_family,
 };
 pub use paradigm::render_paradigm;
+
+/// The spaces needed to pad `text` out to `width` **display characters**.
+///
+/// One definition, shared by every renderer in this crate. Two reasons it is not
+/// inlined at each call site, both learned from copies that had already drifted:
+///
+/// 1. **Char count, never byte length.** `{:<20}` and `text.len()` count bytes, and
+///    these columns carry IPA (`ŋ`, `ɣ`), `§`, and free-text glosses in any script.
+///    Padding by bytes silently misaligns exactly the output this project exists to
+///    print.
+/// 2. **`saturating_sub`, never bare `-`.** Several copies subtracted directly,
+///    which is safe only while `width` is the max over precisely the strings being
+///    padded — an invariant nothing stated and nothing checked. A label computed
+///    rather than listed in the width array would panic on overflow in a
+///    debug build.
+pub(crate) fn pad(text: &str, width: usize) -> String {
+    " ".repeat(width.saturating_sub(text.chars().count()))
+}
 pub use profile::{
     HistoricalDepth, MorphologicalIrregularity, NOT_MODELLED, NotModelled, PlausibilityProfile,
     SemanticDrift, render_profile,
