@@ -12,7 +12,7 @@ The name comes from textual criticism: a *stemma* is the reconstructed family tr
 showing how surviving manuscripts descend from a lost original. That is exactly
 this program's core data structure.
 
-**Status:** **the roadmap is complete — M0 through M11 all shipped** — the
+**Status:** **Phases 0–2 complete (M0–M11); Phase 3 underway (M12 done)** — the
 diachronic kernel runs end to end. Languages get a feature-based phonology,
 generate seeded roots, undergo ordered sound change, fork into daughters with their
 own histories, and line up in a comparative cognate table; `stemma demo` tells the
@@ -27,9 +27,14 @@ produces **byte-identical** output to the hand-built structs, so the notation is
 front end and can never become a second engine. And M11 added `stemma-ui`, a native
 desktop window — no browser, one self-contained binary — that shows any word's full
 history and the daughters side by side. 528 tests pass, and every step is
-deterministic and traced. See
-[ROADMAP.md](ROADMAP.md) for the plan and [PROGRESS.md](PROGRESS.md) for what has
-shipped.
+deterministic and traced.
+
+Twelve milestones remain, and they are the interesting ones: a believable core
+vocabulary, derivation, an ecology that explains *why* a language has the words it
+has — then syntax (you cannot yet form a sentence), writing systems, a constrained
+LLM assistant, and alien modality. See [ROADMAP.md](ROADMAP.md) for the plan,
+[docs/GUIDE.md](docs/GUIDE.md) for how to use what exists, and
+[PROGRESS.md](PROGRESS.md) for what has shipped.
 
 ---
 

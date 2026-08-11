@@ -320,14 +320,29 @@ result is reproducible from that file alone.
 
 ---
 
-## What Stemma does not do
+## What Stemma does not do *yet*
 
-Named honestly, because the roadmap is complete and these are genuinely absent:
+Named honestly, each with the milestone that fills it. None of these is a permanent
+exclusion — see [ROADMAP.md](../ROADMAP.md).
 
-- **No syntax.** You cannot form a sentence. There is no grammar engine, no parser,
-  no translation. This is a *lexicon* engine with morphology.
-- **No writing systems.** Script evolution (§7.6) is designed but unbuilt.
-- **No alien modality.** §7.7's pulse/scent/gesture languages are Phase 4 material;
-  the data model currently assumes a vocal tract throughout.
-- **No LLM anywhere.** By design — the formal engine is the source of truth.
-- **No editing in the UI.** Read-only until the engine asks for more (§20.5).
+| gap | today | planned |
+|---|---|---|
+| **Syntax** — you cannot form a sentence. No grammar engine, no parser, no translation. | a *lexicon* engine with morphology | **M17** syntax profile → **M18** sentence generation → **M19** syntactic change |
+| **Writing systems** — script evolution (§7.6) is designed but unbuilt. | forms render in IPA and romanisation only | **M20** glyphs → **M21** script evolution |
+| **Alien modality** — §7.7's pulse/scent/gesture languages. | the data model assumes a vocal tract throughout | **M23** embodiment profile → **M24** non-vocal signal systems |
+| **An LLM assistant** (§6.5). | nothing, by design | **M22** — and the constraint holds: a model *proposes* a rule set, the engine applies or refuses it. No path to a stored form skips the engine. |
+| **Editing in the UI** — read-only (§20.5). | inspect only; nothing autosaves | **M16** |
+
+Two of these are worth understanding rather than just waiting for.
+
+**The LLM one is a constraint, not an absence.** "No LLM output may mutate a language
+without passing through validation" has been enforced since M0, when there was
+nothing to enforce it against, because it decides *where logic may live*. When M22
+lands, the assistant will write the same authored artefacts you would — a `.sc` rule
+file, a drift set — and they go through `apply-rules` like anything else, or they are
+refused. That is the only door.
+
+**Alien modality is last because it is hardest, not because it is least wanted.**
+Generalising "phoneme" to "channel signal" touches every layer, and the test for
+M24 is that every existing vocal language still produces byte-identical output
+afterwards. The abstraction has to earn the rename.

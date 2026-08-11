@@ -232,9 +232,131 @@ accidental._
   profiles, differ in *which* meanings are elaborated and which are missing — and
   each gap is explained in the report rather than silently empty.
 
-Beyond: script evolution (§7.6), syntax and interlingua (§7.4), alien modality
-(§7.7, §18), LLM copilot (§6.5). Each is a phase in its own right; none of them
-should be started early.
+---
+
+## Phase 4 — Authoring
+
+_Phase 3 makes languages big. This makes them **editable** without hand-writing RON._
+
+- [ ] **M16 — Editing in the explorer.** Lift M11's read-only fence (§20.5 says
+  "before adding full editing", not "never"): edit a gloss, add a word, declare a
+  project concept, reorder a rule set, and save. Every edit goes through the **same
+  library call the CLI would make** — the UI still holds no logic, and
+  `the_ui_computes_nothing_it_could_instead_ask_a_library_for` keeps its ban on
+  engine entrypoints; only `stem_io::save` leaves the list, behind an explicit save
+  action. Undo is the file: nothing autosaves.
+  **Test:** edit a gloss in the window, save, and `stemma validate` on the file
+  agrees; a rejected edit (an id collision, a bad feature) is *reported in the
+  window* and never written; a file saved from the UI is byte-identical to one the
+  equivalent CLI command produces.
+
+---
+
+## Phase 5 — Grammar
+
+_`DESIGN.md` §7.4. The largest remaining gap: today you cannot form a sentence._
+
+- [ ] **M17 — Syntax profile.** §7.4's parameters as **data** — word order, head
+  directionality, adposition placement, genitive and adjective order, case
+  alignment, relative-clause strategy, negation, question formation, topic/focus,
+  pro-drop, evidentiality, switch-reference. No engine yet: a profile, its
+  validation, and a rendered grammar sketch. Typological implications are
+  **reported, not enforced** (§17) — a VO language with postpositions is rare, not
+  forbidden, and Stemma says which and why.
+  **Test:** `stemma grammar <lang>` prints a readable sketch from stored parameters;
+  a harmonically odd combination earns a Warning and still validates; two runs
+  byte-identical.
+
+- [ ] **M18 — Constructions & sentence generation.** The first sentence. A
+  proposition plus the profile yields an ordered, inflected string — reusing M8's
+  morphology and M14's derivation, so a generated sentence is made of words that
+  already have histories. §3.3 applies unchanged: **every sentence carries a record
+  of the constructions that built it**, exactly as a word carries its derivation.
+  **Test:** `stemma say <lang> '<proposition>'` produces a sentence; the same
+  proposition through two daughters differs *because* their profiles differ; the
+  trace names every construction applied.
+
+- [ ] **M19 — Syntactic change.** §7.4's closing claim, made real: syntax evolves.
+  Case erosion forces stricter word order; topic markers become articles; serial
+  verbs become auxiliaries. This is where **grammaticalization** finally lands — it
+  was fenced out of M8 as "a morpheme changing role over time is diachronic
+  morphology proper, a later milestone" (`docs/adr/0010`). This is that milestone.
+  **Test:** a daughter whose case suffixes were eroded by an *ordered sound change*
+  shows stricter word order in its profile, and the causal chain from the rule to
+  the syntactic shift is on the record — not asserted by the author.
+
+---
+
+## Phase 6 — Script
+
+_`DESIGN.md` §7.6. "A glyph should have ancestry just like a word" — which is the
+whole design, and the reason this is a real phase rather than a font picker._
+
+- [ ] **M20 — Glyphs & writing systems.** A script, its glyph inventory, and the
+  mapping from phonology or morphology to written form (alphabet, abjad, abugida,
+  syllabary, logography). A glyph is an entity with an id and a history, modelled
+  the way a phoneme and a morpheme already are.
+  **Test:** `stemma write <lang> <word>` renders a word in its script; the mapping
+  is reported where it is lossy (an abjad drops vowels — that is the point, and the
+  tool says so rather than pretending round-trip).
+
+- [ ] **M21 — Script evolution.** §7.6's chain: pictogram → logogram → divine
+  determinative → rebus sign → simplified manuscript form → modern marker. Glyph
+  descent is traced exactly as word descent is, and the two are **independent** — a
+  glyph may outlive the sound it once wrote, which is how real orthographies become
+  historical rather than phonetic.
+  **Test:** `stemma glyph-trace <lang> <glyph>` walks a glyph back to its pictogram;
+  a language whose spelling froze while its pronunciation moved shows the resulting
+  gap, and §17's script-history row — M7's last deferred dimension — finally scores.
+
+---
+
+## Phase 7 — The copilot
+
+_`DESIGN.md` §6.5, and the phase with the sharpest constraint on it._
+
+- [ ] **M22 — Constrained LLM assistant.** Explain a sound change; propose plausible
+  daughter changes; suggest names under constraints; draft a grammar sketch from
+  structured data; flag oddities.
+  **The hard constraint governs absolutely, and it predates any LLM in the project:
+  no LLM output may mutate a language without passing through validation** (§3.2,
+  `CLAUDE.md`). Concretely: the model **proposes a `RuleSet`, a `DriftSet`, or a
+  concept list** — the same authored artefacts a human writes — and the engine
+  applies them by the same code path, or refuses them. There is no path from a
+  model's output to a stored form that skips the engine, and prose it writes is
+  labelled as prose. This is why the constraint has been enforced since M0, when
+  there was nothing to enforce it against: it shapes where logic may live.
+  **Test:** a proposed rule set is applied through the ordinary `apply-rules` path
+  and produces a traced, reproducible result; a proposal that fails validation is
+  **refused and reported**, never partially applied; with the assistant disabled
+  every other command behaves identically, byte for byte.
+
+---
+
+## Phase 8 — Alien modality
+
+_`DESIGN.md` §7.7 and §18. The furthest out, and the one that touches every layer:
+the data model currently assumes a vocal tract throughout._
+
+- [ ] **M23 — Embodiment profile.** §18.1's profile — auditory range, visual,
+  chemical, tactile and field channels, manipulators, social cognition,
+  environment — plus §18.2's channel constraints. **M15's environment work is the
+  precursor**, not a detour: §18.1 names `environment: EnvironmentProfile` as a
+  field *of* the embodiment profile, so the human-language ecology built there is the
+  same mechanism, generalised.
+  **Test:** a profile with no vocal tract but a bioluminescent channel validates,
+  and the engine reports which existing machinery does *not* apply to it rather
+  than silently producing vowels.
+
+- [ ] **M24 — Non-vocal signal systems.** Generalise "phoneme" to a **channel
+  signal**: a pulse, a scent, a gesture, a field modulation. Sound change becomes
+  *signal* change over the channel's own contrastive dimensions. This is the
+  milestone that would rename `stem_phonology`'s central abstraction, so it needs
+  that abstraction to have earned the rename — everything before it must keep
+  working unchanged for a vocal language.
+  **Test:** a bioluminescent pulse language undergoes an ordered signal change and
+  traces it, through the same engine; every existing vocal fixture produces
+  byte-identical output afterwards.
 
 ---
 
