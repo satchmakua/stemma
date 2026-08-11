@@ -157,9 +157,80 @@ explosion is the top risk to this project._
   that `cmp` reports identical, and `the_dsl_and_the_ron_set_produce_byte_identical_output`
   pins it on the serialised bytes. 528 tests green.
 
-- [ ] **M11 — Visual explorer.** The first UI (§10), read-only to start. Not before
+- [x] **M11 — Visual explorer.** The first UI (§10), read-only to start. Not before
   the engine works — §20.5.
-  **Test:** open a project, inspect a word trace, view daughters side by side.
+  **Test:** open a project, inspect a word trace, view daughters side by side. ✅
+  `stemma-ui` is a native `egui` window (no WebView, no JS — one self-contained
+  binary; `docs/adr/0013`). Files open by dialog, drag-and-drop, or argv; clicking a
+  word shows §10.2's full history; the cognate view puts the daughters side by side.
+  It holds **no logic** — every panel renders a library string through the same
+  function the CLI calls, and a source-scan test bans the engine entrypoints and
+  `stem_io::save` outright, which is what makes "read-only" checked rather than
+  intended.
+
+---
+
+## Phase 3 — Breadth
+
+_Phase 2 finished the engine; this phase makes the languages **believable**. A
+103-word language is a demonstration, not a conlang — the ceiling exists only
+because every word needs a meaning and the built-in list holds 103 of them._
+
+_The governing correction, and it overrules `DESIGN.md` §7.5's reasoning where they
+conflict: **absence must be modelled, not defaulted.** §7.5 rejected Swadesh-207
+partly because it would force a desert proto-language to coin a word for ice — "the
+tool making a claim rather than reporting one". That argument is right about *forced*
+coinage and wrong as a ceiling. A desert people have a word for ice: deserts freeze,
+and you need a name for what the far-north people live on. **A language missing words
+it should have is a worse failure than one carrying a word its speakers rarely use.**
+So: ship breadth by default, and make the gaps deliberate (M15) rather than
+accidental._
+
+- [x] **M12 — Project concepts.** A genome may declare its own meanings alongside
+  the built-in list, so a language gets the vocabulary its culture needs (nautical,
+  kinship, ritual) without waiting for the compiled list to grow. Lifts the
+  `--concepts` ceiling from `CONCEPT_COUNT` to "built-in + declared". The concepts
+  live **inside the genome file**, so `seed`'s "reproducible from the file alone"
+  contract is preserved — which is the whole reason the built-in list was compiled in
+  rather than read from a sidecar (`concept.rs`), and why this must not become a
+  `--concepts-file` flag.
+  **Test:** a genome declaring 40 extra concepts coins 143 words, each with a stable
+  id and cognate set; a pre-M12 file still coins exactly 103 and round-trips with
+  zero new bytes; two runs byte-identical. ✅ `fixtures/seafarers.ron` declares 11
+  (tide, keel, reef, **ice**…) and coins **114**; `--concepts 500` reports the
+  language's real ceiling instead of failing an argument check;
+  `declaring_project_concepts_cannot_change_a_word_already_coined` pins the prefix
+  property. 533 tests green.
+
+- [ ] **M13 — A believable core vocabulary.** Grow the compiled list from 103 to
+  several hundred, so a default language is usable without the author writing a
+  wordlist first. **Append-only** — inserting anywhere else rewrites every word after
+  it in every lexicon ever generated (`concept.rs`'s draw contract), so the existing
+  103 keep their positions and every stored language is untouched. New entries carry
+  `concepticon_id: None` where no mapping is verified: an unanchored concept is
+  honest, a fabricated anchor is not.
+  **Test:** `new-lexicon` with no flags coins the full list; the first 103 words of a
+  seeded run are **byte-identical** to the pre-M13 output, proving the append changed
+  nothing; homophony is reported, not prevented.
+
+- [ ] **M14 — Derivation.** Compounds and productive affixation, so a large
+  vocabulary has **etymology** instead of being N unrelated draws from the same urn.
+  Reuses M8's `compose`; a derived word records what it is made of, exactly as an
+  inflected cell does, and its parts are cognate-visible.
+  **Test:** a language of ~300 roots yields a several-thousand-word lexicon in which
+  every derived word traces to its parts; a sound change applied afterwards makes a
+  compound opaque (its parts no longer recoverable by eye but still recorded), which
+  is how real lexicalisation works.
+
+- [ ] **M15 — Environment & culture profile.** Model *why* a language has the
+  vocabulary it has: an ecological and cultural profile that makes some concepts
+  elaborated (many words), some ordinary, some borrowed-looking, some genuinely
+  absent. This is the honest form of the desert/ice problem — a gap becomes a
+  **stated fact about the speakers**, with a reason, rather than an accident of which
+  wordlist shipped.
+  **Test:** two languages over one phonology and one concept list, given different
+  profiles, differ in *which* meanings are elaborated and which are missing — and
+  each gap is explained in the report rather than silently empty.
 
 Beyond: script evolution (§7.6), syntax and interlingua (§7.4), alien modality
 (§7.7, §18), LLM copilot (§6.5). Each is a phase in its own right; none of them

@@ -12,7 +12,7 @@ use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use stem_core::{RngDomain, Severity, Validate, ValidationReport, rng_for};
 use stem_genome::LanguageGenome;
-use stem_lexicon::{CONCEPT_COUNT, CONCEPTS, build_proto_lexicon};
+use stem_lexicon::{CONCEPT_COUNT, build_proto_lexicon};
 use stem_phonology::RootGenerator;
 
 /// The most roots one invocation will generate.
@@ -97,7 +97,12 @@ enum Command {
         #[arg(long)]
         seed: Option<u64>,
         /// How many concepts to coin words for, from the top of the list.
-        #[arg(long, value_parser = clap::value_parser!(u16).range(1..=CONCEPT_COUNT as i64))]
+        ///
+        /// The ceiling is **this language's** meanings — the built-in list plus any
+        /// the genome declares (M12) — so it is no longer a compile-time constant
+        /// and is checked at run time, where the genome is in hand. Asking for more
+        /// than exist coins all of them and says so.
+        #[arg(long, value_parser = clap::value_parser!(u16).range(1..))]
         concepts: Option<u16>,
         /// Write the language back out with its new lexicon, instead of printing.
         #[arg(long)]
@@ -611,13 +616,28 @@ fn new_lexicon(
         Some(seed) => (seed, "from --seed"),
         None => (genome.seed, "from the genome"),
     };
-    let count = concepts.map_or(CONCEPT_COUNT, |n| n as usize);
+    // Every meaning available: the built-in list, then whatever this project
+    // declares (M12). `--concepts` still takes a prefix, so it can now exceed 103
+    // when the genome supplies more, and the ceiling is the language's own.
+    let available = stem_lexicon::meanings(&genome.concepts);
+    let count = concepts.map_or(available.len(), |n| (n as usize).min(available.len()));
+    if let Some(asked) = concepts
+        && asked as usize > available.len()
+    {
+        eprintln!(
+            "note: asked for {asked} concepts but this language has {} ({} built in + {} declared); coining all {}",
+            available.len(),
+            CONCEPT_COUNT,
+            genome.concepts.len(),
+            available.len()
+        );
+    }
 
     let lexicon = build_proto_lexicon(
         &genome.id,
         &genome.phonemes,
         &genome.phonotactics,
-        &CONCEPTS[..count],
+        &available[..count],
         seed,
     )
     .with_context(|| format!("seeding a lexicon for `{}`", genome.name))?;

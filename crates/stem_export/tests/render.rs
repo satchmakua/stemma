@@ -316,7 +316,7 @@ fn fixture_genome_with_lexicon() -> LanguageGenome {
         &genome.id,
         &genome.phonemes,
         &genome.phonotactics,
-        CONCEPTS,
+        &stem_lexicon::meanings(&genome.concepts),
         genome.seed,
     )
     .expect("the fixture seeds a lexicon");

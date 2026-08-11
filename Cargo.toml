@@ -9,6 +9,7 @@ members = [
     "crates/stem_export",
     "crates/stem_io",
     "crates/stem_cli",
+    "crates/stem_ui",
 ]
 
 [workspace.package]
@@ -36,6 +37,18 @@ ron = "0.12.2"
 thiserror = "2.0.19"
 anyhow = "1.0.104"
 clap = { version = "4.6.2", features = ["derive"] }
+
+# --- The M11 desktop UI (docs/adr/0013). ---
+#
+# `eframe`/`egui` draw with wgpu/glow directly — no system WebView, so the binary
+# is self-contained and there is no browser engine, no JS runtime and no Node in
+# the toolchain. Immediate mode suits a read-only inspector, which is all §20.5
+# permits before editing.
+eframe = "0.36.1"
+egui = "0.36.1"
+# The OS-native Open dialog. Small, and the only way "open a project" is an
+# ordinary desktop gesture rather than a typed path.
+rfd = "0.17.2"
 
 # --- Randomness: pinned exactly, on purpose (see docs/adr/0005). ---
 #

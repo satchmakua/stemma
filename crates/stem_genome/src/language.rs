@@ -4,8 +4,8 @@ use serde::{Deserialize, Serialize};
 use stem_core::{LanguageId, Result, Severity, StemmaError, Validate, ValidationReport};
 use stem_lexicon::{
     DriftEvent, DriftSet, HIGH_ALLOMORPH_COUNT, LONG_SENSE_CHAIN, Lexicon, Morphology,
-    SemanticSpace, apply_drift, check_against_semantics, check_drift_against_language,
-    morphological_irregularity, sense_chains,
+    ProjectConcept, SemanticSpace, apply_drift, check_against_concepts, check_against_semantics,
+    check_drift_against_language, morphological_irregularity, sense_chains,
 };
 use stem_phonology::{PhonemeInventory, Phonotactics, Prosody};
 use stem_soundchange::{RuleSet, SoundChangeRule};
@@ -122,6 +122,24 @@ pub struct LanguageGenome {
     #[serde(default, skip_serializing_if = "Morphology::is_empty")]
     pub morphology: Morphology,
 
+    /// Meanings **this project declares**, alongside the built-in concept list
+    /// (ROADMAP M12).
+    ///
+    /// The built-in 103 are a *basic* vocabulary; a language whose speakers sail, or
+    /// herd, or keep a priesthood needs words the Swadesh list has no opinion about.
+    /// Declaring them here rather than in a sidecar file is what preserves [`Self::seed`]'s
+    /// contract — the language stays reproducible **from its own file alone**, which
+    /// is the whole reason `stem_lexicon::CONCEPTS` is compiled in rather than read
+    /// from disk.
+    ///
+    /// **Appended after the built-in list, never interleaved.** The draw contract
+    /// (`stem_lexicon::build`) makes `build(n)` a strict prefix of `build(n + k)`, so
+    /// declaring a new meaning cannot change a word that was already coined.
+    ///
+    /// Default empty; `skip_serializing_if` keeps every pre-M12 file byte-identical.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub concepts: Vec<ProjectConcept>,
+
     /// This language's senses (`DESIGN.md` §8.1's `semantics: SemanticSpace`,
     /// ROADMAP M9).
     ///
@@ -168,6 +186,7 @@ impl LanguageGenome {
             prosody: Prosody::new(),
             applied_rules: Vec::new(),
             morphology: Morphology::default(),
+            concepts: Vec::new(),
             semantics: SemanticSpace::new(),
             applied_drifts: Vec::new(),
             notes: Vec::new(),
@@ -409,6 +428,14 @@ impl Validate for LanguageGenome {
             check_against_semantics(&self.lexicon, &self.semantics, &self.applied_drifts),
         );
 
+        // M12: `unknown_concept` moved out of `Lexicon::validate` because a bare
+        // lexicon cannot tell an invented key from one this project declares. Same
+        // shape, same reason, as the two checks above.
+        report.absorb(
+            "concepts",
+            check_against_concepts(&self.lexicon, &self.concepts),
+        );
+
         // Not optional: putting the rule checks only in a free function the gate
         // never calls is how the validator and the engine disagree *from the
         // validator side* — `rules.empty_target` is an Error and `stemma validate`
@@ -478,6 +505,8 @@ impl LanguageGenome {
             // Carried verbatim: a fork is a statement about lineage, and the
             // daughter keeps the same morphemes and paradigms it inherited.
             morphology: self.morphology.clone(),
+            // A daughter inherits the meanings its parent could express.
+            concepts: self.concepts.clone(),
             // Likewise its senses and their recorded history: a daughter means what
             // its parent meant until a drift event says otherwise (M9).
             semantics: self.semantics.clone(),
@@ -553,6 +582,7 @@ impl LanguageGenome {
             // are recorded in each evolved cell's `trace`, not here — the morphemes
             // and paradigms themselves are unchanged by a rule run.
             morphology: self.morphology.clone(),
+            concepts: self.concepts.clone(),
             // A sound change moves forms, never meanings. The senses and their
             // history ride along untouched — and each word's `senses` /
             // `sense_history` survive because `apply_rules` clones the entry whole
