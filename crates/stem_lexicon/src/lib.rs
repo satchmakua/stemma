@@ -47,8 +47,11 @@ pub mod trace;
 pub mod word;
 
 pub use build::{build_proto_lexicon, scoped_cognate_set};
-pub use concept::{CONCEPT_COUNT, CONCEPTS, Concept, ConceptKey, PartOfSpeech, SWADESH_COUNT};
-pub use lexicon::{Lexicon, check_against_inventory, is_portable_id};
+pub use concept::{
+    CONCEPT_COUNT, CONCEPTS, Concept, ConceptKey, Meaning, PartOfSpeech, ProjectConcept,
+    SWADESH_COUNT, meanings,
+};
+pub use lexicon::{Lexicon, check_against_concepts, check_against_inventory, is_portable_id};
 pub use morpheme::{
     AllomorphSet, HIGH_ALLOMORPH_COUNT, Morpheme, MorphemeRef, MorphemeRole, Morphology, Paradigm,
     ParadigmCell, compose, inflect, morphological_irregularity,
@@ -100,7 +103,7 @@ mod tests {
             &LanguageId::new("proto_asterian"),
             &inventory(),
             &phonotactics(),
-            &CONCEPTS[..count],
+            &meanings(&[])[..count],
             seed,
         )
         .expect("the test language generates")
@@ -418,8 +421,11 @@ mod tests {
 
     #[test]
     fn a_misspelled_concept_key_warns_and_suggests_the_nearest_real_one() {
-        let report = one_entry(Some("NOES"), vec!["nose".to_owned()]).validate();
-        assert!(report.is_ok(), "unusual is not broken: {report}");
+        // `unknown_concept` moved to the context-taking check at M12: from inside a
+        // bare `Lexicon` an invented key and a project-declared one look identical.
+        let lexicon = one_entry(Some("NOES"), vec!["nose".to_owned()]);
+        assert!(lexicon.validate().is_ok(), "unusual is not broken");
+        let report = check_against_concepts(&lexicon, &[]);
         let issue = report
             .warnings()
             .find(|i| i.code == "unknown_concept")
@@ -429,9 +435,98 @@ mod tests {
 
     #[test]
     fn a_word_with_an_unknown_concept_but_its_own_gloss_stays_valid() {
-        let report = one_entry(Some("OBSIDIAN"), vec!["black glass".to_owned()]).validate();
+        let lexicon = one_entry(Some("OBSIDIAN"), vec!["black glass".to_owned()]);
+        let report = check_against_concepts(&lexicon, &[]);
         assert!(report.is_ok(), "{report}");
         assert!(report.warnings().any(|i| i.code == "unknown_concept"));
+    }
+
+    /// **ROADMAP M12.** A key the *project* declares is a known meaning, and must
+    /// not be reported as an invention.
+    #[test]
+    fn a_project_declared_concept_is_not_reported_as_unknown() {
+        let declared = ProjectConcept {
+            key: ConceptKey::new("OBSIDIAN"),
+            gloss: "black glass".to_owned(),
+            part_of_speech: PartOfSpeech::Noun,
+            note: String::new(),
+        };
+        let lexicon = one_entry(Some("OBSIDIAN"), vec!["black glass".to_owned()]);
+        let report = check_against_concepts(&lexicon, std::slice::from_ref(&declared));
+        assert!(
+            !report.issues.iter().any(|i| i.code == "unknown_concept"),
+            "the project declares this meaning, so it is known: {report}"
+        );
+    }
+
+    /// The paired guard for the gloss `build_proto_lexicon` writes onto a
+    /// project-concept entry — the `stale_sense_gloss` discipline, for concepts.
+    #[test]
+    fn a_project_concept_whose_gloss_drifted_from_its_word_is_caught() {
+        let declared = ProjectConcept {
+            key: ConceptKey::new("OBSIDIAN"),
+            gloss: "black glass".to_owned(),
+            part_of_speech: PartOfSpeech::Noun,
+            note: String::new(),
+        };
+        // The word says something else.
+        let lexicon = one_entry(Some("OBSIDIAN"), vec!["volcanic rock".to_owned()]);
+        let report = check_against_concepts(&lexicon, std::slice::from_ref(&declared));
+        assert!(
+            report.warnings().any(|i| i.code == "stale_project_gloss"),
+            "{report}"
+        );
+    }
+
+    /// A project key that shadows a compiled one is reported: two meanings under one
+    /// key would make every join ambiguous.
+    #[test]
+    fn a_project_concept_shadowing_a_builtin_key_is_reported() {
+        let declared = ProjectConcept {
+            key: ConceptKey::new("STAR"),
+            gloss: "a different star".to_owned(),
+            part_of_speech: PartOfSpeech::Noun,
+            note: String::new(),
+        };
+        let report = check_against_concepts(&Lexicon::new(), std::slice::from_ref(&declared));
+        assert!(
+            report.warnings().any(|i| i.code == "shadows_builtin"),
+            "{report}"
+        );
+    }
+
+    /// **ROADMAP M12, the draw contract.** Declaring project concepts appends, so
+    /// every word that was already coined keeps its form, id and cognate set.
+    #[test]
+    fn declaring_project_concepts_cannot_change_a_word_already_coined() {
+        let extra: Vec<ProjectConcept> = ["TIDE", "KEEL", "HARBOR"]
+            .iter()
+            .map(|k| ProjectConcept {
+                key: ConceptKey::new(*k),
+                gloss: k.to_lowercase(),
+                part_of_speech: PartOfSpeech::Noun,
+                note: String::new(),
+            })
+            .collect();
+
+        let base = meanings(&[]);
+        let extended = meanings(&extra);
+        assert_eq!(extended.len(), base.len() + 3);
+
+        let coin = |ms: &[Meaning<'_>]| {
+            build_proto_lexicon(&LanguageId::new("x"), &inventory(), &phonotactics(), ms, 42)
+                .expect("coins")
+        };
+        let small = coin(&base);
+        let big = coin(&extended);
+
+        assert_eq!(big.len(), base.len() + 3, "three more words");
+        for (a, b) in small.iter().zip(big.iter()) {
+            assert_eq!(a, b, "an already-coined word moved");
+        }
+        // And the new ones carry their own gloss, since nothing compiled supplies it.
+        let tide = big.iter().nth(base.len()).expect("the first project word");
+        assert_eq!(tide.display_gloss(), Some("tide"));
     }
 
     #[test]
@@ -605,7 +700,7 @@ mod tests {
                 &LanguageId::new("x"),
                 &inventory,
                 &phonotactics,
-                &CONCEPTS[..5],
+                &meanings(&[])[..5],
                 1
             )
             .is_ok()
@@ -634,7 +729,7 @@ mod tests {
                 &LanguageId::new("x"),
                 &inventory,
                 &phonotactics(),
-                &CONCEPTS[..5],
+                &meanings(&[])[..5],
                 1
             )
             .is_ok(),
@@ -678,7 +773,7 @@ mod tests {
                 &LanguageId::new("x"),
                 &inventory,
                 &phonotactics,
-                &CONCEPTS[..20],
+                &meanings(&[])[..20],
                 seed,
             )
             .expect("generates");

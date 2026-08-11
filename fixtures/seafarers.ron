@@ -1,0 +1,266 @@
+// Attested Asterian — the acceptance fixture for the sound-change engine (M3).
+//
+// A complete genome carrying the REFERENCE INVENTORY VERBATIM (a test asserts
+// `asterian_attested.phonemes == proto_asterian.phonemes`, so the two files
+// cannot drift apart silently — RON has no include mechanism, and the checked
+// invariant is the honest substitute). The lexicon is nine hand-authored words:
+// four are the design doc's own attested roots, which `proto_asterian.ron`
+// already names and vouches for; five are coined, each for a stated reason in
+// the comment above it.
+//
+// PROSODY. `fixed(from: left, offset: 0)` — initial stress, one of the commonest
+// systems in the world's languages. It is what makes "final UNSTRESSED vowel
+// loss" a real rule here rather than "delete the last vowel": a monosyllable's
+// only syllable bears primary stress, so its vowel survives.
+//
+// No word carries a `trace` and no syllable carries `stress`: this is the
+// language BEFORE anything happened to it. `stemma apply-rules` writes both.
+(
+    id: "asterian_seafarers",
+    name: "Asterian (seafarers)",
+    lineage_depth_years: 0,
+    seed: 42,
+
+    phonemes: [
+        // --- Stops ---
+        (id: "ph_p", ipa: "p", kind: consonant, frequency_weight: 30,
+         features: ["-syllabic", "+consonantal", "-sonorant", "-approximant", "-continuant", "-nasal", "-lateral", "-trill", "-voice", "+labial", "-coronal", "-dorsal", "-round"]),
+        (id: "ph_t", ipa: "t", kind: consonant, frequency_weight: 50,
+         features: ["-syllabic", "+consonantal", "-sonorant", "-approximant", "-continuant", "-nasal", "-lateral", "-trill", "-voice", "-labial", "+coronal", "-dorsal"]),
+        (id: "ph_k", ipa: "k", kind: consonant, frequency_weight: 45,
+         features: ["-syllabic", "+consonantal", "-sonorant", "-approximant", "-continuant", "-nasal", "-lateral", "-trill", "-voice", "-labial", "-coronal", "+dorsal", "+high", "-low", "+back", "-round"]),
+
+        // --- Nasals: [-continuant], because the oral cavity is closed and the air
+        //     escapes nasally. This is the standard treatment and it is what lets
+        //     "stops" be [-sonorant, -continuant] without also catching /m n/.
+        (id: "ph_m", ipa: "m", kind: consonant, frequency_weight: 35,
+         features: ["-syllabic", "+consonantal", "+sonorant", "-approximant", "-continuant", "+nasal", "-lateral", "-trill", "+voice", "+labial", "-coronal", "-dorsal", "-round"]),
+        (id: "ph_n", ipa: "n", kind: consonant, frequency_weight: 40,
+         features: ["-syllabic", "+consonantal", "+sonorant", "-approximant", "-continuant", "+nasal", "-lateral", "-trill", "+voice", "-labial", "+coronal", "-dorsal"]),
+
+        // --- Fricative ---
+        (id: "ph_s", ipa: "s", kind: consonant, frequency_weight: 35,
+         features: ["-syllabic", "+consonantal", "-sonorant", "-approximant", "+continuant", "-nasal", "-lateral", "-trill", "-voice", "-labial", "+coronal", "-dorsal"]),
+
+        // --- Liquids: /l/ is a lateral approximant, /r/ an alveolar trill. Note
+        //     /r/ says "-approximant, +trill" outright rather than leaving
+        //     approximant unvalued — absence must never be used to encode a
+        //     positive property, or a rule targeting [-approximant] would miss it.
+        (id: "ph_l", ipa: "l", kind: consonant, frequency_weight: 30,
+         features: ["-syllabic", "+consonantal", "+sonorant", "+approximant", "+continuant", "-nasal", "+lateral", "-trill", "+voice", "-labial", "+coronal", "-dorsal"]),
+        (id: "ph_r", ipa: "r", kind: consonant, frequency_weight: 25,
+         features: ["-syllabic", "+consonantal", "+sonorant", "-approximant", "+continuant", "-nasal", "-lateral", "+trill", "+voice", "-labial", "+coronal", "-dorsal"]),
+
+        // --- Glides: [-consonantal], filling C slots. See the header note.
+        //     /w/ is the non-syllabic counterpart of /u/ and /j/ of /i/ — each pair
+        //     differs in exactly one feature, [syllabic], which is what makes glide
+        //     formation and vocalization single-feature rules in M3.
+        (id: "ph_w", ipa: "w", kind: consonant, frequency_weight: 20,
+         features: ["-syllabic", "-consonantal", "+sonorant", "+approximant", "+continuant", "-nasal", "-lateral", "-trill", "+voice", "+labial", "-coronal", "+dorsal", "+high", "-low", "+back", "+round"]),
+        (id: "ph_j", ipa: "j", romanization: "y", kind: consonant, frequency_weight: 10,
+         features: ["-syllabic", "-consonantal", "+sonorant", "+approximant", "+continuant", "-nasal", "-lateral", "-trill", "+voice", "-labial", "-coronal", "+dorsal", "+high", "-low", "-back", "-round"]),
+
+        // --- Vowels: three heights over {high, low}. /i u/ are +high, /e o/ are
+        //     -high -low, /a/ is +low. All vowels are [+dorsal] — they are
+        //     articulated with the tongue body, and without that [+dorsal] is not a
+        //     class any rule can use.
+        (id: "ph_a", ipa: "a", kind: vowel, frequency_weight: 60,
+         features: ["+syllabic", "-consonantal", "+sonorant", "+approximant", "+continuant", "-nasal", "-lateral", "-trill", "+voice", "-labial", "-coronal", "+dorsal", "-high", "+low", "+back", "-round"]),
+        (id: "ph_e", ipa: "e", kind: vowel, frequency_weight: 35,
+         features: ["+syllabic", "-consonantal", "+sonorant", "+approximant", "+continuant", "-nasal", "-lateral", "-trill", "+voice", "-labial", "-coronal", "+dorsal", "-high", "-low", "-back", "-round"]),
+        (id: "ph_i", ipa: "i", kind: vowel, frequency_weight: 40,
+         features: ["+syllabic", "-consonantal", "+sonorant", "+approximant", "+continuant", "-nasal", "-lateral", "-trill", "+voice", "-labial", "-coronal", "+dorsal", "+high", "-low", "-back", "-round"]),
+        (id: "ph_o", ipa: "o", kind: vowel, frequency_weight: 30,
+         features: ["+syllabic", "-consonantal", "+sonorant", "+approximant", "+continuant", "-nasal", "-lateral", "-trill", "+voice", "+labial", "-coronal", "+dorsal", "-high", "-low", "+back", "+round"]),
+        (id: "ph_u", ipa: "u", kind: vowel, frequency_weight: 35,
+         features: ["+syllabic", "-consonantal", "+sonorant", "+approximant", "+continuant", "-nasal", "-lateral", "-trill", "+voice", "+labial", "-coronal", "+dorsal", "+high", "-low", "+back", "+round"]),
+    ],
+
+    phonotactics: (
+        templates: [
+            (pattern: "CV",  weight: 45),
+            (pattern: "CVC", weight: 35),
+            (pattern: "V",   weight: 12),
+            (pattern: "VC",  weight: 8),
+        ],
+        syllables_per_root: [
+            (count: 1, weight: 25),
+            (count: 2, weight: 55),
+            (count: 3, weight: 20),
+        ],
+    ),
+
+
+    // MEANINGS THIS PROJECT DECLARES (M12). The built-in list is a *basic*
+    // vocabulary — it has no opinion about rigging or tides, because no Swadesh list
+    // does. A seafaring people need these words; declaring them here rather than in
+    // a sidecar keeps the language reproducible from its own file alone.
+    //
+    // None carries a Concepticon anchor, and the type has no field for one: an
+    // unanchored meaning is honest, a fabricated anchor is not.
+    concepts: [
+        (key: "TIDE",    gloss: "tide",    note: "twice-daily; the whole calendar hangs off it"),
+        (key: "KEEL",    gloss: "keel"),
+        (key: "HARBOR",  gloss: "harbour"),
+        (key: "SAIL",    gloss: "sail"),
+        (key: "OAR",     gloss: "oar"),
+        (key: "REEF",    gloss: "reef"),
+        (key: "SQUALL",  gloss: "squall"),
+        (key: "ANCHOR",  gloss: "anchor"),
+        (key: "NET_FISHING", gloss: "fishing net"),
+        (key: "SALT_SEA", gloss: "sea salt"),
+        (key: "ICE",     gloss: "ice",     note: "they trade north; you need a word for what the far people live on"),
+    ],
+
+    prosody: (stress: fixed(from: left, offset: 0)),
+
+    // SEMANTICS (M9). One node: the inherited sense of *takala. Its gloss is
+    // "star", identical to what concept STAR already displays, so adding this block
+    // moves no rendered byte anywhere — it exists so that Coastal's drift has a
+    // REAL sense to remove, and so `SenseHistory.input` is literally true rather
+    // than inferred. Highland and Riverine never drift, so they simply keep it.
+    semantics: (
+        nodes: [
+            (id: "sn_star", gloss: "star", concept: "STAR",
+             note: "DESIGN §10.2's *takala 'star, bright thing' — the inherited sense."),
+        ],
+    ),
+
+    lexicon: [
+        // §10.2's worked example: *takala 'star'.
+        (
+            id: "w_0001",
+            concept: "STAR",
+            phonemic_form: (syllables: [
+                (pattern: "CV", segments: ["ph_t", "ph_a"]),
+                (pattern: "CV", segments: ["ph_k", "ph_a"]),
+                (pattern: "CV", segments: ["ph_l", "ph_a"]),
+            ]),
+            // The sense M9's drift acts on. Same displayed gloss as concept STAR,
+            // so every existing golden is byte-unchanged.
+            senses: [(node: "sn_star", gloss: "star")],
+            part_of_speech: noun,
+            cognate_set: "cog_asterian_attested_0001",
+            source: authored,
+        ),
+        // THE ORDERING PROOF. Voicing then apocope gives `tag`; apocope then voicing
+        // gives `tak`. *takala shows neither (its final vowel never conditioned the
+        // /k/), so this word is what makes rule order observable.
+        (
+            id: "w_0002",
+            concept: "MOON",
+            phonemic_form: (syllables: [
+                (pattern: "CV", segments: ["ph_t", "ph_a"]),
+                (pattern: "CV", segments: ["ph_k", "ph_a"]),
+            ]),
+            part_of_speech: noun,
+            cognate_set: "cog_asterian_attested_0002",
+            source: authored,
+        ),
+        // The null derivation: no rule touches it, and its trace must say so
+        // explicitly — Some(steps: []) is 'carried through unchanged'.
+        (
+            id: "w_0003",
+            concept: "SUN",
+            phonemic_form: (syllables: [
+                (pattern: "CV", segments: ["ph_s", "ph_a"]),
+                (pattern: "CVC", segments: ["ph_w", "ph_e", "ph_l"]),
+            ]),
+            part_of_speech: noun,
+            cognate_set: "cog_asterian_attested_0003",
+            source: authored,
+        ),
+        // /k/ sits before the glide /w/, which is [-syllabic] — proving the voicing
+        // environment is [+syllabic], not 'vowel-ish'.
+        (
+            id: "w_0004",
+            concept: "WATER",
+            phonemic_form: (syllables: [
+                (pattern: "VC", segments: ["ph_a", "ph_k"]),
+                (pattern: "CV", segments: ["ph_w", "ph_a"]),
+            ]),
+            part_of_speech: noun,
+            cognate_set: "cog_asterian_attested_0004",
+            source: authored,
+        ),
+        // *rekan 'king'. Voices; no final vowel to lose; the nasal is word-final so
+        // assimilation cannot fire. Concept is MAN, glossed "king": etymology 'man',
+        // surface sense 'king' — the split M9 will model, and the reason
+        // `--meanings king` must resolve by gloss (this word), not by concept key
+        // (KING is on the list since M2, but no fixture word carries it).
+        (
+            id: "w_0005",
+            concept: "MAN",
+            phonemic_form: (syllables: [
+                (pattern: "CV", segments: ["ph_r", "ph_e"]),
+                (pattern: "CVC", segments: ["ph_k", "ph_a", "ph_n"]),
+            ]),
+            glosses: ["king"],
+            part_of_speech: noun,
+            cognate_set: "cog_asterian_attested_0005",
+            source: authored,
+        ),
+        // Assimilation tier 2: /n/ before /k/ needs a velar nasal, which this
+        // language does not have — the rule MINTS /ŋ/.
+        (
+            id: "w_0006",
+            concept: "STONE",
+            phonemic_form: (syllables: [
+                (pattern: "CVC", segments: ["ph_s", "ph_a", "ph_n"]),
+                (pattern: "CV", segments: ["ph_k", "ph_a"]),
+            ]),
+            part_of_speech: noun,
+            cognate_set: "cog_asterian_attested_0006",
+            source: authored,
+        ),
+        // Assimilation tier 1: /n/ before /p/ resolves to /m/, a declared phoneme.
+        (
+            id: "w_0007",
+            concept: "MOUNTAIN",
+            phonemic_form: (syllables: [
+                (pattern: "VC", segments: ["ph_a", "ph_n"]),
+                (pattern: "CV", segments: ["ph_p", "ph_a"]),
+            ]),
+            part_of_speech: noun,
+            cognate_set: "cog_asterian_attested_0007",
+            source: authored,
+        ),
+        // Assimilation tier 1, the case that REQUIRES the copy to remove a cell:
+        // /m/ taking /t/'s place must lose its rounding value or the result
+        // matches nothing.
+        (
+            id: "w_0008",
+            concept: "FIRE",
+            phonemic_form: (syllables: [
+                (pattern: "VC", segments: ["ph_a", "ph_m"]),
+                (pattern: "CV", segments: ["ph_t", "ph_a"]),
+            ]),
+            part_of_speech: noun,
+            cognate_set: "cog_asterian_attested_0008",
+            source: authored,
+        ),
+        // MOTHER *mikala. The velar chain again, but /i/ is [-low], so Riverine's
+        // low-vowel coalescence cannot fire — the one daughter that keeps all three
+        // vowels (miala), where STAR's *takala coalesced to tala. Concept MOTHER
+        // carries no gloss override, so it resolves by its concept gloss "mother":
+        // the concept-path counterpart to w_0005 'king', which resolves by an
+        // override. Added for M5's `stemma cognates … --meanings … mother`.
+        (
+            id: "w_0009",
+            concept: "MOTHER",
+            phonemic_form: (syllables: [
+                (pattern: "CV", segments: ["ph_m", "ph_i"]),
+                (pattern: "CV", segments: ["ph_k", "ph_a"]),
+                (pattern: "CV", segments: ["ph_l", "ph_a"]),
+            ]),
+            part_of_speech: noun,
+            cognate_set: "cog_asterian_attested_0009",
+            source: authored,
+        ),
+    ],
+
+    notes: [
+        "The M3 acceptance fixture: DESIGN.md §10.2's *takala chain, plus the ordering proof *taka and three assimilation cases.",
+        "Apply fixtures/rules_asterian.ron to this file to reproduce the worked example.",
+    ],
+)

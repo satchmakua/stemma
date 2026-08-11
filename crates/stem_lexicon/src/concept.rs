@@ -202,6 +202,107 @@ pub struct Concept {
     pub part_of_speech: PartOfSpeech,
 }
 
+/// A meaning **this project declares**, alongside the built-in list (ROADMAP M12).
+///
+/// # Why a second type rather than a bigger [`CONCEPTS`]
+///
+/// [`Concept`] is `&'static str` all the way down because it is a compiled table; it
+/// cannot be deserialised from a file. This is its owned twin, stored **inside the
+/// genome** — which is the point. `concept.rs`'s own docs explain why the built-in
+/// list is compiled in: a lexicon generated from a *sidecar* file would depend on
+/// something [`stem_genome::LanguageGenome::seed`]'s contract does not cover, and
+/// `new-lexicon --seed 42` would produce different languages on two machines. A
+/// concept carried in the genome has no such problem — the language is still
+/// reproducible from its own file alone, which is why this is a genome field and
+/// must never become a `--concepts-file` flag.
+///
+/// # No `concepticon_id`, deliberately
+///
+/// A project concept has no external anchor by definition: if a verified Concepticon
+/// mapping existed, the meaning belongs on the built-in list where every reader gets
+/// it. Omitting the field entirely makes a fabricated anchor unrepresentable rather
+/// than merely discouraged — the strongest form of [`Concept::concepticon_id`]'s
+/// false-provenance rule.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ProjectConcept {
+    /// Local identity, in the same CLDF-safe charset as a built-in key.
+    ///
+    /// **Permanent, and unique against the built-in list.** A key that collides with
+    /// a compiled one is reported (`concepts.shadows_builtin`) rather than silently
+    /// winning, because two meanings under one key would make the join ambiguous.
+    pub key: ConceptKey,
+
+    /// The English label printed in the dictionary.
+    pub gloss: String,
+
+    /// The part of speech a generated entry starts with. A default, not a truth —
+    /// see [`PartOfSpeech`].
+    #[serde(default = "PartOfSpeech::noun_default")]
+    pub part_of_speech: PartOfSpeech,
+
+    /// Authorial prose: why this language needs this meaning. Not interpreted.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub note: String,
+}
+
+/// One meaning to coin a word for, from either source.
+///
+/// The generator needs exactly two things — a key to record and a part of speech to
+/// seed — plus a gloss to write onto the entry when the built-in list cannot supply
+/// one. Borrowing both sources into one view keeps [`crate::build_proto_lexicon`] a
+/// single code path, so a project concept and a built-in concept cannot be coined by
+/// subtly different rules.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Meaning<'a> {
+    /// The concept key recorded on the entry.
+    pub key: &'a str,
+    /// Its gloss.
+    pub gloss: &'a str,
+    /// The part of speech the coined word starts with.
+    pub part_of_speech: PartOfSpeech,
+    /// True when [`concept`] can resolve `key`, i.e. the gloss is already available
+    /// from the compiled table and need not be written onto the entry.
+    pub is_builtin: bool,
+}
+
+impl<'a> From<&'a Concept> for Meaning<'a> {
+    fn from(c: &'a Concept) -> Self {
+        Self {
+            key: c.key,
+            gloss: c.gloss,
+            part_of_speech: c.part_of_speech,
+            is_builtin: true,
+        }
+    }
+}
+
+impl<'a> From<&'a ProjectConcept> for Meaning<'a> {
+    fn from(c: &'a ProjectConcept) -> Self {
+        Self {
+            key: c.key.as_str(),
+            gloss: &c.gloss,
+            part_of_speech: c.part_of_speech,
+            is_builtin: false,
+        }
+    }
+}
+
+/// Every meaning available to a language: the built-in list, then the project's own,
+/// in that order.
+///
+/// **Built-in first, and that is load-bearing.** `build(n)` must stay a strict prefix
+/// of `build(n + k)` ([`crate::build`]'s draw contract), so appending the project's
+/// concepts after the compiled ones means declaring a new meaning cannot change a
+/// single word that was already coined.
+pub fn meanings<'a>(project: &'a [ProjectConcept]) -> Vec<Meaning<'a>> {
+    CONCEPTS
+        .iter()
+        .map(Meaning::from)
+        .chain(project.iter().map(Meaning::from))
+        .collect()
+}
+
 /// Builds a concept carrying a verified Concepticon anchor.
 const fn c(
     key: &'static str,

@@ -12,7 +12,7 @@ The name comes from textual criticism: a *stemma* is the reconstructed family tr
 showing how surviving manuscripts descend from a lost original. That is exactly
 this program's core data structure.
 
-**Status:** **Phase 1 complete (M0–M6); Phase 2 underway (M7–M10 done)** — the
+**Status:** **the roadmap is complete — M0 through M11 all shipped** — the
 diachronic kernel runs end to end. Languages get a feature-based phonology,
 generate seeded roots, undergo ordered sound change, fork into daughters with their
 own histories, and line up in a comparative cognate table; `stemma demo` tells the
@@ -24,8 +24,10 @@ word come to mean something new on one branch while its sisters keep the old sen
 **without breaking the cognate row that proves they are the same etymon**. And M10
 made the rules readable: a `.sc` file writes sound changes in a plain syntax and
 produces **byte-identical** output to the hand-built structs, so the notation is a
-front end and can never become a second engine. 528 tests pass, and every step is
-deterministic and traced. A visual explorer (M11) is next. See
+front end and can never become a second engine. And M11 added `stemma-ui`, a native
+desktop window — no browser, one self-contained binary — that shows any word's full
+history and the daughters side by side. 528 tests pass, and every step is
+deterministic and traced. See
 [ROADMAP.md](ROADMAP.md) for the plan and [PROGRESS.md](PROGRESS.md) for what has
 shipped.
 
@@ -38,9 +40,25 @@ Install from [rustup.rs](https://rustup.rs) if needed. No other dependencies —
 database, no Node, no system libraries.
 
 ```bash
+./scripts/playground.sh     # builds a real 103-word family and opens the explorer
+```
+
+That is the fastest way in. For the command-by-command version, see
+**[docs/GUIDE.md](docs/GUIDE.md)** — the user's guide.
+
+To poke at it from the terminal instead:
+
+```bash
 cargo build --workspace                                    # once
 cargo run -p stem_cli -- validate fixtures/proto_asterian.ron
 ```
+
+> **A note on the fixtures.** `proto_asterian.ron` has **no vocabulary** — it is an
+> inventory and a set of root shapes. `asterian_attested.ron` has **nine** words, and
+> is a *test fixture*: each word is there to prove one engine behaviour. A language
+> with a dictionary is something you **generate** (`new-lexicon`, or just run the
+> playground script). Opening the fixtures expecting a browsable language is the most
+> common first confusion.
 
 You should see:
 
@@ -367,6 +385,7 @@ Phase 1 capstone. (The exact bytes are pinned as a snapshot at
 | `stemma trace <file> <word>` | Print a word's derivation, rule by rule |
 | `stemma trace-word <file> <meaning>` | Print a word's derivation, addressed by meaning |
 | `stemma demo` | Write the "Growing a Language Family in 90 Seconds" document (`--out`) |
+| `stemma-ui [files…]` | Open the desktop explorer: trace a word, compare daughters (read-only) |
 | `stemma rules <file>` | Validate and summarise a rule-set file (`.ron`, `.json`, or `.sc`) |
 | `stemma convert <in> <out>` | Convert a project between RON and JSON |
 

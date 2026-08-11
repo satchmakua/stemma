@@ -5,8 +5,9 @@ A build log of what shipped and the notable decisions behind it. **Keep it hones
 acceptance tests live in [ROADMAP.md](ROADMAP.md); this is the backward-looking
 "what got done and why" companion.
 
-**Current phase:** Phase 2 — depth. M7–M10 shipped; next milestone: **M11 — the
-visual explorer**, the first UI (§10, §20.5).
+**Current phase:** Phase 3 — breadth. M12 shipped; next milestone: **M13 — a
+believable core vocabulary**, then M14 (derivation) and M15 (environment & culture).
+Phases 0–2 (M0–M11) are complete.
 
 ## State of the tree
 
@@ -19,7 +20,136 @@ visual explorer**, the first UI (§10, §20.5).
 | `stem_genome` | `LanguageGenome`, `fork`, `LineageGraph`, family validation, `render_family`, `render_paradigm`, **`with_drift` / `render_word_history`**, plausibility profile | working |
 | `stem_io` | RON/JSON load & save | working — **untouched since M0** |
 | `stem_export` | Markdown dictionaries, CLDF CSV, cognate table, family demo | working |
-| `stem_cli` | the `stemma` binary | …plus `profile`, `inflect`, `paradigm`, `drift`, `drifts` |
+| `stem_cli` | the `stemma` binary | …plus `profile`, `inflect`, `paradigm`, `drift`, `drifts`; rule files may be `.sc` |
+| `stem_ui` | the `stemma-ui` desktop explorer — native egui, read-only | working (M11) |
+
+---
+
+## M12 — Project concepts · built 2026-08-10 · ✓ verified
+
+A language may now declare **its own meanings** alongside the built-in 103, so the
+vocabulary ceiling is the language's, not the compiler's. **533 tests pass**; clippy
+clean.
+
+```ron
+concepts: [
+    (key: "TIDE",   gloss: "tide", note: "twice-daily; the whole calendar hangs off it"),
+    (key: "KEEL",   gloss: "keel"),
+    (key: "ICE",    gloss: "ice",  note: "they trade north; you need a word for what the far people live on"),
+],
+```
+
+```
+$ stemma new-lexicon fixtures/seafarers.ron --seed 7 --out out/sea.ron
+114 words over 114 concepts -> out/sea.ron
+
+| maik | /maik/ | ice | noun | `ICE` | `w_0114` | `cog_asterian_seafarers_0114` |
+```
+
+### Decisions worth knowing
+
+**The concepts live in the genome, and that is the whole design.** `concept.rs`
+compiled the built-in list in precisely so a generated lexicon could not depend on a
+sidecar file that `seed`'s contract does not cover — `new-lexicon --seed 42` must not
+produce different languages on two machines. A concept carried *inside* the genome
+has no such problem: the language is still reproducible from its own file alone. That
+is why this is a genome field and **must never become a `--concepts-file` flag**.
+
+**Appended after the built-in list, never interleaved.** The draw contract makes
+`build(n)` a strict prefix of `build(n + k)`, so declaring a new meaning cannot move
+a word that was already coined — pinned by
+`declaring_project_concepts_cannot_change_a_word_already_coined`.
+
+**`ProjectConcept` has no `concepticon_id` field at all.** If a verified mapping
+existed the meaning belongs on the built-in list, where every reader gets it. Omitting
+the field makes a fabricated anchor *unrepresentable* rather than merely discouraged —
+the strongest form of the false-provenance rule.
+
+**`unknown_concept` moved out of `Lexicon::validate`.** From inside a bare lexicon an
+invented key and a project-declared one are indistinguishable, so the context-free
+method genuinely cannot answer the question — and warning about both would have been
+the validator contradicting the generator on every word `new-lexicon` had just
+coined. It is now `check_against_concepts(lexicon, project)`, absorbed by the genome
+under scope `concepts`, exactly as `check_against_inventory` and
+`check_against_semantics` already were, and for the identical reason.
+
+**A project-concept word carries its own gloss**, because nothing compiled can supply
+one and `display_gloss` takes no context. That echo has a paired guard
+(`concepts.stale_project_gloss`), the same discipline `SenseRef` gets.
+
+**Two more reports, both Warnings:** `shadows_builtin` (a project key reusing a
+compiled one — the compiled meaning wins, so the declaration is inert) and the
+run-time ceiling note, since `--concepts` can no longer be range-checked at compile
+time against a constant that is no longer the ceiling.
+
+### The correction this milestone encodes
+
+`DESIGN.md` §7.5 rejected Swadesh-207 partly to avoid forcing a desert proto-language
+to coin a word for ice. That argument is right about *forced* coinage and wrong as a
+ceiling — the user's counter is better and is now the project's position: deserts
+freeze, and you need a name for what the far-north people live on. **A language
+missing words it should have is a worse failure than one carrying a word its speakers
+rarely use.** M13–M15 follow from it: ship breadth by default, and make gaps
+deliberate rather than accidental.
+
+---
+
+## M11 — Visual explorer · built 2026-08-10 · ✓ verified
+
+The first UI, and the last milestone on the roadmap. `stemma-ui` is a **native
+window** — `eframe`/`egui` drawing through wgpu, no WebView, no JS runtime, no Node
+in the toolchain, one self-contained 16 MB executable you run from the desktop
+(`docs/adr/0013`). **528 workspace tests pass**; clippy clean; the new crate carries
+its own guard test.
+
+Four read-only views, each a presentation of a **library** string: **Trace a word**
+(§10.2's killer feature — click any word in the list, get its full history),
+**Cognate table** (the daughters side by side), **Family**, and **Profile**. Files
+open by native dialog, by dropping them on the window, or as argv:
+
+```bash
+stemma-ui fixtures/asterian_attested.ron out/coastal_modern.ron out/highland.ron
+```
+
+### Decisions worth knowing
+
+**egui over the alternatives, and Tauri ruled out by the constraint.** A system
+WebView *is* a browser engine: it would reintroduce HTML/CSS/JS, a Node toolchain,
+and rendering that depends on whichever Edge/WebKit the machine happens to have.
+Slint would add a **second DSL** to a project that just carefully added one; Iced is
+sound but retained-mode ceremony for a viewer that only reads; GTK/Qt would need
+system libraries this project has never asked anyone to install. The costs of egui
+are recorded honestly in the ADR: a ~16 MB binary and a ~1-minute first build, both
+from the graphics stack.
+
+**The UI holds no logic, and a source-scan test enforces it.** Every panel renders a
+string from `render_word_history` / `render_cognate_table` / `render_family` /
+`render_profile` — the same functions `stemma` the CLI calls.
+`the_ui_computes_nothing_it_could_instead_ask_a_library_for` bans `apply_rules`,
+`apply_drift`, `scoped_cognate_set`, `parse_rule_set`, `compose`, `inflect` **and
+`stem_io::save`** from the crate. That last one is the read-only fence: §20.5's "keep
+views read-only before adding full editing" becomes a checked property rather than an
+intention.
+
+This is the payoff for keeping `stem_cli` logic-free since M0 and for moving
+`render_family` into `stem_genome` at M4 with the note *"the M11 UI must render the
+identical text through the identical function"*. **The CLI and the window cannot
+disagree about a word's history**, because one renderer sits behind both.
+
+**Monospace is not decoration.** Every renderer aligns columns by character count
+through one shared `pad`; a proportional font would undo that work. The window is a
+viewer for the CLI's own output, not a reinterpretation of it.
+
+**Verification, stated exactly:** it compiles, launches, holds a real window, and was
+run against the Asterian family. It could **not** be screenshotted from inside the
+session — the computer-use allowlist resolves *installed* applications and this is a
+freshly built dev binary. What the window displays is library output already pinned
+by tests elsewhere, but "I have seen it render" is not a claim this entry makes.
+
+**Deferred (§20.5's list is where projects go to die):** every §10.1 view beyond the
+four built; all editing and therefore all saving; project files as a concept distinct
+from a set of open languages; `.sc` syntax highlighting; theming; window-state
+persistence.
 
 ---
 

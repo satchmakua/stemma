@@ -578,7 +578,7 @@ fn a_saved_lexicon_regenerates_from_its_own_file() {
         &genome.id,
         &genome.phonemes,
         &genome.phonotactics,
-        stem_lexicon::CONCEPTS,
+        &stem_lexicon::meanings(&genome.concepts),
         genome.seed,
     )
     .expect("rebuild");

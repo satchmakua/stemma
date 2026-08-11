@@ -1,0 +1,26 @@
+[package]
+name = "stem_ui"
+description = "The Stemma desktop explorer — a read-only second front end onto the same crates."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "stemma-ui"
+path = "src/main.rs"
+
+[dependencies]
+stem_core.workspace = true
+stem_genome.workspace = true
+stem_io.workspace = true
+stem_lexicon.workspace = true
+stem_soundchange.workspace = true
+eframe.workspace = true
+egui.workspace = true
+rfd.workspace = true
+
+[lints]
+workspace = true

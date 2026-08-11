@@ -34,7 +34,7 @@ use stem_core::rng::StemmaRng;
 use stem_core::{CognateSetId, LanguageId, Result, WordId, rng_for};
 use stem_phonology::{PhonemeInventory, Phonotactics, RootGenerator};
 
-use crate::concept::{Concept, ConceptKey};
+use crate::concept::{ConceptKey, Meaning};
 use crate::lexicon::Lexicon;
 use crate::word::{WordEntry, WordSource};
 
@@ -86,23 +86,34 @@ pub fn build_proto_lexicon(
     language: &LanguageId,
     inventory: &PhonemeInventory,
     phonotactics: &Phonotactics,
-    concepts: &[Concept],
+    meanings: &[Meaning<'_>],
     seed: u64,
 ) -> Result<Lexicon> {
     let generator = RootGenerator::new(inventory, phonotactics)?;
     let mut rng: StemmaRng = rng_for(seed, RngDomain::Lexicon);
 
-    let entries: Vec<WordEntry> = concepts
+    let entries: Vec<WordEntry> = meanings
         .iter()
         .enumerate()
-        .map(|(i, concept)| {
+        .map(|(i, meaning)| {
             let ordinal = i + 1;
             WordEntry {
                 id: WordId::sequential(ordinal),
-                concept: Some(ConceptKey::new(concept.key)),
+                concept: Some(ConceptKey::new(meaning.key)),
                 phonemic_form: generator.next_root(&mut rng),
-                glosses: Vec::new(),
-                part_of_speech: concept.part_of_speech,
+                // A built-in meaning's gloss comes from the compiled table, so
+                // storing it would put a hundred identical strings in every project
+                // file. A **project** meaning has no compiled entry to fall back to,
+                // and `display_gloss` takes no context — so its gloss is written
+                // here, on the one entry that needs it. This is the same echo
+                // `SenseRef` makes and for the same reason, and
+                // `concepts.stale_project_gloss` is its paired guard.
+                glosses: if meaning.is_builtin {
+                    Vec::new()
+                } else {
+                    vec![meaning.gloss.to_owned()]
+                },
+                part_of_speech: meaning.part_of_speech,
                 cognate_set: scoped_cognate_set(language, ordinal),
                 source: WordSource::Generated,
                 trace: None,

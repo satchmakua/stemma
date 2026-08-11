@@ -248,24 +248,13 @@ impl Validate for Lexicon {
                 );
             }
 
-            // Unusual, not broken: the entry still has an id, a form, a gloss and a
-            // cognate set. `CLAUDE.md` reserves Error for structurally broken.
-            if let Some(key) = &entry.concept
-                && crate::concept::concept(key).is_none()
-            {
-                let message = match nearest_concept_key(key) {
-                    Some(suggestion) => format!(
-                        "`{key}` is not on the built-in concept list; did you mean `{suggestion}`?"
-                    ),
-                    None => format!(
-                        "`{key}` is not on the built-in concept list; it will export with its \
-                         own gloss and no Concepticon anchor"
-                    ),
-                };
-                report.push(
-                    Issue::new(Severity::Warning, "unknown_concept", message).about(&entry.id),
-                );
-            }
+            // `unknown_concept` used to live here. It moved to
+            // `check_against_concepts` at M12, because a genome may now declare its
+            // own meanings and this method takes no context — so from here it is
+            // genuinely unable to tell an invented key from a project one, and
+            // warning about both would be the validator contradicting the generator
+            // on every word `new-lexicon` had just coined. Same reasoning, and the
+            // same remedy, as `check_against_inventory`.
 
             for (id, label) in [
                 (entry.id.as_str(), "word id"),
@@ -443,6 +432,93 @@ pub fn check_against_inventory(
                 shared.join(", ")
             ),
         );
+    }
+
+    report
+}
+
+/// The concept checks that need the project's own declared meanings (M12).
+///
+/// A free function taking context, for the reason `check_against_inventory` is one:
+/// `Validate::validate(&self)` takes no arguments, and from inside a bare [`Lexicon`]
+/// an invented concept key and a project-declared one are indistinguishable.
+///
+/// Three checks, all reporting rather than policing (§17):
+///
+/// - `unknown_concept` — the key is on neither list. A **Warning** with a spelling
+///   suggestion: the entry still has an id, a form, a gloss and a cognate set, so it
+///   is unusual rather than broken.
+/// - `shadows_builtin` — a project concept reuses a compiled key. A **Warning**: two
+///   meanings under one key make every join ambiguous, and the compiled one wins.
+/// - `stale_project_gloss` — an entry's stored gloss disagrees with the project
+///   concept it names. The paired guard for the gloss `build_proto_lexicon` writes
+///   onto project-concept entries, exactly as `semantics.stale_sense_gloss` guards
+///   the echo on a `SenseRef`.
+pub fn check_against_concepts(
+    lexicon: &Lexicon,
+    project: &[crate::concept::ProjectConcept],
+) -> ValidationReport {
+    let mut report = ValidationReport::new();
+
+    for declared in project {
+        if crate::concept::concept(&declared.key).is_some() {
+            report.push(
+                Issue::new(
+                    Severity::Warning,
+                    "shadows_builtin",
+                    format!(
+                        "`{}` is already on the built-in concept list; the compiled meaning \
+                         wins, so this declaration has no effect",
+                        declared.key
+                    ),
+                )
+                .about(&declared.key),
+            );
+        }
+    }
+
+    for entry in lexicon.iter() {
+        let Some(key) = &entry.concept else { continue };
+        if crate::concept::concept(key).is_some() {
+            continue;
+        }
+        match project.iter().find(|p| &p.key == key) {
+            Some(declared) => {
+                // The entry carries its own copy of the gloss (it must — nothing
+                // compiled can supply one). Catch a hand edit that desynchronises it.
+                if let Some(shown) = entry.display_gloss()
+                    && shown != declared.gloss
+                {
+                    report.push(
+                        Issue::new(
+                            Severity::Warning,
+                            "stale_project_gloss",
+                            format!(
+                                "word `{}` displays \"{shown}\", but the concept `{key}` it \
+                                 names says \"{}\"; the word's copy is stale",
+                                entry.id, declared.gloss
+                            ),
+                        )
+                        .about(&entry.id),
+                    );
+                }
+            }
+            None => {
+                let message = match nearest_concept_key(key) {
+                    Some(suggestion) => format!(
+                        "`{key}` is on neither the built-in list nor this project's own \
+                         concepts; did you mean `{suggestion}`?"
+                    ),
+                    None => format!(
+                        "`{key}` is on neither the built-in list nor this project's own \
+                         concepts; it will export with its own gloss and no Concepticon anchor"
+                    ),
+                };
+                report.push(
+                    Issue::new(Severity::Warning, "unknown_concept", message).about(&entry.id),
+                );
+            }
+        }
     }
 
     report
