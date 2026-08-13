@@ -33,13 +33,20 @@ use stem_lexicon::WordEntry;
 
 use crate::LanguageGenome;
 
-/// The complete §10.2 story for one word: its sound-change derivation, then its
-/// meaning history.
+/// The complete §10.2 story for one word: its sound-change derivation, then what it
+/// is made of (M14), then its meaning history.
 ///
 /// A pure function; no clock, no map, no float. Newline-terminated.
+///
+/// The etymology sits between form and meaning because that is what it joins: it
+/// explains the *shape* by naming the words that went in, and their glosses are what
+/// the meaning history then acts on. Both halves render `String::new()` for a word
+/// that has neither, so every pre-M9 and pre-M14 `stemma trace` output is unmoved to
+/// the byte — the composition-not-modification rule this module was created under.
 pub fn render_word_history(genome: &LanguageGenome, entry: &WordEntry) -> Result<String> {
     let mut out =
         stem_soundchange::render_derivation(entry, &genome.applied_rules, &genome.phonemes)?;
+    out.push_str(&crate::etymology::render_etymology(genome, entry)?);
     out.push_str(&render_sense_history(genome, entry));
     Ok(out)
 }
@@ -196,6 +203,7 @@ mod tests {
             source: WordSource::Authored,
             trace: None,
             morphemes: Vec::new(),
+            bases: Vec::new(),
             senses: vec![SenseRef {
                 node: SemanticNodeId::new("sn_omen"),
                 gloss: "omen".to_owned(),

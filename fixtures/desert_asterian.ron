@@ -1,0 +1,166 @@
+// Asterian as the desert people speak it — one half of the M15 acceptance pair.
+//
+// THE POINT (ROADMAP M15): this file and its sibling `seafarer_asterian.ron` carry the
+// SAME 15 phonemes, the SAME phonotactics and the SAME seed. They are one language
+// given two ecologies. Everything that differs between the lexicons they coin is
+// the culture profile's doing and nothing else, which is what makes the comparison
+// legible:
+//
+//   stemma culture     fixtures/desert_asterian.ron
+//   stemma culture     fixtures/seafarer_asterian.ron
+//   stemma new-lexicon fixtures/desert_asterian.ron --out out/a.ron
+//   stemma new-lexicon fixtures/seafarer_asterian.ron --out out/b.ron
+//
+// Both coin `star` as the SAME WORD, because a meaning's form is a pure function of
+// its concept's POSITION and the seed (see `build_shaped_lexicon`'s draw contract).
+// They differ only where these two peoples differ.
+//
+// A GAP IS A CLAIM, NOT AN ACCIDENT. Every meaning either language lacks is listed
+// under the culture trait that explains it, with a reason a reader can disagree
+// with. That is the whole milestone: DESIGN §7.5 worried about a desert language
+// being forced to coin a word for ice, M13 answered "ship breadth by default", and
+// this is the other half — the deliberate gap, on the record.
+(
+    id: "asterian_desert",
+    name: "Asterian (desert)",
+    lineage_depth_years: 0,
+    seed: 42,
+
+    phonemes: [
+        // --- Stops ---
+        (id: "ph_p", ipa: "p", kind: consonant, frequency_weight: 30,
+         features: ["-syllabic", "+consonantal", "-sonorant", "-approximant", "-continuant", "-nasal", "-lateral", "-trill", "-voice", "+labial", "-coronal", "-dorsal", "-round"]),
+        (id: "ph_t", ipa: "t", kind: consonant, frequency_weight: 50,
+         features: ["-syllabic", "+consonantal", "-sonorant", "-approximant", "-continuant", "-nasal", "-lateral", "-trill", "-voice", "-labial", "+coronal", "-dorsal"]),
+        (id: "ph_k", ipa: "k", kind: consonant, frequency_weight: 45,
+         features: ["-syllabic", "+consonantal", "-sonorant", "-approximant", "-continuant", "-nasal", "-lateral", "-trill", "-voice", "-labial", "-coronal", "+dorsal", "+high", "-low", "+back", "-round"]),
+
+        // --- Nasals ---
+        (id: "ph_m", ipa: "m", kind: consonant, frequency_weight: 35,
+         features: ["-syllabic", "+consonantal", "+sonorant", "-approximant", "-continuant", "+nasal", "-lateral", "-trill", "+voice", "+labial", "-coronal", "-dorsal", "-round"]),
+        (id: "ph_n", ipa: "n", kind: consonant, frequency_weight: 40,
+         features: ["-syllabic", "+consonantal", "+sonorant", "-approximant", "-continuant", "+nasal", "-lateral", "-trill", "+voice", "-labial", "+coronal", "-dorsal"]),
+
+        // --- Fricative ---
+        (id: "ph_s", ipa: "s", kind: consonant, frequency_weight: 35,
+         features: ["-syllabic", "+consonantal", "-sonorant", "-approximant", "+continuant", "-nasal", "-lateral", "-trill", "-voice", "-labial", "+coronal", "-dorsal"]),
+
+        // --- Liquids ---
+        (id: "ph_l", ipa: "l", kind: consonant, frequency_weight: 30,
+         features: ["-syllabic", "+consonantal", "+sonorant", "+approximant", "+continuant", "-nasal", "+lateral", "-trill", "+voice", "-labial", "+coronal", "-dorsal"]),
+        (id: "ph_r", ipa: "r", kind: consonant, frequency_weight: 25,
+         features: ["-syllabic", "+consonantal", "+sonorant", "-approximant", "+continuant", "-nasal", "-lateral", "+trill", "+voice", "-labial", "+coronal", "-dorsal"]),
+
+        // --- Glides ---
+        (id: "ph_w", ipa: "w", kind: consonant, frequency_weight: 20,
+         features: ["-syllabic", "-consonantal", "+sonorant", "+approximant", "+continuant", "-nasal", "-lateral", "-trill", "+voice", "+labial", "-coronal", "+dorsal", "+high", "-low", "+back", "+round"]),
+        (id: "ph_j", ipa: "j", romanization: "y", kind: consonant, frequency_weight: 10,
+         features: ["-syllabic", "-consonantal", "+sonorant", "+approximant", "+continuant", "-nasal", "-lateral", "-trill", "+voice", "-labial", "-coronal", "+dorsal", "+high", "-low", "-back", "-round"]),
+
+        // --- Vowels ---
+        (id: "ph_a", ipa: "a", kind: vowel, frequency_weight: 60,
+         features: ["+syllabic", "-consonantal", "+sonorant", "+approximant", "+continuant", "-nasal", "-lateral", "-trill", "+voice", "-labial", "-coronal", "+dorsal", "-high", "+low", "+back", "-round"]),
+        (id: "ph_e", ipa: "e", kind: vowel, frequency_weight: 35,
+         features: ["+syllabic", "-consonantal", "+sonorant", "+approximant", "+continuant", "-nasal", "-lateral", "-trill", "+voice", "-labial", "-coronal", "+dorsal", "-high", "-low", "-back", "-round"]),
+        (id: "ph_i", ipa: "i", kind: vowel, frequency_weight: 40,
+         features: ["+syllabic", "-consonantal", "+sonorant", "+approximant", "+continuant", "-nasal", "-lateral", "-trill", "+voice", "-labial", "-coronal", "+dorsal", "+high", "-low", "-back", "-round"]),
+        (id: "ph_o", ipa: "o", kind: vowel, frequency_weight: 30,
+         features: ["+syllabic", "-consonantal", "+sonorant", "+approximant", "+continuant", "-nasal", "-lateral", "-trill", "+voice", "+labial", "-coronal", "+dorsal", "-high", "-low", "+back", "+round"]),
+        (id: "ph_u", ipa: "u", kind: vowel, frequency_weight: 35,
+         features: ["+syllabic", "-consonantal", "+sonorant", "+approximant", "+continuant", "-nasal", "-lateral", "-trill", "+voice", "+labial", "-coronal", "+dorsal", "+high", "-low", "+back", "+round"]),
+    ],
+
+    phonotactics: (
+        templates: [
+            (pattern: "CV",  weight: 45),
+            (pattern: "CVC", weight: 35),
+            (pattern: "V",   weight: 12),
+            (pattern: "VC",  weight: 8),
+        ],
+        syllables_per_root: [
+            (count: 1, weight: 25),
+            (count: 2, weight: 55),
+            (count: 3, weight: 20),
+        ],
+    ),
+
+    prosody: (stress: fixed(from: left, offset: 0)),
+
+    // WHY THIS PEOPLE HAS THE WORDS IT HAS.
+    //
+    // Two traits, and each carries its own consequences rather than being looked up
+    // in a compiled ecology table. Stemma does not know what deserts imply; this
+    // author does, and writes it down where a reader can argue with it.
+    environment: (
+        summary: "The high inland waste and its two rivers; herders who trade north for salt and ice.",
+        traits: [
+            (
+                id: "DESERT",
+                name: "High desert",
+                note: "No coast within a season of travel. Water is counted, not assumed.",
+                elaborates: [
+                    // Four words for sand, because four kinds matter to someone who
+                    // has to cross them. This is the half of lexical ecology a
+                    // wordlist can never express: not a missing word, an insisted-on
+                    // distinction.
+                    (concept: "SAND", senses: [
+                        "fine drifting sand, the kind that moves overnight",
+                        "coarse sand that holds a footprint",
+                        "sand crusted hard enough to bear a cart",
+                        "sand carried on the wind, that blinds",
+                    ]),
+                    (concept: "WATER", senses: [
+                        "standing water, of a cistern or a rock pool",
+                        "running water, of the two rivers",
+                        "water carried, a skin worth",
+                    ]),
+                    (concept: "WELL_WATER", senses: [
+                        "a well one may drink at freely",
+                        "a well held by a clan, drunk at by leave",
+                    ]),
+                ],
+                lacks: [
+                    (concept: "SEA",    reason: "no living speaker has seen open water; the traders describe it and it has not been named"),
+                    (concept: "BOAT",   reason: "there is nothing to put one on"),
+                    (concept: "SHIP",   reason: "as BOAT"),
+                    (concept: "SAIL",   reason: "as BOAT"),
+                    (concept: "OAR",    reason: "as BOAT"),
+                    (concept: "SHORE",  reason: "the rivers have banks, and the word used for that is BORDER"),
+                    (concept: "WAVE",   reason: "no body of water here is large enough to make one"),
+                    (concept: "ISLAND", reason: "as SEA"),
+                    (concept: "FISH",   reason: "the two rivers run too fast and too cold; there is no fishing and no word"),
+                    (concept: "SWIM",   reason: "nobody learns; the verb used of a drowning animal is FLOAT"),
+                    (concept: "SWAMP",  reason: "unattested in the range these people travel"),
+                    (concept: "FOREST", reason: "trees grow singly and are named singly; a word for many together was never needed"),
+                ],
+            ),
+            (
+                id: "HERDING",
+                name: "Transhumant herders",
+                note: "Goats and a long-legged cattle breed, moved twice a year.",
+                elaborates: [
+                    (concept: "CATTLE", senses: [
+                        "the herd as property",
+                        "the herd on the move",
+                        "a beast fit to breed from",
+                        "a beast fit to kill",
+                    ]),
+                    (concept: "GRASS", senses: [
+                        "grazing worth stopping for",
+                        "grass too dry to graze",
+                    ]),
+                ],
+                lacks: [
+                    (concept: "PIG",  reason: "not herded here; the animal is unknown"),
+                    (concept: "PLOW", reason: "these people do not break ground; the settled south does, and its word has not been borrowed"),
+                    (concept: "REAP", reason: "as PLOW"),
+                    (concept: "SOW",  reason: "as PLOW"),
+                ],
+            ),
+        ],
+    ),
+
+    notes: [
+        "The M15 acceptance fixture (desert half). Compare with seafarer_asterian.ron: one phonology, one seed, two ecologies.",
+    ],
+)

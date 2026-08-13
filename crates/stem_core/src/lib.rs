@@ -25,5 +25,5 @@ pub use errors::{Result, StemmaError};
 pub use ids::{
     CognateSetId, EventId, LanguageId, MorphemeId, PhonemeId, RuleId, SemanticNodeId, WordId,
 };
-pub use rng::{RngDomain, StemmaRng, rng_for};
+pub use rng::{RngDomain, StemmaRng, rng_for, rng_for_indexed};
 pub use validate::{Issue, Severity, Validate, ValidationReport};

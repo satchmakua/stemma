@@ -5,9 +5,9 @@ A build log of what shipped and the notable decisions behind it. **Keep it hones
 acceptance tests live in [ROADMAP.md](ROADMAP.md); this is the backward-looking
 "what got done and why" companion.
 
-**Current phase:** Phase 3 — breadth. M12 shipped; next milestone: **M13 — a
-believable core vocabulary**, then M14 (derivation) and M15 (environment & culture).
-Phases 0–2 (M0–M11) are complete.
+**Current phase:** **Phase 3 is complete** (M12–M15). Next milestone: **M16 —
+editing in the explorer**, which opens Phase 4 (authoring). Phases 0–2 (M0–M11) are
+complete.
 
 ## State of the tree
 
@@ -15,13 +15,412 @@ Phases 0–2 (M0–M11) are complete.
 |---|---|---|
 | `stem_core` | typed IDs (`MorphemeId` M8, `SemanticNodeId` M9), `StemmaError`, `Validate` / `ValidationReport`, `rng`, `suggest` | working |
 | `stem_phonology` | features, `Phoneme`, inventory, phonotactics, root generation | working |
-| `stem_lexicon` | `WordEntry`, `Lexicon`, the 103-concept list, cognate-set minting, morphemes / `compose` / `inflect`, **senses / `apply_drift` / sense history** | working |
+| `stem_lexicon` | `WordEntry`, `Lexicon`, the **673**-concept list, cognate-set minting, morphemes / `compose` / `inflect`, senses / `apply_drift` / sense history, derivation patterns / `derive` / `BaseRef`, **culture profile / `build_shaped_lexicon`** | working |
 | `stem_soundchange` | rules, matching, ordered application, resolution, traces | working — **untouched by M8 and M9** |
 | `stem_genome` | `LanguageGenome`, `fork`, `LineageGraph`, family validation, `render_family`, `render_paradigm`, **`with_drift` / `render_word_history`**, plausibility profile | working |
 | `stem_io` | RON/JSON load & save | working — **untouched since M0** |
 | `stem_export` | Markdown dictionaries, CLDF CSV, cognate table, family demo | working |
 | `stem_cli` | the `stemma` binary | …plus `profile`, `inflect`, `paradigm`, `drift`, `drifts`; rule files may be `.sc` |
 | `stem_ui` | the `stemma-ui` desktop explorer — native egui, read-only | working (M11) |
+
+---
+
+## M15 — Environment & culture profile · built 2026-08-11 · ✓ verified
+
+Phase 3 closes. M13 gave every language 673 meanings by default; M15 is what makes
+that a starting point rather than an assertion. A language now says **why** it has
+the words it has — and, more importantly, why it has not got the others.
+**611 tests pass**; clippy clean; fmt clean.
+
+Two fixtures, one phonology, one concept list, one seed, two ecologies:
+
+```
+$ stemma new-lexicon fixtures/desert_asterian.ron
+$ stemma new-lexicon fixtures/seafarer_asterian.ron
+
+meaning      desert   island
+STAR              1        1     ← the same word, sosem, in both
+SAND              4        1
+SEA               0        4
+FISH              0        3
+CATTLE            4        0
+ICE               1        0
+```
+
+```
+$ stemma culture fixtures/seafarer_asterian.ron
+
+    lacks       ICE   — as SNOW, and unlike the desert people these have no
+                        northern trade to name it for
+```
+
+**`ice` is the inversion that closes the argument.** `DESIGN.md` §7.5 rejected a
+larger wordlist partly to avoid forcing a desert language to coin a word for ice. M12
+recorded the user's counter — deserts freeze, and you need a name for what the
+far-north people live on — and M13 shipped breadth on the strength of it. Here the
+*desert* language has the word, because its speakers trade north, and the *tropical
+island* language does not. The ecology decides, and either way the decision is on the
+record with a reason a reader can disagree with.
+
+### Decisions worth knowing
+
+**No inference engine, and that is the central call.** The tempting design is a
+compiled table — "desert ⇒ no SEA, no BOAT, no FISH" — so an author picks a terrain
+and gaps appear. That table would be Stemma asserting a great many claims about human
+cultures it cannot support, in a program whose premise is that every claim traces to
+something a person wrote. There are desert peoples with rich maritime vocabulary
+(they trade) and inland peoples with none. So a `CultureTrait` carries **its own
+declared consequences**: the author writes "these are high-desert herders, and
+*therefore* they lack these twelve meanings", and the engine applies and reports it.
+Same relationship a `RuleSet` has to the sound-change engine.
+
+**Distinctions are named, never counted.** `words: 4` would coin four rows all
+glossed "sand" — four identical dictionary lines and no information. `senses: [...]`
+makes the author state what the four *are*, and the count falls out of the list, so
+the data cannot disagree with itself. The desert language's four sands are the kind
+that moves overnight, the kind that holds a footprint, the kind that bears a cart,
+and the kind that blinds.
+
+**A reason is required, because an unexplained gap is the accident being replaced.**
+`Absence::reason` is a `String`, not an `Option<String>`, and an empty one is
+reported (`missing_absence_reason`).
+
+**Absence outranks elaboration.** You cannot have four words for a thing you have no
+word for; the conflict is reported (`contested_concept`) and resolved toward the
+stronger claim, so the report's explanation stays true.
+
+**`stemma culture` on a language with *no* profile says what that silently asserts** —
+"this language coins all 673 available meanings, which is itself a claim about its
+speakers, just not a deliberate one." Printing nothing would have been the same
+invisibility one layer up.
+
+### The draw contract, extended twice — and the bug in the middle
+
+The hard part of this milestone is not shaping the vocabulary, it is shaping it
+**without moving a word it did not shape**. Two clauses, and the second one took two
+attempts:
+
+1. **An absent concept still draws, and discards.** Skipping the draw would make
+   every later word's form depend on how many earlier meanings the profile happened
+   to remove, so adding one absence would silently rewrite the rest of the dictionary.
+2. **Elaboration's extra words come from `RngDomain::Elaboration`, indexed by the
+   concept's own position.**
+
+The first draft of clause 2 used a *single shared* elaboration stream, which is the
+obvious reading of "a separate stream" and is wrong. One cursor across all
+elaborations means giving `sand` a fourth word moves `water`'s second and third,
+because water's draws shifted one position down a stream they shared. Silent, and
+exactly the class of rewrite the determinism contract exists to prevent. It was
+caught by `elaborating_a_meaning_does_not_move_any_other_word` — a test written
+because the property was worth asserting, not because the bug was suspected.
+
+The fix is `stem_core::rng_for_indexed`, which salts the seed expansion with an
+index so every position gets its own stream. Its `Option<u64>` salt is deliberate:
+`None` hashes byte-identically to the old unsalted expansion, so **no existing stream
+moved**, and `Some(0)` is a different stream from `None` rather than conflated with
+it.
+
+Together the clauses make a word's form a pure function of its **concept's position**
+and the seed. That is what buys the acceptance's legibility: the two fixtures agree on
+`star` and every other shared meaning, so every difference between the dictionaries is
+attributable to the culture profile and nothing else.
+
+### Reported, never policed
+
+Six checks, all Warnings or Notes: `unknown_environment_concept` (with a spelling
+suggestion — a typo'd key means the author's stated gap silently is not one),
+`contested_concept`, `duplicate_culture_trait`, `empty_elaboration`,
+`missing_absence_reason`, and `large_vocabulary_gap`. A strange culture is a design,
+not a fault.
+
+The §17 profile gains a `Vocabulary shaping` band reading the shared
+`LARGE_VOCABULARY_GAP`, so band and Note switch at exactly the same count
+(`docs/adr/0009`, third instance). `Unshaped` means *no profile declared* — a
+different fact from a profile that removes nothing, which reads `Shaped`.
+
+### What is deliberately not here
+
+ROADMAP M15 names four categories; **borrowed-looking is the one not implemented**.
+A loanword is not an ecological fact, it is a *contact* fact: making a word look
+borrowed means drawing it from a donor language's phonotactics, and with no donor the
+only thing on offer is "draw from a deliberately wrong template" — a word that looks
+odd for no stated reason, which is precisely the unsupported claim this milestone
+exists to remove. It waits for a milestone that can name the donor.
+
+---
+
+## M14 — Derivation · built 2026-08-11 · ✓ verified
+
+M13 made the lexicon big. M14 makes it **made of itself**. 673 roots and 14 authored
+patterns produce **3,978 words**, and every coined one records the words it was built
+from. **577 tests pass**; clippy clean; fmt clean.
+
+```
+$ stemma derive out/deriv_proto.ron --out out/deriv.ron
+Asterian (derivation) — 673 base word(s), 14 pattern(s) -> 3305 coined
+3978 words over 673 concepts -> out/deriv.ron
+```
+
+Then erode the seams, and watch the record outlive them:
+
+```
+$ stemma apply-rules out/deriv.ron --rules fixtures/rules_coastal.ron … --out out/deriv_late.ron
+$ stemma trace out/deriv_late.ron w_3973
+
+  proto      wikikippa
+  │  1  r_velar_lenition    g > ɣ  [2,3)  ·  g > ɣ  [4,5)   → wiɣiɣippa
+  │  2  r_gamma_loss        ɣ > ∅  [2,3)  ·  ɣ > ∅  [4,5)   → wiiippa
+  │  3  r_apocope           a > ∅  [6,7)                    → wiiipp
+  modern     wiiipp
+
+Formation:
+  wiki         word     "blood"  →  wii  [w_0009 · cog_asterian_deriv_0009]
+  kippa        word     "debt"   →  ipp  [w_0414 · cog_asterian_deriv_0414]
+
+  wikikippa  →  wiiipp   — the seam has eroded; the record above is how the parts
+                            are still recoverable
+```
+
+`wiiipp` contains neither `wiki` nor `kippa` as a substring. **That is the milestone.**
+By eye the word is a monolith; on the record it is still a blood-debt, and each half
+is addressable, cognate-visible, and traceable back to the root it came from.
+
+### Decisions worth knowing
+
+**`BaseRef` is a new record, not a reused `MorphemeRef`, and the reason is the
+lexicon's size.** A `MorphemeRef` names a `MorphemeId` — an entry in the genome's
+*declared* morpheme inventory. A compound's parts are not affixes; they are lexicon
+entries, and there are 673 of them. Lifting every word into a parallel morpheme
+inventory would duplicate every root's form in a second place (the desync
+`docs/adr/0007` forbids) and would bloat every project file by its whole lexicon
+again. So `BaseRef` is the word-level twin: same span discipline, same echoed label,
+plus the one thing a morpheme has no use for — the base's `CognateSetId`.
+
+**The two record types are complementary, not alternative.** An affixed derivative
+records its **base** in `bases` and its **affix** in `morphemes`, because one is a
+lexicon entry and the other is a declared morpheme. That is also what distinguishes a
+derived lexeme from an inflected cell — both are `WordSource::Derived`, and adding a
+variant to re-cut a distinction the record already carries would store a derivable
+value, which `WordSource`'s own docs warn against.
+
+**Affixation is productive; compounding is authored.** A derivational affix really
+does attach to essentially any word of its class, so applying `-AGT` to all 169 verbs
+is *reporting* a fact. Compounding every noun with every noun would coin 123,201
+words for a 351-noun language, and whether `star` + `stone` means *meteorite* is a
+fact about a culture, not a rule — coining them all would be the tool making a claim
+rather than reporting one. That is `DESIGN.md` §7.5's argument applied where it is
+actually right, as opposed to where M13 had to overrule it. M15's culture profile is
+what will eventually *propose* the pairs.
+
+**`compose` was not copied, it was split.** M8's `compose` and M14's `derive` now
+share one `lay_out` kernel, which owns the two things that could silently
+desynchronise: the span arithmetic and the rule that every emitted syllable carries
+`stress: None` (prosody is assigned once per whole word inside `apply_rules`). Two
+composers computing spans separately is a second opinion — and a span that is off by
+one does not fail loudly, it misattributes segments in every trace thereafter.
+
+**A derived word mints its own cognate set and names no concept.** `starstone` is a
+new lexeme, not a reflex of `star`: sharing its base's descent class would put them
+on one row of M5's comparative table, claiming they *are* the same word. And it
+realises no built-in concept, because it is on no comparison list — its meaning is
+the rendered gloss template.
+
+**Compound pairs are named by `ConceptKey`, never `WordId`.** In a seeded lexicon
+`w_0081` is whatever the concept list happened to put at position 81, so a fixture
+written against it would have silently meant a different word after M13's append. A
+concept key means the same thing in every language, which is what concepts are for.
+
+**`--limit` tightens and never loosens.** A flag typed at the prompt cannot overrun a
+bound the file asked for; it takes the min of the two. And it is a cap, never a
+sample — a random subset would need an RNG on a path that has none, so it always
+takes the first eligible bases in lexicon order.
+
+**Replace, never append — so `derive` is idempotent.** The command drops entries
+already marked `source: derived` and re-coins, which is the `new-lexicon` rule.
+Running it twice produces byte-identical files instead of doubling the lexicon.
+
+### Three defects the inline review caught
+
+**A `limit` was a shared budget, not a per-pattern cap.** The affixation arm counted
+per pattern; the compound arm compared against `coined.len()` — the running total
+across *every* pattern. So `stemma derive --limit 2` filled its budget on the
+thirteen affix patterns and coined **zero compounds**: no error, no warning, just a
+whole formation silently absent from the output. The test that was supposed to cover
+it asserted only an upper bound (`coined <= 28`), which passes trivially when a
+pattern produces nothing. Both are fixed; the test now asserts the exact count *and*
+that a compound is among them.
+
+**`derive` could emit a colliding word id.** Ordinals continue from `lexicon.len()`,
+which is collision-free for the sequential ids `build_proto_lexicon` and `inflect`
+produce, but not for a hand-authored lexicon with a gap — `[w_0001, w_0004]` has
+length 2, so the third coined word would want `w_0004`. `Lexicon::validate` calls a
+duplicate id an Error, so the command would have written a file the validator
+immediately calls broken while reporting success: the validator and the engine
+disagreeing, which is the defect class M1's review established. `derive` now refuses,
+naming the id.
+
+**One code, two severities.** `stale_base` covered both a broken cognate-set echo
+(a real fault) and a drifted base gloss (entirely ordinary — M9 drift is *supposed*
+to move meanings, and the record is deliberately of the meaning at composition time).
+Any `warnings().any(|i| i.code == "stale_base")` was therefore ambiguous about which
+it had caught. The gloss case is now `base_gloss_drifted`, a Note under its own code.
+
+### The bug caught in the renderer, and why it mattered
+
+The first draft of `render_etymology` printed *"no rule has run over it yet"* whenever
+the surface equalled the composition form. That is false for a word that went through
+every rule and was moved by none — and it was being printed on real output, because
+plenty of compounds survive a rule set untouched. `WordEntry::trace` has carried
+exactly this three-state distinction since M3 (`None` / `Some(steps: [])` / `Some`),
+with a doc comment explaining that an empty-steps derivation "is the genuinely
+different third state". The renderer had collapsed it back to two. Now it says
+"exposed to every rule since, and changed by none", and
+`a_compound_exposed_to_rules_and_unchanged_says_so_rather_than_claiming_none_ran`
+holds the line.
+
+### Fences held
+
+Nothing in `stem_soundchange` changed — the engine still knows nothing about
+morphemes, bases, or meaning, and `apply_rules` is still a pure RNG-free function of
+five arguments. Erosion of a compound is the *untouched* engine's doing, exactly as
+cross-boundary sound change was at M8 (`docs/adr/0010`). `derive` mints through
+`scoped_cognate_set` like everything else, and `bases` / `derivations` are additive
+`#[serde(default)]` fields, so both reference fixtures round-trip with zero new bytes
+(pinned by `a_pre_m14_fixture_round_trips_with_no_new_bytes`).
+
+---
+
+## M13 — A believable core vocabulary · built 2026-08-11 · ✓ verified
+
+The built-in concept list grew from **103 to 673**. A default language is now usable
+without the author writing a wordlist first: it can name its kin, its weather, its
+livestock, its house, its gods, and can count past two. **540 tests pass**; clippy
+clean; fmt clean.
+
+```
+$ stemma new-lexicon fixtures/proto_asterian.ron
+Proto-Asterian — seed 42 (from the genome), stream `lexicon`
+note: 62 entries share a written form with another entry (e.g. a, ap, e, i, inu);
+      homophony is real and is reported, not prevented (§17)
+673 words over 673 concepts
+
+$ stemma new-lexicon fixtures/proto_asterian.ron --concepts 103 | sha256sum
+d16ba86130091d93e3455d2742037b6d199c5181710d15cc28f0f8b9ca508423
+```
+
+That second digest is the point of the milestone. `d16ba861…` is the hash **M2
+froze** over the 103-word reference lexicon, and it is unchanged — asking for the
+same concepts still gives the same words, byte for byte.
+
+The new words are first-class in the engine, not decoration. `ice` — a word §7.5
+argued against having at all — forks three ways through the ordinary rule sets:
+
+```
+meaning  asterian_attested  coastal  highland  riverine
+ice      *kulanpa           kulanp   kulamp    kulampa
+father   *etar              edar     edar      etar
+```
+
+### Decisions worth knowing
+
+**Append-only, pinned twice, from both ends.** `build` draws one root per concept in
+list order from one never-re-seeded stream, so an insertion at index *i* rewrites
+every word from *i* onward in every language anyone has ever generated — silently,
+with no error and no way to notice. `the_first_hundred_and_three_concepts_are_frozen_in_place`
+pins the 103 keys *structurally*, spelled out in full rather than hashed so a
+failure names what moved; `the_first_hundred_and_three_words_are_unchanged` pins the
+same claim *behaviourally*, by generating and hashing. `PRE_M13_CONCEPT_COUNT = 103`
+is the boundary both read.
+
+**Not one new Concepticon id, and that is the honest answer.** All 570 additions use
+the `stemma()` constructor and carry `concepticon_id: None`. Mapping 570 meanings
+onto Concepticon is real work against a real data file; a plausible-looking integer
+under a column bearing an external authority's name is exactly the false provenance
+`Concept::concepticon_id`'s docs forbid. It is now *structural*:
+`no_concept_added_after_the_first_hundred_and_three_claims_an_anchor` fails on any
+`c(…)` below the frozen prefix, so a future session cannot quietly type one in.
+Anchoring the stratum later changes no key and no position, therefore no word.
+
+**Organised by field, because a list that grows by association acquires holes where
+nobody happened to think.** The 22 semantic fields are Buck's *Dictionary of Selected
+Synonyms* / the IDS's — the physical world, kinship, animals, the body, food,
+clothing, dwelling, agriculture, physical acts, motion, commerce, space, quantity,
+time, perception, emotion, mind, speech, society, war, law, religion — plus a 23rd
+for pronouns and function words. The fields are a **checklist against holes, not a
+stored property**: `Concept` gained no `semantic_field`, and nothing but the key
+reaches disk.
+
+**What Swadesh's list cannot say.** Working the fields turned up gaps that are
+invisible until you look for them: no `father` (but `mother`, added at M2), no third
+person at all (`I`/`thou`/`we` and stop), no `and`, no number above `two`, no
+`house`, no `god`. A language that cannot refer to an absent person or count to three
+is not a basic vocabulary, it is a demonstration.
+
+**Two English homographs need two glosses.** `the_gloss_column_is_unique` is what
+forces it, and it is right to: `LIGHT_ILLUMINATION` is `light` and `LIGHT_WEIGHT` is
+`light (not heavy)`; Swadesh's `FLY_MOVE_THROUGH_AIR` is `fly` so the insect is
+`fly (insect)`. Where a distinct English word exists, it beats bracketing — the
+"tell an untruth" verb is `DECEIVE`, because `LIE_REST` already owns `lie`.
+
+**No `OMEN`, deliberately.** `fixtures/drift_coastal.ron` declares `sn_omen` as an
+unanchored sense a language *invents*, and M9's worked example is `*takala` "star"
+drifting to "omen" on one branch. Putting `omen` on the coinable list would blunt the
+distinction that example exists to draw.
+
+### The bug M13 exposed, and why it was invisible until now
+
+M12 documented a resolution rule for a project concept whose key collides with a
+compiled one — "the compiled meaning wins, so this declaration has no effect" — and
+`concept::meanings` did not implement it. It chained unconditionally, so a shadowing
+declaration coined a **second** word: two entries, one key, both with the same gloss,
+and `by_meaning` returning both. The `shadows_builtin` Warning was describing
+behaviour the code did not have.
+
+Nothing hit it at M12, because a collision needed an author to reuse a compiled key
+on purpose. Then the compiled list grew and landed on three of
+`fixtures/seafarers.ron`'s own declarations — `ICE`, `SAIL`, `OAR` — and the
+reference fixture for M12 started emitting three warnings and three duplicate words.
+**That is the real shape of this hazard: not an author reusing a key, but the
+built-in list growing under a language that already declared the meaning.** It will
+happen again at every future append.
+
+`meanings` now drops a shadowed declaration, which is the *reported* resolution and
+not a policed one: one key means one meaning or the M5 join is ambiguous, the
+compiled meaning wins because it is the one every other language joins to, and
+`check_against_concepts` says which declaration went inert and what to do about it.
+The fixture drops the three lines and validates `✓ no issues` again — and its comment
+records why, because deleting a declaration the compiled list has absorbed is the
+ordinary lifecycle of a project concept, not a mistake.
+
+### What this does *not* fix, stated plainly
+
+A project concept sits **after** the built-in block, so when that block grows by 570,
+a project language's own words are drawn from a later point in the stream and
+re-coining yields **different forms for them**. The built-in prefix is preserved; the
+project tail is not. Nothing on disk is stranded — a stored file loads and validates
+unchanged, and only re-running `new-lexicon` moves them. Pinning a project tail across
+a compiled-list append would need the genome to record the built-in count it was
+authored against, and that shim is not worth its weight until someone is actually
+stranded by it. It is recorded in `concept::meanings`' docs so the next append does
+not rediscover it.
+
+### The reference phonology is now visibly too small, and that is information
+
+62 of 673 words share a written form (~9%), against 10 consonants, 5 vowels and a
+CV-heavy template set. Homophony is **reported, not prevented** — rejection sampling
+would make the draw count depend on words already produced and destroy the prefix
+property that this whole milestone rests on. The note is the tool telling an author
+their phonology is undersized for the vocabulary they asked for, which is a fact
+about the language and exactly the sort of thing §17 exists to surface.
+
+### The correction, now discharged
+
+M12 recorded the user's counter to `DESIGN.md` §7.5 as the project's position:
+deserts freeze, and a language missing words it should have is a worse failure than
+one carrying a word its speakers rarely use. M13 is that argument shipped —
+`ICE`, `SNOW`, `FROST` and `SEA` are on the list for every language, including the
+desert ones. **The deliberate gap is M15's job**: a meaning a culture genuinely
+lacks, with a reason on the record, rather than the wordlist's silence.
 
 ---
 

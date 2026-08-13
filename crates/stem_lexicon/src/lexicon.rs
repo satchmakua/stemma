@@ -449,7 +449,11 @@ pub fn check_against_inventory(
 ///   suggestion: the entry still has an id, a form, a gloss and a cognate set, so it
 ///   is unusual rather than broken.
 /// - `shadows_builtin` — a project concept reuses a compiled key. A **Warning**: two
-///   meanings under one key make every join ambiguous, and the compiled one wins.
+///   meanings under one key make every join ambiguous, and the compiled one wins —
+///   `concept::meanings` drops the declaration, so it coins no word. Expect this
+///   after the built-in list grows (M13 collided with three of
+///   `fixtures/seafarers.ron`'s own declarations), which is why the message names
+///   the compiled list rather than blaming the author.
 /// - `stale_project_gloss` — an entry's stored gloss disagrees with the project
 ///   concept it names. The paired guard for the gloss `build_proto_lexicon` writes
 ///   onto project-concept entries, exactly as `semantics.stale_sense_gloss` guards
@@ -468,7 +472,8 @@ pub fn check_against_concepts(
                     "shadows_builtin",
                     format!(
                         "`{}` is already on the built-in concept list; the compiled meaning \
-                         wins, so this declaration has no effect",
+                         wins, so this declaration coins no word — drop it, or rename it if \
+                         your language means something else by it",
                         declared.key
                     ),
                 )

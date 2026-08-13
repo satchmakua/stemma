@@ -912,6 +912,7 @@ mod tests {
             source: WordSource::Authored,
             trace: None,
             morphemes: Vec::new(),
+            bases: Vec::new(),
             senses: Vec::new(),
             sense_history: None,
         }

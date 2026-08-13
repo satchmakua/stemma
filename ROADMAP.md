@@ -173,8 +173,9 @@ explosion is the top risk to this project._
 ## Phase 3 — Breadth
 
 _Phase 2 finished the engine; this phase makes the languages **believable**. A
-103-word language is a demonstration, not a conlang — the ceiling exists only
-because every word needs a meaning and the built-in list holds 103 of them._
+103-word language is a demonstration, not a conlang — the ceiling existed only
+because every word needs a meaning and the built-in list held 103 of them. M13
+raised it to 673._
 
 _The governing correction, and it overrules `DESIGN.md` §7.5's reasoning where they
 conflict: **absence must be modelled, not defaulted.** §7.5 rejected Swadesh-207
@@ -202,7 +203,7 @@ accidental._
   `declaring_project_concepts_cannot_change_a_word_already_coined` pins the prefix
   property. 533 tests green.
 
-- [ ] **M13 — A believable core vocabulary.** Grow the compiled list from 103 to
+- [x] **M13 — A believable core vocabulary.** Grow the compiled list from 103 to
   several hundred, so a default language is usable without the author writing a
   wordlist first. **Append-only** — inserting anywhere else rewrites every word after
   it in every lexicon ever generated (`concept.rs`'s draw contract), so the existing
@@ -211,18 +212,28 @@ accidental._
   honest, a fabricated anchor is not.
   **Test:** `new-lexicon` with no flags coins the full list; the first 103 words of a
   seeded run are **byte-identical** to the pre-M13 output, proving the append changed
-  nothing; homophony is reported, not prevented.
+  nothing; homophony is reported, not prevented. ✅ **673 concepts** (103 + 570),
+  organised by Buck's / the IDS's semantic fields; `new-lexicon fixtures/proto_asterian.ron`
+  coins 673 words and notes 62 homophones. `--concepts 103` still hashes to M2's own
+  frozen `d16ba861…`, so the append moved nothing, and
+  `no_concept_added_after_the_first_hundred_and_three_claims_an_anchor` makes the
+  unanchored stratum structural rather than a habit. 540 tests green.
 
-- [ ] **M14 — Derivation.** Compounds and productive affixation, so a large
+- [x] **M14 — Derivation.** Compounds and productive affixation, so a large
   vocabulary has **etymology** instead of being N unrelated draws from the same urn.
   Reuses M8's `compose`; a derived word records what it is made of, exactly as an
   inflected cell does, and its parts are cognate-visible.
   **Test:** a language of ~300 roots yields a several-thousand-word lexicon in which
   every derived word traces to its parts; a sound change applied afterwards makes a
   compound opaque (its parts no longer recoverable by eye but still recorded), which
-  is how real lexicalisation works.
+  is how real lexicalisation works. ✅ `fixtures/derivation_asterian.ron` declares 14
+  patterns; `stemma derive` turns **673 roots into 3,978 words**, every derived one
+  carrying a `BaseRef` span per part. Then `apply-rules` erodes `wikikippa`
+  ("blood-debt") to **`wiiipp`** — neither part survives as a substring — and
+  `stemma trace` still prints `wiki → wii` and `kippa → ipp` with both cognate sets.
+  577 tests green.
 
-- [ ] **M15 — Environment & culture profile.** Model *why* a language has the
+- [x] **M15 — Environment & culture profile.** Model *why* a language has the
   vocabulary it has: an ecological and cultural profile that makes some concepts
   elaborated (many words), some ordinary, some borrowed-looking, some genuinely
   absent. This is the honest form of the desert/ice problem — a gap becomes a
@@ -230,7 +241,21 @@ accidental._
   wordlist shipped.
   **Test:** two languages over one phonology and one concept list, given different
   profiles, differ in *which* meanings are elaborated and which are missing — and
-  each gap is explained in the report rather than silently empty.
+  each gap is explained in the report rather than silently empty. ✅
+  `fixtures/desert_asterian.ron` and `fixtures/seafarer_asterian.ron` share a
+  phonology, a concept list and a seed; both coin `star` as **`sosem`**, and differ
+  only where their cultures do — `sand` 4/1, `sea` 0/4, `cattle` 4/0, `fish` 0/3.
+  **`ice` inverts §7.5's own example**: the desert people have the word (they trade
+  north), the islanders do not. `stemma culture` prints every gap with the trait and
+  reason behind it. 611 tests green.
+
+  *Borrowed-looking* is the one category of the four **not** implemented, and
+  deliberately: a loanword is a contact fact, not an ecological one, and faking one
+  without a donor language would be exactly the unsupported claim this milestone
+  exists to remove. It waits for a milestone that can name the donor.
+
+_Phase 3 is complete: the languages are broad (M13), made of themselves (M14), and
+shaped by who speaks them (M15)._
 
 ---
 

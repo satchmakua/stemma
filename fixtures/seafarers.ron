@@ -98,18 +98,28 @@
     //
     // None carries a Concepticon anchor, and the type has no field for one: an
     // unanchored meaning is honest, a fabricated anchor is not.
+    //
+    // THREE DECLARATIONS WERE REMOVED AT M13, and the reason is the interesting part.
+    // This fixture shipped at M12 with SAIL, OAR and ICE declared here. M13 grew the
+    // built-in list from 103 concepts to 673, and all three landed on it — so all
+    // three started firing `concepts.shadows_builtin` and coining nothing, because
+    // the compiled meaning wins. That is the ordinary lifecycle of a project concept:
+    // you declare what the compiled list lacks, and one day it stops lacking it.
+    // Stemma tells you (a Warning, never an error) and you delete the line.
+    //
+    // ICE is the one worth remembering. It was declared here to make DESIGN §7.5's
+    // argument concrete — "they trade north; you need a word for what the far people
+    // live on" — and M13 answered it by putting ice on the list for every language.
+    // The note it carried is now the concept list's own doc comment.
     concepts: [
         (key: "TIDE",    gloss: "tide",    note: "twice-daily; the whole calendar hangs off it"),
         (key: "KEEL",    gloss: "keel"),
         (key: "HARBOR",  gloss: "harbour"),
-        (key: "SAIL",    gloss: "sail"),
-        (key: "OAR",     gloss: "oar"),
         (key: "REEF",    gloss: "reef"),
         (key: "SQUALL",  gloss: "squall"),
         (key: "ANCHOR",  gloss: "anchor"),
         (key: "NET_FISHING", gloss: "fishing net"),
         (key: "SALT_SEA", gloss: "sea salt"),
-        (key: "ICE",     gloss: "ice",     note: "they trade north; you need a word for what the far people live on"),
     ],
 
     prosody: (stress: fixed(from: left, offset: 0)),

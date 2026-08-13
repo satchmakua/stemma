@@ -1,0 +1,241 @@
+// Asterian derivation — the M14 acceptance fixture.
+//
+// The REFERENCE ASTERIAN INVENTORY VERBATIM (the same 15 phonemes and initial-stress
+// prosody as asterian_attested.ron / morphology_asterian.ron, so the sound-change
+// engine behaves identically), plus a `morphology` whose job is word FORMATION
+// rather than inflection: five derivational affixes and ten patterns.
+//
+// THE POINT (ROADMAP M14): a large vocabulary should have an ETYMOLOGY, not just a
+// size. M13 grew the concept list to 673 independent draws from one urn; this file
+// makes most of a lexicon out of the rest of it.
+//
+//   stemma new-lexicon fixtures/derivation_asterian.ron --out out/deriv_proto.ron
+//   stemma derive out/deriv_proto.ron --out out/deriv.ron
+//
+// 673 base words in, several thousand out — every one of which records the words it
+// was built from, with the span each occupies.
+//
+// Then erode the seams and watch the record survive:
+//
+//   stemma apply-rules out/deriv.ron --rules fixtures/rules_coastal.ron
+//       --id deriv_late --name "Late Asterian" --years 500 --out out/deriv_late.ron
+//   stemma trace out/deriv_late.ron <a compound's id>
+//
+// The compound's surface no longer contains either part whole. `Formation:` still
+// names both, and says what each became. That is lexicalisation, on the record.
+//
+// WHY THE AFFIX PATTERNS ARE PRODUCTIVE AND THE COMPOUNDS ARE AUTHORED. A
+// derivational affix really does attach to essentially any word of its class, so
+// applying one to every noun is reporting a fact. Compounding every noun with every
+// noun would coin 123,201 words for a 351-noun language, and whether STAR + STONE
+// means "meteorite" is a fact about a culture, not a rule — so the pairs are named,
+// and M15's culture profile is what will eventually propose them. The same argument
+// DESIGN.md §7.5 made, applied where it is actually right.
+//
+// The base lexicon is empty; `new-lexicon` fills it, then `derive` appends to it.
+(
+    id: "asterian_deriv",
+    name: "Asterian (derivation)",
+    lineage_depth_years: 0,
+    seed: 42,
+
+    phonemes: [
+        // --- Stops ---
+        (id: "ph_p", ipa: "p", kind: consonant, frequency_weight: 30,
+         features: ["-syllabic", "+consonantal", "-sonorant", "-approximant", "-continuant", "-nasal", "-lateral", "-trill", "-voice", "+labial", "-coronal", "-dorsal", "-round"]),
+        (id: "ph_t", ipa: "t", kind: consonant, frequency_weight: 50,
+         features: ["-syllabic", "+consonantal", "-sonorant", "-approximant", "-continuant", "-nasal", "-lateral", "-trill", "-voice", "-labial", "+coronal", "-dorsal"]),
+        (id: "ph_k", ipa: "k", kind: consonant, frequency_weight: 45,
+         features: ["-syllabic", "+consonantal", "-sonorant", "-approximant", "-continuant", "-nasal", "-lateral", "-trill", "-voice", "-labial", "-coronal", "+dorsal", "+high", "-low", "+back", "-round"]),
+
+        // --- Nasals ---
+        (id: "ph_m", ipa: "m", kind: consonant, frequency_weight: 35,
+         features: ["-syllabic", "+consonantal", "+sonorant", "-approximant", "-continuant", "+nasal", "-lateral", "-trill", "+voice", "+labial", "-coronal", "-dorsal", "-round"]),
+        (id: "ph_n", ipa: "n", kind: consonant, frequency_weight: 40,
+         features: ["-syllabic", "+consonantal", "+sonorant", "-approximant", "-continuant", "+nasal", "-lateral", "-trill", "+voice", "-labial", "+coronal", "-dorsal"]),
+
+        // --- Fricative ---
+        (id: "ph_s", ipa: "s", kind: consonant, frequency_weight: 35,
+         features: ["-syllabic", "+consonantal", "-sonorant", "-approximant", "+continuant", "-nasal", "-lateral", "-trill", "-voice", "-labial", "+coronal", "-dorsal"]),
+
+        // --- Liquids ---
+        (id: "ph_l", ipa: "l", kind: consonant, frequency_weight: 30,
+         features: ["-syllabic", "+consonantal", "+sonorant", "+approximant", "+continuant", "-nasal", "+lateral", "-trill", "+voice", "-labial", "+coronal", "-dorsal"]),
+        (id: "ph_r", ipa: "r", kind: consonant, frequency_weight: 25,
+         features: ["-syllabic", "+consonantal", "+sonorant", "-approximant", "+continuant", "-nasal", "-lateral", "+trill", "+voice", "-labial", "+coronal", "-dorsal"]),
+
+        // --- Glides ---
+        (id: "ph_w", ipa: "w", kind: consonant, frequency_weight: 20,
+         features: ["-syllabic", "-consonantal", "+sonorant", "+approximant", "+continuant", "-nasal", "-lateral", "-trill", "+voice", "+labial", "-coronal", "+dorsal", "+high", "-low", "+back", "+round"]),
+        (id: "ph_j", ipa: "j", romanization: "y", kind: consonant, frequency_weight: 10,
+         features: ["-syllabic", "-consonantal", "+sonorant", "+approximant", "+continuant", "-nasal", "-lateral", "-trill", "+voice", "-labial", "-coronal", "+dorsal", "+high", "-low", "-back", "-round"]),
+
+        // --- Vowels ---
+        (id: "ph_a", ipa: "a", kind: vowel, frequency_weight: 60,
+         features: ["+syllabic", "-consonantal", "+sonorant", "+approximant", "+continuant", "-nasal", "-lateral", "-trill", "+voice", "-labial", "-coronal", "+dorsal", "-high", "+low", "+back", "-round"]),
+        (id: "ph_e", ipa: "e", kind: vowel, frequency_weight: 35,
+         features: ["+syllabic", "-consonantal", "+sonorant", "+approximant", "+continuant", "-nasal", "-lateral", "-trill", "+voice", "-labial", "-coronal", "+dorsal", "-high", "-low", "-back", "-round"]),
+        (id: "ph_i", ipa: "i", kind: vowel, frequency_weight: 40,
+         features: ["+syllabic", "-consonantal", "+sonorant", "+approximant", "+continuant", "-nasal", "-lateral", "-trill", "+voice", "-labial", "-coronal", "+dorsal", "+high", "-low", "-back", "-round"]),
+        (id: "ph_o", ipa: "o", kind: vowel, frequency_weight: 30,
+         features: ["+syllabic", "-consonantal", "+sonorant", "+approximant", "+continuant", "-nasal", "-lateral", "-trill", "+voice", "+labial", "-coronal", "+dorsal", "-high", "-low", "+back", "+round"]),
+        (id: "ph_u", ipa: "u", kind: vowel, frequency_weight: 35,
+         features: ["+syllabic", "-consonantal", "+sonorant", "+approximant", "+continuant", "-nasal", "-lateral", "-trill", "+voice", "+labial", "-coronal", "+dorsal", "+high", "-low", "+back", "+round"]),
+    ],
+
+    phonotactics: (
+        templates: [
+            (pattern: "CV",  weight: 45),
+            (pattern: "CVC", weight: 35),
+            (pattern: "V",   weight: 12),
+            (pattern: "VC",  weight: 8),
+        ],
+        syllables_per_root: [
+            (count: 1, weight: 25),
+            (count: 2, weight: 55),
+            (count: 3, weight: 20),
+        ],
+    ),
+
+    prosody: (stress: fixed(from: left, offset: 0)),
+
+    morphology: (
+        // Five derivational affixes. Four suffixes and one prefix, which is the
+        // ordinary asymmetry: suffixing derivation is far commoner than prefixing.
+        morphemes: [
+            (id: "m_agent",  role: suffix, gloss: "AGT", part_of_speech: noun, form: (syllables: [
+                (pattern: "CV", segments: ["ph_r", "ph_i"]),
+            ])),
+            (id: "m_result", role: suffix, gloss: "RES", part_of_speech: noun, form: (syllables: [
+                (pattern: "CVC", segments: ["ph_m", "ph_a", "ph_n"]),
+            ])),
+            (id: "m_place",  role: suffix, gloss: "LOC", part_of_speech: noun, form: (syllables: [
+                (pattern: "CV", segments: ["ph_w", "ph_o"]),
+            ])),
+            (id: "m_having", role: suffix, gloss: "PROP", part_of_speech: adjective, form: (syllables: [
+                (pattern: "CVC", segments: ["ph_l", "ph_i", "ph_s"]),
+            ])),
+            (id: "m_un",     role: prefix, gloss: "PRIV", part_of_speech: adjective, form: (syllables: [
+                (pattern: "VC", segments: ["ph_a", "ph_n"]),
+            ])),
+            (id: "m_dim",    role: suffix, gloss: "DIM", part_of_speech: noun, form: (syllables: [
+                (pattern: "CV", segments: ["ph_n", "ph_u"]),
+            ])),
+            (id: "m_aug",    role: suffix, gloss: "AUG", part_of_speech: noun, form: (syllables: [
+                (pattern: "CVC", segments: ["ph_t", "ph_a", "ph_r"]),
+            ])),
+            (id: "m_verbal", role: suffix, gloss: "VBLZ", part_of_speech: verb, form: (syllables: [
+                (pattern: "CV", segments: ["ph_j", "ph_e"]),
+            ])),
+            (id: "m_incho",  role: prefix, gloss: "INCH", part_of_speech: verb, form: (syllables: [
+                (pattern: "CV", segments: ["ph_s", "ph_u"]),
+            ])),
+        ],
+
+        // No paradigms: inflection is morphology_asterian.ron's job, and mixing the
+        // two here would blur which milestone a surprise came from.
+        paradigms: [],
+
+        // Authored order IS the coining order, so it is part of the determinism
+        // contract. APPEND to grow this list; inserting renumbers every derived word
+        // after the insertion point, exactly as inserting a concept would.
+        derivations: [
+            // --- Productive affixation. `{1}` is the base's gloss. ---
+            (
+                id: "AGENT", name: "Agent noun",
+                formation: affix(affix: "m_agent", applies_to: verb),
+                gloss: "one who {1}s", part_of_speech: noun,
+                note: "The commonest derivation there is: an action, and the one who does it.",
+            ),
+            (
+                id: "RESULT", name: "Result noun",
+                formation: affix(affix: "m_result", applies_to: verb),
+                gloss: "the result of {1}ing", part_of_speech: noun,
+            ),
+            (
+                id: "PLACE", name: "Place noun",
+                formation: affix(affix: "m_place", applies_to: verb),
+                gloss: "a place where one {1}s", part_of_speech: noun,
+            ),
+            (
+                id: "HAVING", name: "Proprietive adjective",
+                formation: affix(affix: "m_having", applies_to: noun),
+                gloss: "having {1}", part_of_speech: adjective,
+            ),
+            (
+                id: "PLACE_OF", name: "Place of a thing",
+                formation: affix(affix: "m_place", applies_to: noun),
+                gloss: "a place of {1}", part_of_speech: noun,
+            ),
+            (
+                id: "KEEPER", name: "Keeper of a thing",
+                formation: affix(affix: "m_agent", applies_to: noun),
+                gloss: "one who keeps {1}", part_of_speech: noun,
+            ),
+            (
+                id: "PRIVATIVE", name: "Privative adjective",
+                formation: affix(affix: "m_un", applies_to: adjective),
+                gloss: "not {1}", part_of_speech: adjective,
+            ),
+            (
+                id: "QUALITY", name: "Quality noun",
+                formation: affix(affix: "m_result", applies_to: adjective),
+                gloss: "{1}ness", part_of_speech: noun,
+            ),
+            (
+                id: "LACKING", name: "Privative of a thing",
+                formation: affix(affix: "m_un", applies_to: noun),
+                gloss: "without {1}", part_of_speech: adjective,
+            ),
+            (
+                id: "DIMINUTIVE", name: "Diminutive",
+                formation: affix(affix: "m_dim", applies_to: noun),
+                gloss: "little {1}", part_of_speech: noun,
+                note: "Diminutives are among the most productive derivations attested, and among the most likely to lexicalise into something no longer small.",
+            ),
+            (
+                id: "AUGMENTATIVE", name: "Augmentative",
+                formation: affix(affix: "m_aug", applies_to: noun),
+                gloss: "great {1}", part_of_speech: noun,
+            ),
+            (
+                id: "VERBALISE", name: "Denominal verb",
+                formation: affix(affix: "m_verbal", applies_to: noun),
+                gloss: "to {1}", part_of_speech: verb,
+            ),
+            (
+                id: "INCHOATIVE", name: "Inchoative verb",
+                formation: affix(affix: "m_incho", applies_to: verb),
+                gloss: "to begin to {1}", part_of_speech: verb,
+            ),
+
+            // --- Authored compounds. `{1}` and `{2}` are the two bases' glosses.
+            //     Each pair is a claim about what these speakers found worth
+            //     naming, which is why a human writes them and a loop does not. ---
+            (
+                id: "COMPOUND", name: "Noun compound",
+                formation: compound(pairs: [
+                    (left: "STAR",  right: "STONE"),
+                    (left: "SUN",   right: "ROAD"),
+                    (left: "WATER", right: "MOUNTAIN"),
+                    (left: "FIRE",  right: "MOUTH"),
+                    (left: "NIGHT", right: "BIRD"),
+                    (left: "SEA",   right: "HORSE"),
+                    (left: "BLOOD", right: "DEBT"),
+                    (left: "STORM", right: "SEASON"),
+                    (left: "KING",  right: "ROAD"),
+                    (left: "BONE",  right: "KNIFE"),
+                    (left: "SALT",  right: "FIELD"),
+                    (left: "MOON",  right: "MONTH"),
+                ]),
+                gloss: "{1}-{2}", part_of_speech: noun,
+                note: "STAR+STONE is the worked example: a meteorite is a stone that fell out of the sky, and no rule could have told you that.",
+            ),
+        ],
+    ),
+
+    notes: [
+        "The M14 acceptance fixture: `new-lexicon` then `derive` turns 673 roots into several thousand words, each recording what it is made of.",
+        "Apply any rule set afterwards to make the compounds opaque; `stemma trace` still recovers the parts.",
+    ],
+)

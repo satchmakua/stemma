@@ -289,17 +289,54 @@ impl<'a> From<&'a ProjectConcept> for Meaning<'a> {
 }
 
 /// Every meaning available to a language: the built-in list, then the project's own,
-/// in that order.
+/// in that order, minus any project concept whose key is already compiled in.
 ///
 /// **Built-in first, and that is load-bearing.** `build(n)` must stay a strict prefix
 /// of `build(n + k)` ([`crate::build`]'s draw contract), so appending the project's
 /// concepts after the compiled ones means declaring a new meaning cannot change a
 /// single word that was already coined.
+///
+/// # Why a shadowing declaration is dropped
+///
+/// M12 documented the resolution rule — "two meanings under one key make every join
+/// ambiguous, and the compiled one wins" (`check_against_concepts`) — and this
+/// function did not implement it: it chained unconditionally, so a project `ICE`
+/// beside a built-in `ICE` coined **two** words, both glossed "ice", under one key.
+/// The `shadows_builtin` Warning said the declaration "has no effect" while the
+/// declaration was quietly adding a word.
+///
+/// Nothing exercised it until M13, because a collision needed an author to reuse a
+/// compiled key on purpose. Then the compiled list grew from 103 concepts to 673 and
+/// collided with `fixtures/seafarers.ron`'s own `ICE`, `SAIL` and `OAR` — the hazard
+/// is not really "the author reused a key", it is "the built-in list grew under a
+/// language that had already declared that meaning", and that will happen again at
+/// every future append.
+///
+/// Dropping the shadowed declaration is the *reported* resolution, not a policed
+/// one: the key is the join, one key means one meaning, and
+/// `check_against_concepts` tells the author which declaration went inert and why.
+/// The compiled meaning wins because it is the one every other language joins to,
+/// which is the entire purpose of a shared concept.
+///
+/// # What this does not fix
+///
+/// A project concept sits *after* the built-in block, so when that block grows, the
+/// project's own words are drawn from a later point in the stream and **re-coining
+/// yields different forms for them**. The built-in prefix is preserved; the project
+/// tail is not. Their stored file is untouched and loads unchanged — only re-running
+/// `new-lexicon` moves them. Pinning a project tail across a compiled-list append
+/// would need the genome to record the built-in count it was authored against, and
+/// that shim is not worth its weight until someone is actually stranded by it.
 pub fn meanings<'a>(project: &'a [ProjectConcept]) -> Vec<Meaning<'a>> {
     CONCEPTS
         .iter()
         .map(Meaning::from)
-        .chain(project.iter().map(Meaning::from))
+        .chain(
+            project
+                .iter()
+                .filter(|p| concept(&p.key).is_none())
+                .map(Meaning::from),
+        )
         .collect()
 }
 
@@ -1133,6 +1170,22 @@ pub const CONCEPT_COUNT: usize = CONCEPTS.len();
 /// verified Concepticon anchor.
 pub const SWADESH_COUNT: usize = 100;
 
+/// How long the list was before M13 grew it — the **frozen prefix**.
+///
+/// Every language generated before M13 drew exactly this many roots, in exactly
+/// this order. [`crate::build`]'s draw contract makes `build(n)` a strict prefix of
+/// `build(n + k)`, so those words are untouched by the append **as long as nothing
+/// is inserted below this index**. Two tests hold the line: a structural one here
+/// pins the 103 keys in order, and `the_first_hundred_and_three_words_are_unchanged`
+/// in `stem_cli` re-runs the generator and checks the output against M2's frozen
+/// digest, byte for byte.
+///
+/// It is a constant rather than a literal so that a future M-something append has
+/// somewhere obvious to read "this is the boundary you must not cross". It never
+/// changes again: growth appends past `CONCEPT_COUNT`, and *that* is the boundary
+/// the next one pins.
+pub const PRE_M13_CONCEPT_COUNT: usize = 103;
+
 /// Resolves a key against the built-in list.
 ///
 /// Linear over ~100 `&'static str` comparisons. A map would be no faster at this
@@ -1166,8 +1219,8 @@ mod tests {
     use std::collections::BTreeSet;
 
     #[test]
-    fn the_concept_list_has_one_hundred_and_three_unique_keys() {
-        assert_eq!(CONCEPT_COUNT, 103);
+    fn the_concept_list_holds_six_hundred_and_seventy_three_unique_keys() {
+        assert_eq!(CONCEPT_COUNT, 673);
         let keys: BTreeSet<&str> = CONCEPTS.iter().map(|c| c.key).collect();
         assert_eq!(keys.len(), CONCEPT_COUNT, "a concept key is duplicated");
     }
@@ -1229,10 +1282,225 @@ mod tests {
     }
 
     #[test]
-    fn the_stemma_additions_sit_after_the_swadesh_hundred() {
+    fn the_stemma_additions_sit_directly_after_the_swadesh_hundred() {
         // Appending is what preserves the prefix property of the draw contract.
-        let tail: Vec<&str> = CONCEPTS[SWADESH_COUNT..].iter().map(|c| c.key).collect();
+        let tail: Vec<&str> = CONCEPTS[SWADESH_COUNT..PRE_M13_CONCEPT_COUNT]
+            .iter()
+            .map(|c| c.key)
+            .collect();
         assert_eq!(tail, ["MOTHER", "KING", "STORM"]);
+    }
+
+    /// **ROADMAP M13's structural half.** The list grew from 103 to 673, and the
+    /// only way that is safe is if the 103 did not move: [`crate::build`] draws one
+    /// root per concept in list order, so an insertion at index *i* rewrites every
+    /// word from *i* onward in **every lexicon ever generated**.
+    ///
+    /// Spelled out in full rather than hashed. A digest tells a future session that
+    /// something moved; this tells them *what* moved, on the assert line, which is
+    /// the difference between a five-minute fix and an afternoon.
+    ///
+    /// Its behavioural twin is `stem_cli`'s
+    /// `the_first_hundred_and_three_words_are_unchanged`, which proves the same
+    /// thing from the other end — by generating and comparing bytes.
+    #[test]
+    fn the_first_hundred_and_three_concepts_are_frozen_in_place() {
+        const FROZEN: [&str; PRE_M13_CONCEPT_COUNT] = [
+            "ALL",
+            "ASH",
+            "BARK",
+            "BELLY",
+            "BIG",
+            "BIRD",
+            "BITE",
+            "BLACK",
+            "BLOOD",
+            "BONE",
+            "BREAST",
+            "BURN",
+            "CLAW",
+            "CLOUD",
+            "COLD",
+            "COME",
+            "DIE",
+            "DOG",
+            "DRINK",
+            "DRY",
+            "EAR",
+            "EARTH_SOIL",
+            "EAT",
+            "EGG",
+            "EYE",
+            "FAT_ORGANIC_SUBSTANCE",
+            "FEATHER",
+            "FIRE",
+            "FISH",
+            "FLY_MOVE_THROUGH_AIR",
+            "FOOT",
+            "FULL",
+            "GIVE",
+            "GOOD",
+            "GREEN",
+            "HAIR",
+            "HAND",
+            "HEAD",
+            "HEAR",
+            "HEART",
+            "HORN_ANATOMY",
+            "I",
+            "KILL",
+            "KNEE",
+            "KNOW_SOMETHING",
+            "LEAF",
+            "LIE_REST",
+            "LIVER",
+            "LONG",
+            "LOUSE",
+            "MAN",
+            "MANY",
+            "FLESH_OR_MEAT",
+            "MOON",
+            "MOUNTAIN",
+            "MOUTH",
+            "NAME",
+            "NECK",
+            "NEW",
+            "NIGHT",
+            "NOSE",
+            "NOT",
+            "ONE",
+            "PERSON",
+            "RAINING_OR_RAIN",
+            "RED",
+            "ROAD",
+            "ROOT",
+            "ROUND",
+            "SAND",
+            "SAY",
+            "SEE",
+            "SEED",
+            "SIT",
+            "SKIN",
+            "SLEEP",
+            "SMALL",
+            "SMOKE_EXHAUST",
+            "STAND",
+            "STAR",
+            "STONE",
+            "SUN",
+            "SWIM",
+            "TAIL",
+            "THAT",
+            "THIS",
+            "THOU",
+            "TONGUE",
+            "TOOTH",
+            "TREE",
+            "TWO",
+            "WALK",
+            "HOT_OR_WARM",
+            "WATER",
+            "WE",
+            "WHAT",
+            "WHITE",
+            "WHO",
+            "WOMAN",
+            "YELLOW",
+            "MOTHER",
+            "KING",
+            "STORM",
+        ];
+        let actual: Vec<&str> = CONCEPTS[..PRE_M13_CONCEPT_COUNT]
+            .iter()
+            .map(|c| c.key)
+            .collect();
+        assert_eq!(
+            actual, FROZEN,
+            "a concept moved inside the frozen prefix; every lexicon ever generated \
+             just changed. Growth appends past index {CONCEPT_COUNT}."
+        );
+    }
+
+    /// **ROADMAP M13's provenance half, mechanically enforced.**
+    ///
+    /// M13 added ~570 meanings and verified a Concepticon id for none of them —
+    /// that mapping is real work against a real data file, and until it is done the
+    /// honest value is `None`. This test makes the honesty structural rather than
+    /// a habit: any `c(…)` below the frozen prefix fails here, so a future session
+    /// cannot quietly type a plausible integer into a column bearing an external
+    /// authority's name.
+    ///
+    /// Anchoring the stratum later is a pure addition. It changes no key, no
+    /// position, and therefore no word — only `concepticon_id`, which never
+    /// reaches disk.
+    #[test]
+    fn no_concept_added_after_the_first_hundred_and_three_claims_an_anchor() {
+        for concept in &CONCEPTS[PRE_M13_CONCEPT_COUNT..] {
+            assert_eq!(
+                concept.concepticon_id, None,
+                "`{}` claims Concepticon id {:?}, but M13's stratum is unverified — \
+                 an unanchored concept is honest, a fabricated anchor is not",
+                concept.key, concept.concepticon_id
+            );
+        }
+    }
+
+    /// The point of the milestone, stated as behaviour rather than as a count: a
+    /// default language can talk about its family, its weather, its livestock, its
+    /// numbers past two, its house and its gods — none of which the Swadesh 103
+    /// could name.
+    #[test]
+    fn a_default_language_can_name_the_things_a_language_needs() {
+        for gloss in [
+            "father",
+            "daughter",
+            "friend", // kinship and society
+            "snow",
+            "ice",
+            "sea",
+            "wind", // the physical world, §7.5's own examples
+            "horse",
+            "sheep",
+            "wolf", // animals
+            "three",
+            "ten",
+            "hundred", // counting past two
+            "house",
+            "door",
+            "bread", // dwelling and food
+            "god",
+            "law",
+            "war", // the institutions
+            "he",
+            "they",
+            "and", // saying anything about anyone absent
+            "yesterday",
+            "why",
+            "because", // time and cause
+        ] {
+            assert!(
+                concept_by_gloss(gloss).is_some(),
+                "a language with no word for `{gloss}` is missing something its \
+                 speakers would have; that gap must be M15's decision, not the \
+                 wordlist's silence"
+            );
+        }
+    }
+
+    /// A list that is 673 nouns is not a vocabulary. Every part of speech the
+    /// dictionary can print must have at least one member, or a whole section of
+    /// `write_lexicon_markdown` renders empty for every language ever generated.
+    #[test]
+    fn every_part_of_speech_has_at_least_one_concept() {
+        use PartOfSpeech::*;
+        for pos in [
+            Noun, Verb, Adjective, Adverb, Pronoun, Numeral, Determiner, Adposition, Particle,
+        ] {
+            assert!(
+                CONCEPTS.iter().any(|c| c.part_of_speech == pos),
+                "no concept defaults to `{pos}`"
+            );
+        }
     }
 
     #[test]

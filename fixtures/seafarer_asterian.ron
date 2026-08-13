@@ -1,0 +1,152 @@
+// Asterian as the island people speak it — one half of the M15 acceptance pair.
+//
+// THE POINT (ROADMAP M15): this file and its sibling `desert_asterian.ron` carry the
+// SAME 15 phonemes, the SAME phonotactics and the SAME seed. They are one language
+// given two ecologies. Everything that differs between the lexicons they coin is
+// the culture profile's doing and nothing else, which is what makes the comparison
+// legible:
+//
+//   stemma culture     fixtures/seafarer_asterian.ron
+//   stemma culture     fixtures/desert_asterian.ron
+//   stemma new-lexicon fixtures/seafarer_asterian.ron --out out/a.ron
+//   stemma new-lexicon fixtures/desert_asterian.ron --out out/b.ron
+//
+// Both coin `star` as the SAME WORD, because a meaning's form is a pure function of
+// its concept's POSITION and the seed (see `build_shaped_lexicon`'s draw contract).
+// They differ only where these two peoples differ.
+//
+// A GAP IS A CLAIM, NOT AN ACCIDENT. Every meaning either language lacks is listed
+// under the culture trait that explains it, with a reason a reader can disagree
+// with. That is the whole milestone: DESIGN §7.5 worried about a desert language
+// being forced to coin a word for ice, M13 answered "ship breadth by default", and
+// this is the other half — the deliberate gap, on the record.
+(
+    id: "asterian_seafarer",
+    name: "Asterian (seafaring)",
+    lineage_depth_years: 0,
+    seed: 42,
+
+    phonemes: [
+        // --- Stops ---
+        (id: "ph_p", ipa: "p", kind: consonant, frequency_weight: 30,
+         features: ["-syllabic", "+consonantal", "-sonorant", "-approximant", "-continuant", "-nasal", "-lateral", "-trill", "-voice", "+labial", "-coronal", "-dorsal", "-round"]),
+        (id: "ph_t", ipa: "t", kind: consonant, frequency_weight: 50,
+         features: ["-syllabic", "+consonantal", "-sonorant", "-approximant", "-continuant", "-nasal", "-lateral", "-trill", "-voice", "-labial", "+coronal", "-dorsal"]),
+        (id: "ph_k", ipa: "k", kind: consonant, frequency_weight: 45,
+         features: ["-syllabic", "+consonantal", "-sonorant", "-approximant", "-continuant", "-nasal", "-lateral", "-trill", "-voice", "-labial", "-coronal", "+dorsal", "+high", "-low", "+back", "-round"]),
+
+        // --- Nasals ---
+        (id: "ph_m", ipa: "m", kind: consonant, frequency_weight: 35,
+         features: ["-syllabic", "+consonantal", "+sonorant", "-approximant", "-continuant", "+nasal", "-lateral", "-trill", "+voice", "+labial", "-coronal", "-dorsal", "-round"]),
+        (id: "ph_n", ipa: "n", kind: consonant, frequency_weight: 40,
+         features: ["-syllabic", "+consonantal", "+sonorant", "-approximant", "-continuant", "+nasal", "-lateral", "-trill", "+voice", "-labial", "+coronal", "-dorsal"]),
+
+        // --- Fricative ---
+        (id: "ph_s", ipa: "s", kind: consonant, frequency_weight: 35,
+         features: ["-syllabic", "+consonantal", "-sonorant", "-approximant", "+continuant", "-nasal", "-lateral", "-trill", "-voice", "-labial", "+coronal", "-dorsal"]),
+
+        // --- Liquids ---
+        (id: "ph_l", ipa: "l", kind: consonant, frequency_weight: 30,
+         features: ["-syllabic", "+consonantal", "+sonorant", "+approximant", "+continuant", "-nasal", "+lateral", "-trill", "+voice", "-labial", "+coronal", "-dorsal"]),
+        (id: "ph_r", ipa: "r", kind: consonant, frequency_weight: 25,
+         features: ["-syllabic", "+consonantal", "+sonorant", "-approximant", "+continuant", "-nasal", "-lateral", "+trill", "+voice", "-labial", "+coronal", "-dorsal"]),
+
+        // --- Glides ---
+        (id: "ph_w", ipa: "w", kind: consonant, frequency_weight: 20,
+         features: ["-syllabic", "-consonantal", "+sonorant", "+approximant", "+continuant", "-nasal", "-lateral", "-trill", "+voice", "+labial", "-coronal", "+dorsal", "+high", "-low", "+back", "+round"]),
+        (id: "ph_j", ipa: "j", romanization: "y", kind: consonant, frequency_weight: 10,
+         features: ["-syllabic", "-consonantal", "+sonorant", "+approximant", "+continuant", "-nasal", "-lateral", "-trill", "+voice", "-labial", "-coronal", "+dorsal", "+high", "-low", "-back", "-round"]),
+
+        // --- Vowels ---
+        (id: "ph_a", ipa: "a", kind: vowel, frequency_weight: 60,
+         features: ["+syllabic", "-consonantal", "+sonorant", "+approximant", "+continuant", "-nasal", "-lateral", "-trill", "+voice", "-labial", "-coronal", "+dorsal", "-high", "+low", "+back", "-round"]),
+        (id: "ph_e", ipa: "e", kind: vowel, frequency_weight: 35,
+         features: ["+syllabic", "-consonantal", "+sonorant", "+approximant", "+continuant", "-nasal", "-lateral", "-trill", "+voice", "-labial", "-coronal", "+dorsal", "-high", "-low", "-back", "-round"]),
+        (id: "ph_i", ipa: "i", kind: vowel, frequency_weight: 40,
+         features: ["+syllabic", "-consonantal", "+sonorant", "+approximant", "+continuant", "-nasal", "-lateral", "-trill", "+voice", "-labial", "-coronal", "+dorsal", "+high", "-low", "-back", "-round"]),
+        (id: "ph_o", ipa: "o", kind: vowel, frequency_weight: 30,
+         features: ["+syllabic", "-consonantal", "+sonorant", "+approximant", "+continuant", "-nasal", "-lateral", "-trill", "+voice", "+labial", "-coronal", "+dorsal", "-high", "-low", "+back", "+round"]),
+        (id: "ph_u", ipa: "u", kind: vowel, frequency_weight: 35,
+         features: ["+syllabic", "-consonantal", "+sonorant", "+approximant", "+continuant", "-nasal", "-lateral", "-trill", "+voice", "+labial", "-coronal", "+dorsal", "+high", "-low", "+back", "+round"]),
+    ],
+
+    phonotactics: (
+        templates: [
+            (pattern: "CV",  weight: 45),
+            (pattern: "CVC", weight: 35),
+            (pattern: "V",   weight: 12),
+            (pattern: "VC",  weight: 8),
+        ],
+        syllables_per_root: [
+            (count: 1, weight: 25),
+            (count: 2, weight: 55),
+            (count: 3, weight: 20),
+        ],
+    ),
+
+    prosody: (stress: fixed(from: left, offset: 0)),
+
+    // WHY THIS PEOPLE HAS THE WORDS IT HAS.
+    //
+    // The mirror of desert_asterian.ron. Note what it elaborates: the same slots the
+    // desert people have no word for at all. Neither language is more complete —
+    // they are differently complete, which is the point.
+    environment: (
+        summary: "An island chain and its channels; fishers and coastal traders who have never gone inland.",
+        traits: [
+            (
+                id: "MARITIME",
+                name: "Island fishers",
+                note: "Everything arrives by water. A day of walking crosses the largest island.",
+                elaborates: [
+                    (concept: "SEA", senses: [
+                        "the channel water between islands, crossable",
+                        "the open sea beyond the last island",
+                        "the sea as it is on a given day, its temper",
+                        "the shallow water over a reef",
+                    ]),
+                    (concept: "WAVE", senses: [
+                        "the swell that runs under a hull",
+                        "a breaking wave",
+                        "the chop of a crossing wind",
+                    ]),
+                    (concept: "FISH", senses: [
+                        "fish as a catch",
+                        "fish as a meal",
+                        "the small fish used as bait",
+                    ]),
+                    (concept: "BOAT", senses: [
+                        "a one-man boat for the channels",
+                        "a family boat",
+                        "a boat fit for the open sea",
+                    ]),
+                    (concept: "WIND", senses: [
+                        "the wind that lets you leave",
+                        "the wind that keeps you in",
+                        "wind with no direction, that means weather coming",
+                    ]),
+                ],
+                lacks: [
+                    (concept: "DESERT",   reason: "the traders word for it; described, never adopted"),
+                    (concept: "MOUNTAIN", reason: "the high ground of the islands is HILL, and nothing here is larger"),
+                    (concept: "CAVE",     reason: "the sea caves are named as a kind of SHORE, not as an inland thing"),
+                    (concept: "VALLEY",   reason: "no landform here is one"),
+                    (concept: "PLAIN",    reason: "as VALLEY"),
+                    (concept: "SNOW",     reason: "it does not fall at this latitude"),
+                    (concept: "ICE",      reason: "as SNOW, and unlike the desert people these have no northern trade to name it for"),
+                    (concept: "FROST",    reason: "as SNOW"),
+                    (concept: "HORSE",    reason: "no room and no need; the animal has not been brought"),
+                    (concept: "CATTLE",   reason: "as HORSE"),
+                    (concept: "COW",      reason: "as HORSE"),
+                    (concept: "OX",       reason: "as HORSE"),
+                    (concept: "CART",     reason: "there is nowhere to drive one and nothing to pull it"),
+                    (concept: "WHEEL",    reason: "as CART"),
+                ],
+            ),
+        ],
+    ),
+
+    notes: [
+        "The M15 acceptance fixture (seafaring half). Compare with desert_asterian.ron: one phonology, one seed, two ecologies.",
+    ],
+)

@@ -12,7 +12,7 @@ use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use stem_core::{RngDomain, Severity, Validate, ValidationReport, rng_for};
 use stem_genome::LanguageGenome;
-use stem_lexicon::{CONCEPT_COUNT, build_proto_lexicon};
+use stem_lexicon::CONCEPT_COUNT;
 use stem_phonology::RootGenerator;
 
 /// The most roots one invocation will generate.
@@ -266,6 +266,53 @@ enum Command {
         paradigm: String,
     },
 
+    /// Coin new words out of the words this language already has (M14): compounds
+    /// and productive derivational affixation.
+    ///
+    /// The etymology analogue of `new-lexicon`. Where that draws N unrelated roots
+    /// from the urn, this makes the lexicon out of *itself* — `star` + `stone`, or
+    /// every verb plus an agent suffix — and records what each coined word is made
+    /// of. Run `apply-rules` afterwards and the seams erode; `stemma trace` still
+    /// shows the parts.
+    ///
+    /// **Replaces the derived block, never appends to it.** Words already marked
+    /// `source: derived` are dropped and re-coined, so running this twice is
+    /// byte-identical rather than doubling the lexicon.
+    Derive {
+        /// Path to a language file (`.ron` or `.json`) whose morphology declares
+        /// `derivations`.
+        path: PathBuf,
+        /// Coin only this pattern, by id (`AGENT`). Omitted, every pattern runs.
+        #[arg(long)]
+        pattern: Option<String>,
+        /// Cap every pattern at this many words, on top of each pattern's own
+        /// `limit`. A ceiling for experimenting, not a sample: it always takes the
+        /// first eligible bases in lexicon order.
+        #[arg(long, value_parser = clap::value_parser!(u32).range(1..))]
+        limit: Option<u32>,
+        /// Write the language with its derived words here; omitted, print a
+        /// sample only.
+        #[arg(long)]
+        out: Option<PathBuf>,
+    },
+
+    /// Explain why this language has the vocabulary it has (M15): what its culture
+    /// makes fine distinctions inside, and what it has no word for **and why**.
+    ///
+    /// A gap you cannot see is indistinguishable from an accident, so this prints
+    /// every uncoined meaning with the culture trait and reason that explain it.
+    Culture {
+        /// Path to a language file (`.ron` or `.json`).
+        path: PathBuf,
+    },
+
+    /// List and validate a language's derivation patterns (M14). The mirror of
+    /// `rules` and `drifts`, for word formation.
+    Derivations {
+        /// Path to a language file (`.ron` or `.json`).
+        path: PathBuf,
+    },
+
     /// Apply an ordered set of semantic drift events, producing the next stage of
     /// the lineage with new *meanings* (M9).
     ///
@@ -376,6 +423,14 @@ fn run() -> Result<ExitCode> {
             out,
         } => inflect(&path, &paradigm, out.as_deref()),
         Command::Paradigm { path, paradigm } => show_paradigm(&path, &paradigm),
+        Command::Derive {
+            path,
+            pattern,
+            limit,
+            out,
+        } => derive(&path, pattern.as_deref(), limit, out.as_deref()),
+        Command::Derivations { path } => derivations_summary(&path),
+        Command::Culture { path } => culture(&path),
         Command::Drift {
             path,
             drift,
@@ -617,30 +672,45 @@ fn new_lexicon(
         None => (genome.seed, "from the genome"),
     };
     // Every meaning available: the built-in list, then whatever this project
-    // declares (M12). `--concepts` still takes a prefix, so it can now exceed 103
-    // when the genome supplies more, and the ceiling is the language's own.
+    // declares (M12). `--concepts` still takes a prefix, so it can exceed the
+    // compiled count when the genome supplies more, and the ceiling is the
+    // language's own.
     let available = stem_lexicon::meanings(&genome.concepts);
     let count = concepts.map_or(available.len(), |n| (n as usize).min(available.len()));
     if let Some(asked) = concepts
         && asked as usize > available.len()
     {
+        // The declared figure is `available.len() - CONCEPT_COUNT`, not
+        // `genome.concepts.len()`: a declaration shadowing a compiled key coins no
+        // word (`concept::meanings`), so counting the raw `Vec` would print a
+        // ceiling one higher than the command can actually reach.
         eprintln!(
-            "note: asked for {asked} concepts but this language has {} ({} built in + {} declared); coining all {}",
+            "note: asked for {asked} concepts but this language has {} ({CONCEPT_COUNT} built in + {} declared); coining all {}",
             available.len(),
-            CONCEPT_COUNT,
-            genome.concepts.len(),
+            available.len() - CONCEPT_COUNT,
             available.len()
         );
     }
 
-    let lexicon = build_proto_lexicon(
+    // M15: the culture profile shapes WHICH meanings are coined and how many words
+    // each gets. An empty profile (every pre-M15 file) coins exactly what it did.
+    let lexicon = stem_lexicon::build_shaped_lexicon(
         &genome.id,
         &genome.phonemes,
         &genome.phonotactics,
         &available[..count],
+        &genome.environment,
         seed,
     )
     .with_context(|| format!("seeding a lexicon for `{}`", genome.name))?;
+
+    if !genome.environment.is_empty() {
+        let (absent, elaborated, extra) =
+            stem_lexicon::shaping_counts(&genome.environment, &available[..count]);
+        eprintln!(
+            "note: culture profile — {absent} meaning(s) uncoined, {elaborated} elaborated              into {extra} extra word(s); `stemma culture` explains each"
+        );
+    }
 
     eprintln!(
         "{} — seed {seed} ({provenance}), stream `lexicon`",
@@ -942,6 +1012,175 @@ fn inflect(
     }
 
     Ok(ExitCode::SUCCESS)
+}
+
+/// `stemma culture` — why this language has the vocabulary it has.
+fn culture(path: &std::path::Path) -> Result<ExitCode> {
+    let genome = load_genome(path)?;
+    print!("{}", stem_genome::render_culture(&genome)?);
+
+    let report = stem_lexicon::check_against_environment(
+        &genome.environment,
+        &genome.concepts,
+        &stem_lexicon::meanings(&genome.concepts),
+    );
+    if !report.issues.is_empty() {
+        eprintln!();
+        print_report(&report);
+    }
+    Ok(if report.is_ok() {
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::FAILURE
+    })
+}
+
+/// `stemma derive` — coin compounds and affixed derivatives from the lexicon.
+fn derive(
+    path: &std::path::Path,
+    pattern_id: Option<&str>,
+    limit: Option<u32>,
+    out: Option<&std::path::Path>,
+) -> Result<ExitCode> {
+    let mut genome = load_genome(path)?;
+
+    // Which patterns to run, in authored order — never re-sorted, because that
+    // order is the coining order and therefore the determinism contract.
+    let patterns: Vec<stem_lexicon::DerivationPattern> = match pattern_id {
+        Some(wanted) => vec![
+            genome
+                .morphology
+                .derivation(wanted)
+                .ok_or_else(|| stem_core::StemmaError::not_found("derivation pattern", wanted))?
+                .clone(),
+        ],
+        None => genome.morphology.derivations.clone(),
+    };
+    if patterns.is_empty() {
+        eprintln!(
+            "note: `{}` declares no derivation patterns; nothing to coin",
+            genome.name
+        );
+        return Ok(ExitCode::SUCCESS);
+    }
+
+    // `--limit` tightens each pattern's own cap; it never loosens one, so a flag
+    // typed at the prompt cannot quietly overrun a bound the file asked for.
+    let patterns: Vec<stem_lexicon::DerivationPattern> = patterns
+        .into_iter()
+        .map(|p| match limit {
+            Some(cap) => stem_lexicon::DerivationPattern {
+                limit: Some(p.limit.map_or(cap as usize, |own| own.min(cap as usize))),
+                ..p
+            },
+            None => p,
+        })
+        .collect();
+
+    // Replace the derived block, never append to it: re-running must be
+    // byte-identical, and appending would collide the sequential word ids. The
+    // bases are exactly the words that were not themselves coined here.
+    let bases = stem_lexicon::Lexicon::from_entries(
+        genome
+            .lexicon
+            .iter()
+            .filter(|e| e.source != stem_lexicon::WordSource::Derived)
+            .cloned(),
+    );
+    let dropped = genome.lexicon.len() - bases.len();
+    if dropped > 0 {
+        eprintln!("note: replacing {dropped} previously derived word(s)");
+    }
+
+    let coined = stem_lexicon::derive(&patterns, &genome.morphology.morphemes, &bases, &genome.id)
+        .with_context(|| format!("deriving words in `{}`", genome.name))?;
+
+    eprintln!(
+        "{} — {} base word(s), {} pattern(s) -> {} coined",
+        genome.name,
+        bases.len(),
+        patterns.len(),
+        coined.len()
+    );
+
+    let mut entries: Vec<stem_lexicon::WordEntry> = bases.iter().cloned().collect();
+    entries.extend(coined.iter().cloned());
+    genome.lexicon = stem_lexicon::Lexicon::from_entries(entries);
+
+    let homophones = stem_lexicon::check_against_inventory(&genome.lexicon, &genome.phonemes);
+    for issue in homophones.issues.iter().filter(|i| i.code == "homophones") {
+        eprintln!("note: {}", issue.message);
+    }
+
+    match out {
+        Some(destination) => {
+            stem_io::save(destination, &genome)
+                .with_context(|| format!("writing `{}`", destination.display()))?;
+            eprintln!("{} -> {}", genome.lexicon.summary(), destination.display());
+        }
+        None => {
+            // Without `--out` this is a look, not a commit: print the coined words
+            // and their parts, so `derive` can be tried before it is saved.
+            for entry in &coined {
+                let parts: Vec<String> = entry
+                    .bases
+                    .iter()
+                    .map(|b| b.gloss.clone())
+                    .chain(entry.morphemes.iter().map(|m| format!("-{}", m.gloss)))
+                    .collect();
+                println!(
+                    "{}\t{}\t{}",
+                    entry.written(&genome.phonemes)?,
+                    entry.display_gloss().unwrap_or("?"),
+                    parts.join(" + ")
+                );
+            }
+        }
+    }
+
+    Ok(ExitCode::SUCCESS)
+}
+
+/// `stemma derivations` — list and validate a language's word-formation patterns.
+fn derivations_summary(path: &std::path::Path) -> Result<ExitCode> {
+    let genome = load_genome(path)?;
+    let patterns = &genome.morphology.derivations;
+
+    println!("{} — {} derivation pattern(s)", genome.name, patterns.len());
+    println!();
+    for pattern in patterns {
+        println!(
+            "  {:<14} {:<28} {}",
+            pattern.id,
+            pattern.name,
+            pattern.formation.summary()
+        );
+        println!(
+            "  {:<14} glosses as \"{}\" -> {}{}",
+            "",
+            pattern.gloss,
+            pattern.part_of_speech,
+            pattern
+                .limit
+                .map_or(String::new(), |n| format!(", capped at {n}"))
+        );
+        if !pattern.note.is_empty() {
+            println!("  {:<14} {}", "", pattern.note);
+        }
+        println!();
+    }
+
+    let report = stem_lexicon::check_against_derivations(
+        &genome.lexicon,
+        patterns,
+        &genome.morphology.morphemes,
+    );
+    print_report(&report);
+    Ok(if report.is_ok() {
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::FAILURE
+    })
 }
 
 /// `stemma paradigm` — render a paradigm from the language's inflected cells.

@@ -12,7 +12,7 @@ The name comes from textual criticism: a *stemma* is the reconstructed family tr
 showing how surviving manuscripts descend from a lost original. That is exactly
 this program's core data structure.
 
-**Status:** **Phases 0–2 complete (M0–M11); Phase 3 underway (M12 done)** — the
+**Status:** **Phases 0–3 complete (M0–M15)** — the
 diachronic kernel runs end to end. Languages get a feature-based phonology,
 generate seeded roots, undergo ordered sound change, fork into daughters with their
 own histories, and line up in a comparative cognate table; `stemma demo` tells the
@@ -26,13 +26,21 @@ made the rules readable: a `.sc` file writes sound changes in a plain syntax and
 produces **byte-identical** output to the hand-built structs, so the notation is a
 front end and can never become a second engine. And M11 added `stemma-ui`, a native
 desktop window — no browser, one self-contained binary — that shows any word's full
-history and the daughters side by side. 528 tests pass, and every step is
-deterministic and traced.
+history and the daughters side by side. Phase 3 then made the languages *believable*:
+M13 grew the built-in concept list from 103 meanings to **673**, append-only, so
+every language coined before it comes back byte-for-byte identical; and M14 gave a
+big vocabulary an **etymology** — `stemma derive` turns 673 roots into ~4,000 words
+by compounding and productive affixation, then a sound change erodes `wikikippa`
+"blood-debt" into `wiiipp`, which contains neither part, **and the trace still names
+both**. M15 closed the phase by modelling *why* a language has the words it has: two
+fixtures over one phonology and one seed coin `star` as the same word and differ only
+where their cultures do — and every meaning a people lacks is printed with the reason.
+611 tests pass, and every step is deterministic and traced.
 
-Twelve milestones remain, and they are the interesting ones: a believable core
-vocabulary, derivation, an ecology that explains *why* a language has the words it
-has — then syntax (you cannot yet form a sentence), writing systems, a constrained
-LLM assistant, and alien modality. See [ROADMAP.md](ROADMAP.md) for the plan,
+Nine milestones remain, and they are the interesting ones: editing in the explorer,
+then syntax (you cannot yet form a sentence), writing systems, a constrained LLM
+assistant, and alien modality. See
+[ROADMAP.md](ROADMAP.md) for the plan,
 [docs/GUIDE.md](docs/GUIDE.md) for how to use what exists, and
 [PROGRESS.md](PROGRESS.md) for what has shipped.
 
@@ -45,7 +53,7 @@ Install from [rustup.rs](https://rustup.rs) if needed. No other dependencies —
 database, no Node, no system libraries.
 
 ```bash
-./scripts/playground.sh     # builds a real 103-word family and opens the explorer
+./scripts/playground.sh     # builds a real 673-word family and opens the explorer
 ```
 
 That is the fastest way in. For the command-by-command version, see
@@ -144,9 +152,16 @@ cargo run -p stem_cli -- export-md out/proto.ron
 | nak | /nak/ | bark | noun | `BARK` | `w_0003` | `cog_proto_asterian_0003` |
 ```
 
-One word per meaning, drawn from a built-in list of 103 concepts — the Swadesh 1955
-hundred, with their Concepticon anchors, plus three the design's own worked examples
-need. `export-csv` writes the same data as a [CLDF](https://cldf.clld.org/)-shaped
+One word per meaning, drawn from a built-in list of **673 concepts** — the Swadesh
+1955 hundred with their Concepticon anchors, three the design's own worked examples
+need, and a core vocabulary organised by the semantic fields of Buck's *Dictionary of
+Selected Synonyms* (kinship, weather, the body, food, dwelling, motion, quantity,
+time, emotion, speech, war, law, religion…). The list is **append-only**: the
+original 103 are still at positions 1–103, so a language coined before it grew comes
+back byte-for-byte identical. Declare anything it lacks in your own genome — see
+[docs/GUIDE.md](docs/GUIDE.md).
+
+`export-csv` writes the same data as a [CLDF](https://cldf.clld.org/)-shaped
 table, including a `Segments` column of space-separated IPA that a field linguist
 would normally have to reconstruct by hand.
 

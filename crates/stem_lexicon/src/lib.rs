@@ -40,16 +40,25 @@
 
 pub mod build;
 pub mod concept;
+pub mod derivation;
+pub mod environment;
 pub mod lexicon;
 pub mod morpheme;
 pub mod semantics;
 pub mod trace;
 pub mod word;
 
-pub use build::{build_proto_lexicon, scoped_cognate_set};
+pub use build::{build_proto_lexicon, build_shaped_lexicon, scoped_cognate_set};
 pub use concept::{
-    CONCEPT_COUNT, CONCEPTS, Concept, ConceptKey, Meaning, PartOfSpeech, ProjectConcept,
-    SWADESH_COUNT, meanings,
+    CONCEPT_COUNT, CONCEPTS, Concept, ConceptKey, Meaning, PRE_M13_CONCEPT_COUNT, PartOfSpeech,
+    ProjectConcept, SWADESH_COUNT, meanings,
+};
+pub use derivation::{
+    BaseRef, CompoundPair, DerivationPattern, Formation, check_against_derivations, derive,
+};
+pub use environment::{
+    Absence, CultureTrait, Elaboration, EnvironmentProfile, LARGE_VOCABULARY_GAP, Salience,
+    check_against_environment, salience, shaping, shaping_counts,
 };
 pub use lexicon::{Lexicon, check_against_concepts, check_against_inventory, is_portable_id};
 pub use morpheme::{
@@ -240,6 +249,7 @@ mod tests {
             source: WordSource::Authored,
             trace: None,
             morphemes: Vec::new(),
+            bases: Vec::new(),
             senses: Vec::new(),
             sense_history: None,
         };
@@ -327,6 +337,7 @@ mod tests {
             source: WordSource::Authored,
             trace: None,
             morphemes: Vec::new(),
+            bases: Vec::new(),
             senses: Vec::new(),
             sense_history: None,
         }])
@@ -359,6 +370,7 @@ mod tests {
             source: WordSource::Authored,
             trace: None,
             morphemes: Vec::new(),
+            bases: Vec::new(),
             senses: Vec::new(),
             sense_history: None,
         }
@@ -478,6 +490,46 @@ mod tests {
         );
     }
 
+    /// **The defect M13 exposed.** M12 documented "the compiled meaning wins, so
+    /// this declaration has no effect" and `meanings` chained unconditionally, so a
+    /// shadowing declaration quietly coined a *second* word under the same key —
+    /// two entries, one key, both glossed the same, and `by_meaning` returning both.
+    ///
+    /// Nothing hit it until the compiled list grew from 103 to 673 and landed on
+    /// `fixtures/seafarers.ron`'s own `ICE`, `SAIL` and `OAR`. That is the real
+    /// shape of this hazard: not an author reusing a key, but the built-in list
+    /// growing under a language that had already declared the meaning — which will
+    /// happen again at every future append.
+    #[test]
+    fn a_project_concept_shadowing_a_builtin_key_coins_no_second_word() {
+        let shadowing = ProjectConcept {
+            key: ConceptKey::new("STAR"),
+            gloss: "a different star".to_owned(),
+            part_of_speech: PartOfSpeech::Noun,
+            note: String::new(),
+        };
+        let own = ProjectConcept {
+            key: ConceptKey::new("OBSIDIAN"),
+            gloss: "black glass".to_owned(),
+            part_of_speech: PartOfSpeech::Noun,
+            note: String::new(),
+        };
+
+        let declared = [shadowing, own];
+        let ms = meanings(&declared);
+        assert_eq!(
+            ms.len(),
+            CONCEPT_COUNT + 1,
+            "only the non-shadowing declaration may add a meaning"
+        );
+        assert_eq!(
+            ms.iter().filter(|m| m.key == "STAR").count(),
+            1,
+            "one key means one meaning, or the M5 join is ambiguous"
+        );
+        assert_eq!(ms.last().expect("a tail").key, "OBSIDIAN");
+    }
+
     /// A project key that shadows a compiled one is reported: two meanings under one
     /// key would make every join ambiguous.
     #[test]
@@ -589,6 +641,7 @@ mod tests {
             source: WordSource::Authored,
             trace: None,
             morphemes: Vec::new(),
+            bases: Vec::new(),
             senses: Vec::new(),
             sense_history: None,
         });
@@ -622,6 +675,7 @@ mod tests {
             source: WordSource::Authored,
             trace: None,
             morphemes: Vec::new(),
+            bases: Vec::new(),
             senses: Vec::new(),
             sense_history: None,
         }]);
@@ -667,6 +721,7 @@ mod tests {
             source: WordSource::Authored,
             trace: None,
             morphemes: Vec::new(),
+            bases: Vec::new(),
             senses: Vec::new(),
             sense_history: None,
         };

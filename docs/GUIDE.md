@@ -11,7 +11,7 @@ This is the how-to. [README.md](../README.md) is the pitch and the quick tour;
 stem
 ```
 
-That builds a real 103-word language family and opens the desktop explorer on it.
+That builds a real 673-word language family and opens the desktop explorer on it.
 First run takes a minute or so (the graphics stack compiles once); after that it is
 instant, because the family is cached in `out/`.
 
@@ -49,6 +49,8 @@ This trips people up, so plainly:
 | `proto_asterian.ron` | **0** | A 15-phoneme inventory and root shapes. No vocabulary at all. |
 | `asterian_attested.ron` | **9** | A *test fixture*. Each word exists to prove one engine behaviour. |
 | `morphology_asterian.ron` | 0 | Four stems and a plural suffix, for the paradigm demo. |
+| `derivation_asterian.ron` | 0 | Derivational affixes and patterns; `derive` turns its 673 roots into ~4,000 words. |
+| `desert_asterian.ron` / `seafarer_asterian.ron` | 0 | One phonology, one seed, two ecologies — the culture-profile pair. |
 
 **None of these is a language you are meant to browse.** They are the inputs. A
 language with vocabulary is something you *generate*, which is what `stem` does and
@@ -67,43 +69,62 @@ dictionary and found nine words, that is why.
 stemma new-lexicon fixtures/asterian_attested.ron --seed 42 --out out/proto.ron
 ```
 
-One word per meaning, drawn from a built-in list of 103 concepts (the Swadesh 1955
-hundred plus three the design's worked examples need). Words are drawn from the
+One word per meaning, drawn from a built-in list of **673 concepts** — the Swadesh
+1955 hundred, three the design's worked examples need, and a core vocabulary
+organised by semantic field (kinship, weather, animals, the body, food, dwelling,
+motion, quantity, time, perception, emotion, speech, society, war, law, religion, and
+the pronouns and function words Swadesh leaves out). Words are drawn from the
 inventory under the declared syllable templates.
+
+The list is **append-only**, and that is a promise rather than a convention: word *n*
+is drawn from the *n*-th draw of one seeded stream, so anything inserted rather than
+appended would silently rewrite every word after it in every language you have ever
+generated. When the list grows, your old languages come back byte-for-byte identical.
 
 > **Why `asterian_attested` and not `proto_asterian`?** Same phonemes, but it also
 > declares a **stress system**. Without prosody, a rule like "final *unstressed*
 > vowel loss" can never fire — the engine tells you so (`stress_without_prosody`)
 > rather than silently doing nothing, but you get a duller family. `new-lexicon`
-> replaces its nine hand-authored words with 103 coined ones.
+> replaces its nine hand-authored words with 673 coined ones.
 
 Change `--seed` for a completely different language from the same phonology. Use
 `--concepts 25` for a smaller one.
 
 ### Giving your language its own vocabulary
 
-103 is a *basic* vocabulary — the Swadesh list has no opinion about rigging, or
-kinship terms, or ritual. Declare the meanings your culture needs in the genome
-itself:
+673 is a broad vocabulary, not an exhaustive one — it has no opinion about rigging,
+or your pantheon, or the four words your people have for a kind of snow nobody else
+distinguishes. Declare what your culture needs in the genome itself:
 
 ```ron
 concepts: [
     (key: "TIDE",   gloss: "tide", note: "twice-daily; the calendar hangs off it"),
     (key: "KEEL",   gloss: "keel"),
-    (key: "ICE",    gloss: "ice",  note: "they trade north"),
+    (key: "REEF",   gloss: "reef"),
 ],
 ```
 
 ```bash
 stemma new-lexicon fixtures/seafarers.ron --seed 7 --out out/sea.ron
-# 114 words over 114 concepts
+# 681 words over 681 concepts
 ```
 
 They append after the built-in list, so **adding one cannot change a word you already
-coined**. Keys must not collide with a built-in (you'll be told). There is no
-Concepticon-anchor field on a project concept, deliberately: if a verified mapping
-existed, the meaning belongs on the built-in list — so a fabricated anchor is not
-merely discouraged here, it is unrepresentable.
+coined**. There is no Concepticon-anchor field on a project concept, deliberately: if
+a verified mapping existed, the meaning belongs on the built-in list — so a
+fabricated anchor is not merely discouraged here, it is unrepresentable.
+
+> **If the built-in list later grows into your key**, you get a Warning
+> (`concepts.shadows_builtin`) and the compiled meaning wins — one key has to mean
+> one thing or the comparative table cannot join on it. Delete the line; that is the
+> ordinary lifecycle of a project concept, not a mistake you made. This happened to
+> `fixtures/seafarers.ron` at M13: it had declared `ICE`, `SAIL` and `OAR`, and all
+> three arrived on the built-in list.
+>
+> One caveat worth knowing: your declared concepts sit *after* the built-in block, so
+> when that block grows, re-running `new-lexicon` draws **different forms for your own
+> words** (the built-in ones are unaffected). Your saved file is not touched — it
+> loads and validates exactly as before. Only re-coining moves them.
 
 > Why in the genome and not a `--concepts-file`? Because a language must be
 > reproducible **from its own file alone**. A sidecar the seed contract doesn't cover
@@ -253,6 +274,183 @@ Nobody declared the irregularity. It fell out of the history.
 
 ---
 
+## Make words out of words
+
+673 words is a vocabulary. It is not yet a *lexicon*, because every one of those words
+is an unrelated draw from the same urn — no language is like that. Most of a real
+lexicon is built from the rest of it.
+
+```bash
+stemma derivations fixtures/derivation_asterian.ron          # what patterns exist
+stemma new-lexicon fixtures/derivation_asterian.ron --out out/d.ron
+stemma derive out/d.ron --out out/dd.ron
+```
+
+```
+Asterian (derivation) — 673 base word(s), 14 pattern(s) -> 3305 coined
+3978 words over 673 concepts -> out/dd.ron
+```
+
+Two kinds of pattern, declared in the genome's `morphology`:
+
+```ron
+derivations: [
+    // Productive: attaches to every word of that part of speech.
+    (id: "AGENT", name: "Agent noun",
+     formation: affix(affix: "m_agent", applies_to: verb),
+     gloss: "one who {1}s", part_of_speech: noun),
+
+    // Authored: you name the pairs.
+    (id: "COMPOUND", name: "Noun compound",
+     formation: compound(pairs: [(left: "STAR", right: "STONE")]),
+     gloss: "{1}-{2}", part_of_speech: noun),
+],
+```
+
+**Affixation is productive and compounding is not, deliberately.** A derivational
+affix really does attach to essentially any word of its class, so applying one to
+every verb reports a fact. Compounding every noun with every noun would coin 123,201
+words for a 351-noun language — and whether `star` + `stone` means *meteorite* is a
+fact about your culture, not a rule. So you write the pairs.
+
+> Use `--pattern AGENT` to run one pattern, and `--limit N` to cap them all while
+> experimenting. `--limit` only ever *tightens* a pattern's own cap, and it takes the
+> first N bases in order rather than a random sample — so it stays reproducible.
+>
+> `derive` **replaces** the derived block rather than appending to it, so running it
+> twice gives you the same file, not twice the lexicon.
+
+### Then let time have it
+
+This is the part worth doing. Evolve the derived language and the seams erode:
+
+```bash
+stemma apply-rules out/dd.ron --rules fixtures/rules_coastal.ron \
+    --id late --name "Late Asterian" --years 500 --out out/late.ron
+stemma trace out/late.ron w_3973
+```
+
+```
+  proto      wikikippa
+  │  1  r_velar_lenition   g > ɣ  [2,3) · [4,5)   → wiɣiɣippa
+  │  2  r_gamma_loss       ɣ > ∅  [2,3) · [4,5)   → wiiippa
+  │  3  r_apocope          a > ∅  [6,7)           → wiiipp
+  modern     wiiipp
+
+Formation:
+  wiki         word     "blood"  →  wii  [w_0009 · cog_asterian_deriv_0009]
+  kippa        word     "debt"   →  ipp  [w_0414 · cog_asterian_deriv_0414]
+
+  wikikippa  →  wiiipp   — the seam has eroded; the record above is how the parts
+                            are still recoverable
+```
+
+`wiiipp` contains neither `wiki` nor `kippa`. No one looking at that word could tell
+it was ever a compound — which is exactly what happens to real words (`lord` was
+`hlāfweard`, "loaf-guard"). Stemma still knows, because each part stored the *span* it
+occupies rather than a copy of its letters, and the span is walked through the word's
+own sound-change record.
+
+That is the whole idea of the program, applied one level up from a single word.
+
+---
+
+## Say why your language has the words it has
+
+A vocabulary of 673 meanings is a starting point, not a claim. Real languages
+elaborate what their speakers care about and simply lack what they have never met —
+and until you say which is which, every word in the dictionary is there because the
+wordlist shipped it, not because these people would have it.
+
+Declare an `environment:` in the genome:
+
+```ron
+environment: (
+    summary: "The high inland waste and its two rivers; herders who trade north.",
+    traits: [
+        (
+            id: "DESERT", name: "High desert",
+            note: "No coast within a season of travel. Water is counted, not assumed.",
+            elaborates: [
+                (concept: "SAND", senses: [
+                    "fine drifting sand, the kind that moves overnight",
+                    "coarse sand that holds a footprint",
+                    "sand crusted hard enough to bear a cart",
+                    "sand carried on the wind, that blinds",
+                ]),
+            ],
+            lacks: [
+                (concept: "SEA",  reason: "no living speaker has seen open water"),
+                (concept: "FISH", reason: "the two rivers run too fast and too cold"),
+            ],
+        ),
+    ],
+),
+```
+
+```bash
+stemma culture fixtures/desert_asterian.ron
+```
+
+Every gap prints with the trait and the reason behind it, because **a gap you cannot
+see is indistinguishable from an accident**:
+
+```
+  High desert  (DESERT)
+    elaborates  SAND into 4 word(s):
+                  · fine drifting sand, the kind that moves overnight
+                  …
+    lacks       SEA    — no living speaker has seen open water
+    lacks       FISH   — the two rivers run too fast and too cold
+
+  Vocabulary
+    673 available meaning(s) − 16 uncoined + 10 from 5 elaboration(s) = 667 word(s)
+```
+
+Then `new-lexicon` coins that vocabulary and no other.
+
+### Two peoples, one language
+
+`fixtures/desert_asterian.ron` and `fixtures/seafarer_asterian.ron` carry the **same
+15 phonemes, the same root shapes and the same seed**. They are one language given two
+ecologies:
+
+```bash
+stemma new-lexicon fixtures/desert_asterian.ron   --out out/desert.ron
+stemma new-lexicon fixtures/seafarer_asterian.ron --out out/sea.ron
+```
+
+| meaning | desert | island |
+|---|---|---|
+| star | `sosem` | `sosem` |
+| sand | **4 words** | 1 |
+| sea | **none** | **4 words** |
+| fish | **none** | 3 |
+| cattle | **4 words** | **none** |
+| ice | 1 | **none** |
+
+`star` is the *same word* in both, and that is deliberate: a meaning's form depends
+only on its position in the concept list and the seed, so everything that differs
+between these two dictionaries is the culture profile's doing and nothing else. (An
+absent meaning still draws its root and throws it away, precisely so that removing one
+word cannot move another.)
+
+Look at `ice`. The desert people have a word for it — they trade north — and the
+island people do not. That is the whole argument in one row: the tool is not deciding
+who gets a word for ice, the author is, and the reason is in the file.
+
+> **Notes on writing one.** The distinctions in an elaboration are *named*, not
+> counted — `senses: [...]`, never `words: 4` — because four rows all glossed "sand"
+> is four identical dictionary lines and no information. A `reason` is required on
+> every absence. And if one trait elaborates what another says is missing, absence
+> wins and you are told (`contested_concept`); you cannot have four words for a thing
+> you have no word for.
+>
+> `stemma culture` on a language with no profile tells you what that silently asserts,
+> rather than printing an empty section.
+
+---
+
 ## Give a word a new meaning
 
 Meaning has its own history, separate from form:
@@ -305,6 +503,8 @@ stemma <cmd> --help    # its options
 | `trace` `trace-word` | why a word looks like that |
 | `cognates` `family` | compare a family |
 | `inflect` `paradigm` | morphology |
+| `derive` `derivations` | compounds and productive affixation |
+| `culture` | why this language has the vocabulary it has |
 | `drift` `drifts` | meaning change |
 | `rules` | validate a rule file (`.ron`, `.json`, or `.sc`) |
 | `export-md` `export-csv` `demo` | get data out |

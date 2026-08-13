@@ -16,12 +16,16 @@
 //! `stem_core` makes the crate graph cyclic. Splitting it out keeps the graph a
 //! DAG and keeps `stem_core` a true foundation. See `docs/adr/0002-crate-layering.md`.
 
+pub mod culture;
+pub mod etymology;
 pub mod language;
 pub mod lineage;
 pub mod paradigm;
 pub mod profile;
 pub mod semantics_view;
 
+pub use culture::{absences, render_culture};
+pub use etymology::render_etymology;
 pub use language::LanguageGenome;
 pub use lineage::{
     BranchSpec, CognateCell, CognateColumn, CognateCoverage, CognateRow, CognateTable, LineageEdge,
@@ -48,7 +52,7 @@ pub(crate) fn pad(text: &str, width: usize) -> String {
 }
 pub use profile::{
     HistoricalDepth, MorphologicalIrregularity, NOT_MODELLED, NotModelled, PlausibilityProfile,
-    SemanticDrift, render_profile,
+    SemanticDrift, VocabularyShaping, render_profile,
 };
 pub use semantics_view::{render_sense_history, render_word_history};
 // The phonology bands the profile is built from, re-exported so a consumer needs
