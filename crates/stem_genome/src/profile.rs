@@ -20,7 +20,8 @@
 //! or average over dimensions that do not exist).
 
 use stem_lexicon::{
-    HIGH_ALLOMORPH_COUNT, LONG_SENSE_CHAIN, morphological_irregularity, sense_chains,
+    HIGH_ALLOMORPH_COUNT, LARGE_VOCABULARY_GAP, LONG_SENSE_CHAIN, morphological_irregularity,
+    sense_chains,
 };
 use stem_phonology::{Complexity, Rarity};
 
@@ -94,6 +95,31 @@ pub enum SemanticDrift {
     HighlyDrifted,
 }
 
+/// How deliberately this language's vocabulary has been shaped by its culture (M15).
+///
+/// Descriptive, not a score, and emphatically not a plausibility ranking: a heavily
+/// shaped vocabulary is a **more** considered language, not a less believable one.
+/// It sits in this block because without it the profile is blind to the largest
+/// single fact about a language's word list — a 673-meaning language and a
+/// 600-meaning one read identically everywhere else.
+///
+/// The threshold between [`Self::Shaped`] and [`Self::HeavilyShaped`] is the shared
+/// [`LARGE_VOCABULARY_GAP`], so this band reads `HeavilyShaped` exactly when the
+/// `large_vocabulary_gap` validation Note fires (`docs/adr/0009`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum VocabularyShaping {
+    /// No culture profile — every available meaning is coined. A fact, not a low
+    /// score (the [`HistoricalDepth::None`] precedent), though it is the *undeliberate*
+    /// state M15 exists to give authors a way out of.
+    Unshaped,
+    /// A profile is declared and removes fewer than [`LARGE_VOCABULARY_GAP`]
+    /// meanings.
+    Shaped,
+    /// A profile removes [`LARGE_VOCABULARY_GAP`] meanings or more — the band the
+    /// Note is paired to.
+    HeavilyShaped,
+}
+
 /// A §17 dimension no shipped milestone can measure yet. Carried explicitly so the
 /// profile is transparent about its own coverage rather than silently omitting
 /// four of §17's rows — or, worse, fabricating a number for them.
@@ -165,6 +191,12 @@ pub struct PlausibilityProfile {
     /// recorded shift count), in lexicon order — the `affix_allomorphy` shape, and
     /// shown beside the band for the same honesty reason.
     pub sense_chains: Vec<(String, usize)>,
+    /// How deliberately the culture profile shapes the vocabulary (M15).
+    pub vocabulary_shaping: VocabularyShaping,
+    /// The raw basis for `vocabulary_shaping`: `(uncoined, elaborated, extra words)`,
+    /// shown beside the band so the number can be checked rather than trusted — the
+    /// `recorded_changes` discipline.
+    pub shaping_counts: (usize, usize, usize),
 }
 
 impl LanguageGenome {
@@ -235,6 +267,24 @@ impl LanguageGenome {
             }
         };
 
+        // M15: how deliberately the culture profile shapes the word list. The band
+        // reads the same `LARGE_VOCABULARY_GAP` the `large_vocabulary_gap` Note
+        // reads, so the two cannot disagree about when a shaping is remarkable
+        // (`docs/adr/0009`). `Unshaped` is "no profile declared", which is a
+        // different fact from "a profile that removes nothing" — the latter is a
+        // deliberate decision to keep everything, and reads as `Shaped`.
+        let counts = stem_lexicon::shaping_counts(
+            &self.environment,
+            &stem_lexicon::meanings(&self.concepts),
+        );
+        let vocabulary_shaping = if self.environment.is_empty() {
+            VocabularyShaping::Unshaped
+        } else if counts.0 >= LARGE_VOCABULARY_GAP {
+            VocabularyShaping::HeavilyShaped
+        } else {
+            VocabularyShaping::Shaped
+        };
+
         PlausibilityProfile {
             rarity: self.phonemes.rarity(),
             complexity: self.phonotactics.complexity(),
@@ -245,6 +295,8 @@ impl LanguageGenome {
             affix_allomorphy,
             semantic_drift,
             sense_chains: chains,
+            vocabulary_shaping,
+            shaping_counts: counts,
         }
     }
 }
@@ -278,7 +330,8 @@ pub fn render_profile(profile: &PlausibilityProfile, name: &str) -> String {
     const DEPTH: &str = "Historical depth";
     const MORPH: &str = "Morphological irregularity";
     const SEMANTIC: &str = "Semantic drift";
-    let width = [RARITY, COMPLEXITY, DEPTH, MORPH, SEMANTIC]
+    const CULTURE: &str = "Vocabulary shaping";
+    let width = [RARITY, COMPLEXITY, DEPTH, MORPH, SEMANTIC, CULTURE]
         .iter()
         .map(|l| l.chars().count())
         .max()
@@ -351,6 +404,23 @@ pub fn render_profile(profile: &PlausibilityProfile, name: &str) -> String {
         }
     };
 
+    // M15: the band plus its raw basis, the `semantic_line` shape. `Unshaped` is
+    // "no profile at all", not a zero — and it names what that silently asserts.
+    let (absent, elaborated, extra) = profile.shaping_counts;
+    let culture_line = match profile.vocabulary_shaping {
+        VocabularyShaping::Unshaped => {
+            "unshaped  (no culture profile; every meaning coined)".to_owned()
+        }
+        band => {
+            let label = match band {
+                VocabularyShaping::Shaped => "shaped",
+                VocabularyShaping::HeavilyShaped => "heavily shaped",
+                VocabularyShaping::Unshaped => unreachable!(),
+            };
+            format!("{label}  ({absent} uncoined, {elaborated} elaborated into {extra} extra)")
+        }
+    };
+
     let mut out = String::new();
     out.push_str(&format!("Plausibility profile — {name}\n\n"));
     out.push_str(&format!(
@@ -366,6 +436,7 @@ pub fn render_profile(profile: &PlausibilityProfile, name: &str) -> String {
     out.push_str(&format!("  {DEPTH}{}  {depth_line}\n", pad(DEPTH)));
     out.push_str(&format!("  {MORPH}{}  {morph_line}\n", pad(MORPH)));
     out.push_str(&format!("  {SEMANTIC}{}  {semantic_line}\n", pad(SEMANTIC)));
+    out.push_str(&format!("  {CULTURE}{}  {culture_line}\n", pad(CULTURE)));
 
     out.push_str("\n  not yet modelled:\n");
     // The unbuilt §17 dimensions, in NOT_MODELLED order — no fabricated score.
@@ -635,6 +706,9 @@ mod tests {
                     start: 0,
                     end: segs.len() as u32,
                 }],
+                // Monomorphemic on the derivation axis: this is an inflected cell,
+                // not a compound, so it has an affix ref and no base (M14).
+                bases: Vec::new(),
                 // This fixture exercises the morphology band; it declares no
                 // senses, so the semantic band reads `None`.
                 senses: Vec::new(),
@@ -742,6 +816,7 @@ mod tests {
             source: WordSource::Authored,
             trace: None,
             morphemes: Vec::new(),
+            bases: Vec::new(),
             senses: vec![SenseRef {
                 node: SemanticNodeId::new(format!("sn_{shifts}")),
                 gloss: format!("sense {shifts}"),

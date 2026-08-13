@@ -75,6 +75,18 @@ pub enum RngDomain {
     /// is a scratchpad run at varying `--count` while auditioning phonotactics;
     /// `new-lexicon` produces an artifact. They share a subroutine, not a contract.
     Lexicon,
+    /// The **extra** words an elaborated concept gets (M15) — the second, third and
+    /// fourth word a desert language has for sand.
+    ///
+    /// A separate stream for precisely the reason [`Self::Lexicon`]'s docs name: it
+    /// is "the first time lexicon seeding wants one extra draw per entry", and
+    /// taking those draws from the lexicon stream would shift every word after an
+    /// elaborated concept. Split out, the primary stream stays exactly one draw per
+    /// concept **position**, so two languages over one concept list and one seed
+    /// share a form for every meaning they both have, and differ only where their
+    /// culture profiles say they differ. That is what makes M15's acceptance legible
+    /// rather than a total reshuffle.
+    Elaboration,
 }
 
 impl RngDomain {
@@ -86,6 +98,7 @@ impl RngDomain {
         match self {
             Self::Roots => "roots",
             Self::Lexicon => "lexicon",
+            Self::Elaboration => "elaboration",
         }
     }
 }
@@ -93,6 +106,18 @@ impl RngDomain {
 /// Expands a user-facing `u64` seed into the generator's full 32-byte seed, with
 /// domain separation.
 fn expand_seed(seed: u64, domain: RngDomain) -> [u8; 32] {
+    expand_seed_indexed(seed, domain, None)
+}
+
+/// The same, optionally salted with an index so one domain can hand out **many
+/// independent streams**.
+///
+/// `None` is byte-identical to the unsalted expansion — nothing is appended — so
+/// every stream that existed before this function did is unmoved. That is why the
+/// salt is an `Option` rather than a `u64` defaulting to 0: `Some(0)` is a *different*
+/// stream from `None`, and conflating them would have silently rewritten every
+/// language in existence.
+fn expand_seed_indexed(seed: u64, domain: RngDomain, index: Option<u64>) -> [u8; 32] {
     let mut hasher = Sha256::new();
     hasher.update(SEED_DOMAIN_VERSION);
     hasher.update(domain.tag().as_bytes());
@@ -100,12 +125,37 @@ fn expand_seed(seed: u64, domain: RngDomain) -> [u8; 32] {
     // `to_le_bytes`, never `to_ne_bytes`: endianness must be pinned, or the same
     // seed produces a different language on a big-endian target.
     hasher.update(seed.to_le_bytes());
+    if let Some(index) = index {
+        hasher.update(b"#");
+        hasher.update(index.to_le_bytes());
+    }
     hasher.finalize().into()
 }
 
 /// A generator for one subsystem, seeded from the project seed.
 pub fn rng_for(seed: u64, domain: RngDomain) -> StemmaRng {
     StemmaRng::from_seed(expand_seed(seed, domain))
+}
+
+/// A generator for one subsystem **and one index within it** — an independent
+/// stream per index, from the same project seed.
+///
+/// # Why an indexed stream, and not a counter into a shared one
+///
+/// M15 needed this and found out why the hard way. A culture profile can give a
+/// concept several words, and the extra ones were first taken sequentially from a
+/// single [`RngDomain::Elaboration`] stream. That is a shared cursor: adding a
+/// fourth word for *sand* moved the second and third words for *water*, because
+/// water's draws had shifted one position down a stream they shared. Silent, and
+/// exactly the class of rewrite the whole determinism contract exists to prevent —
+/// caught only because a test asserted that an unrelated meaning had not moved.
+///
+/// Salting the seed with the index gives every position its own stream, so a draw
+/// depends on **what it is for** and never on how many draws happened before it.
+/// Separation is by SHA-256 over the index bytes, so adjacent indices are as
+/// unrelated as distinct seeds are.
+pub fn rng_for_indexed(seed: u64, domain: RngDomain, index: u64) -> StemmaRng {
+    StemmaRng::from_seed(expand_seed_indexed(seed, domain, Some(index)))
 }
 
 #[cfg(test)]

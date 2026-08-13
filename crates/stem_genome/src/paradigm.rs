@@ -532,6 +532,7 @@ mod tests {
             part_of_speech: stem_lexicon::PartOfSpeech::Noun,
         };
         Morphology {
+            derivations: Vec::new(),
             morphemes: vec![
                 stem(
                     "m_tira",
@@ -714,6 +715,7 @@ mod tests {
             part_of_speech: stem_lexicon::PartOfSpeech::Noun,
         };
         let morphology = Morphology {
+            derivations: Vec::new(),
             morphemes: vec![
                 Morpheme {
                     id: MorphemeId::new("m_tira"),

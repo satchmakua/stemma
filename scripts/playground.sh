@@ -9,7 +9,7 @@
 # and is rightly underwhelming.
 #
 # This script does what the README's walkthrough does, in one go: coins a full
-# 103-word vocabulary from the built-in concept list, forks it down three branches
+# 673-word vocabulary from the built-in concept list, forks it down three branches
 # with their real sound-change histories, drifts one branch's meaning, and opens the
 # result. Everything is seeded, so the same family comes back byte-for-byte every
 # time — delete `out/` and re-run to prove it.
@@ -46,12 +46,12 @@ fi
 
 if [[ ! -f out/attested_coastal_modern.ron ]]; then
     mkdir -p out
-    echo "Coining a 103-word proto-language…"
+    echo "Coining a 673-word proto-language…"
     # `asterian_attested` rather than `proto_asterian`: it carries the same phoneme
     # inventory PLUS a stress system, and without prosody the stress-conditioned
     # rules ("final UNSTRESSED vowel loss") can never fire — the engine says so, but
     # the family would be duller for no reason. `new-lexicon` replaces the nine
-    # hand-authored words with 103 coined ones.
+    # hand-authored words with 673 coined ones.
     "$CLI" new-lexicon fixtures/asterian_attested.ron --seed 42 --out out/proto.ron
 
     echo "Forking three daughters, each with its own sound-change history…"

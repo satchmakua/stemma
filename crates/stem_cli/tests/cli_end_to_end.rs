@@ -732,6 +732,12 @@ fn export_csv_writes_one_row_per_entry_plus_a_header() {
 /// Mirrors M1's `677f3413…` corpus canary: a frozen digest over the whole
 /// generated lexicon, distinguishable from the data-free canaries in
 /// `stem_export` because only a fixture edit can move this one.
+///
+/// Re-baselined once, at M13, when the built-in list grew from 103 concepts to
+/// 673 and the whole lexicon therefore got 570 words longer. That the *whole*
+/// digest moved proves nothing about the append being safe — which is what
+/// [`the_first_hundred_and_three_words_are_unchanged`] below is for, and why the
+/// old value is still asserted there rather than deleted.
 #[test]
 fn the_reference_lexicon_hashes_to_a_frozen_digest() {
     use sha2::{Digest, Sha256};
@@ -743,7 +749,86 @@ fn the_reference_lexicon_hashes_to_a_frozen_digest() {
     let digest: [u8; 32] = Sha256::digest(&output.stdout).into();
     let hex: String = digest.iter().map(|b| format!("{b:02x}")).collect();
     assert_eq!(
-        hex, "d16ba86130091d93e3455d2742037b6d199c5181710d15cc28f0f8b9ca508423",
+        hex, "acee728343680ae0fc35a6aa63f97366509d9b707a50728b49c61257ef37c522",
         "the reference lexicon changed; see the doc comment before re-baselining"
     );
+}
+
+/// **ROADMAP M13's acceptance test, and the reason the milestone is not simply
+/// "type more words".**
+///
+/// [`stem_lexicon::build`] draws exactly one root per concept, in list order, from
+/// one never-re-seeded stream. So `build(n)` is a strict prefix of `build(n + k)`
+/// — appending is free, and inserting anywhere else silently rewrites every word
+/// from the insertion point onward in **every language anyone has ever generated
+/// with this tool**. There is no error, no warning, and no way for a user to
+/// notice except that their language is quietly a different language.
+///
+/// `d16ba861…` is the digest M2 froze over the 103-word reference lexicon, and it
+/// is asserted here **unchanged**: `--concepts 103` names exactly the prefix that
+/// used to be the whole list, so if the 673-entry table still opens with those 103
+/// concepts in those 103 positions, these bytes are still those bytes.
+///
+/// A future append re-baselines [`the_reference_lexicon_hashes_to_a_frozen_digest`]
+/// and must leave this one alone. If this test ever needs re-baselining, the change
+/// that made it fail is the bug.
+#[test]
+fn the_first_hundred_and_three_words_are_unchanged() {
+    use sha2::{Digest, Sha256};
+
+    let path = fixture("proto_asterian.ron");
+    let output = stemma(&["new-lexicon", path.to_str().unwrap(), "--concepts", "103"]);
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(
+        stdout(&output).lines().count(),
+        stem_lexicon::PRE_M13_CONCEPT_COUNT,
+        "the prefix must be exactly the pre-M13 list"
+    );
+
+    let digest: [u8; 32] = Sha256::digest(&output.stdout).into();
+    let hex: String = digest.iter().map(|b| format!("{b:02x}")).collect();
+    assert_eq!(
+        hex, "d16ba86130091d93e3455d2742037b6d199c5181710d15cc28f0f8b9ca508423",
+        "growing the concept list moved a word that was already coined — every \
+         lexicon generated before this change is now a different language"
+    );
+}
+
+/// The behavioural half of the same claim, without a hash: the words are not just
+/// collectively identical, each one is individually where it was.
+#[test]
+fn growing_the_concept_list_left_every_pre_m13_word_in_place() {
+    let genome: stem_genome::LanguageGenome =
+        stem_io::load(fixture("proto_asterian.ron")).expect("load");
+
+    let coin = |count: usize| {
+        stem_lexicon::build_proto_lexicon(
+            &genome.id,
+            &genome.phonemes,
+            &genome.phonotactics,
+            &stem_lexicon::meanings(&genome.concepts)[..count],
+            genome.seed,
+        )
+        .expect("coins")
+    };
+
+    let before = coin(stem_lexicon::PRE_M13_CONCEPT_COUNT);
+    let after = coin(stem_lexicon::CONCEPT_COUNT);
+
+    assert!(
+        after.len() > before.len(),
+        "M13 was supposed to grow the list"
+    );
+    for (old, new) in before.iter().zip(after.iter()) {
+        assert_eq!(
+            old,
+            new,
+            "`{}` moved when the list grew",
+            old.concept.as_ref().map_or("?", |k| k.as_str())
+        );
+    }
 }

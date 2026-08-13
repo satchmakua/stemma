@@ -575,9 +575,17 @@ fn m3_moves_no_rng_canary_and_no_corpus_digest() {
         "the M1 corpus digest moved"
     );
 
+    // `--concepts 103` names the M2 corpus exactly: M13 grew the built-in list to
+    // 673, and the pre-M13 103 are its frozen prefix (`PRE_M13_CONCEPT_COUNT`). The
+    // digest below is M2's own, deliberately **not** re-baselined — asking for the
+    // same concepts must still give the same words, or the append was not an
+    // append. `the_first_hundred_and_three_words_are_unchanged` is the same claim
+    // stated as M13's acceptance test rather than as an M3 regression guard.
     let lexicon = stemma(&[
         "new-lexicon",
         fixture("proto_asterian.ron").to_str().unwrap(),
+        "--concepts",
+        "103",
     ]);
     let digest: [u8; 32] = Sha256::digest(&lexicon.stdout).into();
     let hex: String = digest.iter().map(|b| format!("{b:02x}")).collect();

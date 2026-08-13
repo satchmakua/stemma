@@ -3,9 +3,10 @@
 use serde::{Deserialize, Serialize};
 use stem_core::{LanguageId, Result, Severity, StemmaError, Validate, ValidationReport};
 use stem_lexicon::{
-    DriftEvent, DriftSet, HIGH_ALLOMORPH_COUNT, LONG_SENSE_CHAIN, Lexicon, Morphology,
-    ProjectConcept, SemanticSpace, apply_drift, check_against_concepts, check_against_semantics,
-    check_drift_against_language, morphological_irregularity, sense_chains,
+    DriftEvent, DriftSet, EnvironmentProfile, HIGH_ALLOMORPH_COUNT, LONG_SENSE_CHAIN, Lexicon,
+    Morphology, ProjectConcept, SemanticSpace, apply_drift, check_against_concepts,
+    check_against_semantics, check_drift_against_language, morphological_irregularity,
+    sense_chains,
 };
 use stem_phonology::{PhonemeInventory, Phonotactics, Prosody};
 use stem_soundchange::{RuleSet, SoundChangeRule};
@@ -122,6 +123,21 @@ pub struct LanguageGenome {
     #[serde(default, skip_serializing_if = "Morphology::is_empty")]
     pub morphology: Morphology,
 
+    /// This language's ecology and culture, as the vocabulary it implies (ROADMAP
+    /// M15, `DESIGN.md` §7.5, §18.1).
+    ///
+    /// Why a language has the words it has: which meanings its speakers make several
+    /// distinctions inside, and which they have no word for **and why**. Empty by
+    /// default, so every pre-M15 file loads and round-trips byte-identically and
+    /// coins exactly the vocabulary it did before.
+    ///
+    /// In the genome for M12's reason: `new-lexicon` reads it, so a language would
+    /// not be reproducible from its own file alone if it lived in a sidecar. `fork`
+    /// and `evolve` carry it verbatim — a daughter inherits its parents' ecology
+    /// until an author says otherwise, which is the truthful default.
+    #[serde(default, skip_serializing_if = "EnvironmentProfile::is_empty")]
+    pub environment: EnvironmentProfile,
+
     /// Meanings **this project declares**, alongside the built-in concept list
     /// (ROADMAP M12).
     ///
@@ -186,6 +202,7 @@ impl LanguageGenome {
             prosody: Prosody::new(),
             applied_rules: Vec::new(),
             morphology: Morphology::default(),
+            environment: EnvironmentProfile::default(),
             concepts: Vec::new(),
             semantics: SemanticSpace::new(),
             applied_drifts: Vec::new(),
@@ -436,6 +453,35 @@ impl Validate for LanguageGenome {
             check_against_concepts(&self.lexicon, &self.concepts),
         );
 
+        // M15, the fifth instance: a culture trait names concepts that may be
+        // built-in or project-declared, so the check needs both lists. Gated on a
+        // non-empty profile, so a pre-M15 language absorbs an empty report.
+        if !self.environment.is_empty() {
+            report.absorb(
+                "culture",
+                stem_lexicon::check_against_environment(
+                    &self.environment,
+                    &self.concepts,
+                    &stem_lexicon::meanings(&self.concepts),
+                ),
+            );
+        }
+
+        // M14, and the fourth instance of the same pattern: a derivation pattern's
+        // affix lives in the morphology while the words it coined live in the
+        // lexicon, so no single type can check that a `BaseRef` still points at the
+        // word it claims. Every check inside is gated on a non-empty patterns list
+        // or a non-empty `bases`, so a pre-M14 language absorbs an empty report and
+        // gains no scope line.
+        report.absorb(
+            "derivation",
+            stem_lexicon::check_against_derivations(
+                &self.lexicon,
+                &self.morphology.derivations,
+                &self.morphology.morphemes,
+            ),
+        );
+
         // Not optional: putting the rule checks only in a free function the gate
         // never calls is how the validator and the engine disagree *from the
         // validator side* — `rules.empty_target` is an Error and `stemma validate`
@@ -505,6 +551,7 @@ impl LanguageGenome {
             // Carried verbatim: a fork is a statement about lineage, and the
             // daughter keeps the same morphemes and paradigms it inherited.
             morphology: self.morphology.clone(),
+            environment: self.environment.clone(),
             // A daughter inherits the meanings its parent could express.
             concepts: self.concepts.clone(),
             // Likewise its senses and their recorded history: a daughter means what
@@ -582,6 +629,7 @@ impl LanguageGenome {
             // are recorded in each evolved cell's `trace`, not here — the morphemes
             // and paradigms themselves are unchanged by a rule run.
             morphology: self.morphology.clone(),
+            environment: self.environment.clone(),
             concepts: self.concepts.clone(),
             // A sound change moves forms, never meanings. The senses and their
             // history ride along untouched — and each word's `senses` /
@@ -883,6 +931,7 @@ mod tests {
             source: WordSource::Authored,
             trace: None,
             morphemes: Vec::new(),
+            bases: Vec::new(),
             senses: Vec::new(),
             sense_history: None,
         };

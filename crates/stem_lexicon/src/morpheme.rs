@@ -137,13 +137,26 @@ pub struct Morphology {
     /// The paradigms, in authored order.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub paradigms: Vec<Paradigm>,
+    /// The derivation patterns, in authored order (M14).
+    ///
+    /// Beside the paradigms, because inflection and derivation are two halves of one
+    /// question — how this language builds a word — and both are facts about the
+    /// language rather than about a run. Authored order is the order patterns coin
+    /// in, so it is part of the determinism contract exactly as the other two are.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub derivations: Vec<crate::derivation::DerivationPattern>,
 }
 
 impl Morphology {
     /// True when there is nothing to model — every pre-M8 file, both reference
     /// fixtures. `LanguageGenome` uses it to keep those files byte-identical.
     pub fn is_empty(&self) -> bool {
-        self.morphemes.is_empty() && self.paradigms.is_empty()
+        self.morphemes.is_empty() && self.paradigms.is_empty() && self.derivations.is_empty()
+    }
+
+    /// The derivation pattern with this id, or `None`.
+    pub fn derivation(&self, id: &str) -> Option<&crate::derivation::DerivationPattern> {
+        self.derivations.iter().find(|d| d.id == id)
     }
 
     /// The morpheme with this id, or `None`.
@@ -221,29 +234,55 @@ pub fn compose(stem: &Morpheme, affixes: &[&Morpheme]) -> (Root, Vec<MorphemeRef
         )
         .collect();
 
+    let (form, spans) = lay_out(ordered.iter().map(|m| &m.form));
+    let refs = ordered
+        .iter()
+        .zip(spans)
+        .map(|(morpheme, (start, end))| MorphemeRef {
+            morpheme: morpheme.id.clone(),
+            role: morpheme.role,
+            gloss: morpheme.gloss.clone(),
+            start,
+            end,
+        })
+        .collect();
+
+    (form, refs)
+}
+
+/// The concatenation kernel: lay `parts` end to end into one [`Root`] and return
+/// each part's flat half-open span `[start, end)` in it.
+///
+/// Extracted at M14 so that [`compose`] (morpheme parts) and
+/// [`crate::derivation::derive`] (word parts, and an affix) share **one**
+/// implementation of the two things that could silently desynchronise: the span
+/// arithmetic, and the rule that every emitted syllable carries `stress: None`
+/// because prosody is assigned once per whole word inside `apply_rules`. Two
+/// composers computing spans separately is the defect class `docs/adr/0009` treats
+/// as a second opinion — and a span that is off by one does not fail loudly, it
+/// silently attributes the wrong segments to a morpheme in every trace thereafter.
+///
+/// Syllable patterns are carried across verbatim and go stale, which nothing reads
+/// (the [`Syllable`] contract) and no resyllabifier corrects — unchanged from M8.
+pub(crate) fn lay_out<'a>(parts: impl IntoIterator<Item = &'a Root>) -> (Root, Vec<(u32, u32)>) {
     let mut syllables: Vec<Syllable> = Vec::new();
-    let mut refs: Vec<MorphemeRef> = Vec::new();
+    let mut spans: Vec<(u32, u32)> = Vec::new();
     let mut cursor: u32 = 0;
-    for morpheme in ordered {
-        let len = morpheme.form.len() as u32;
-        for syllable in &morpheme.form.syllables {
+
+    for part in parts {
+        let len = part.len() as u32;
+        for syllable in &part.syllables {
             syllables.push(Syllable {
                 pattern: syllable.pattern.clone(),
                 segments: syllable.segments.clone(),
                 stress: None,
             });
         }
-        refs.push(MorphemeRef {
-            morpheme: morpheme.id.clone(),
-            role: morpheme.role,
-            gloss: morpheme.gloss.clone(),
-            start: cursor,
-            end: cursor + len,
-        });
+        spans.push((cursor, cursor + len));
         cursor += len;
     }
 
-    (Root { syllables }, refs)
+    (Root { syllables }, spans)
 }
 
 /// Materialises a paradigm into one [`WordEntry`] per (stem × cell), stem-major /
@@ -311,6 +350,10 @@ pub fn inflect(
                 source: WordSource::Derived,
                 trace: None,
                 morphemes: refs,
+                // An inflected cell is a form of a lexeme, not a new one: its stem
+                // is a declared morpheme, so it has a `MorphemeRef` and no base.
+                // A non-empty `bases` is what marks a *derived* word (M14).
+                bases: Vec::new(),
                 // An inflected cell starts with no modelled sense and no drift
                 // history — its gloss comes from the stem's own label. M9 drift
                 // then acts on it like any other entry (`docs/adr/0010`: a

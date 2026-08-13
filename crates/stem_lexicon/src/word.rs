@@ -168,6 +168,30 @@ pub struct WordEntry {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub morphemes: Vec<crate::morpheme::MorphemeRef>,
 
+    /// The **words** this word was derived from (M14): its etymology.
+    ///
+    /// Empty for everything that is not a compound or an affixed derivative — every
+    /// M0–M13 entry, both reference fixtures, and every inflected cell — so
+    /// `#[serde(default)]` keeps every saved file loading and `skip_serializing_if`
+    /// keeps them byte-identical.
+    ///
+    /// The word-level twin of [`Self::morphemes`], and the two are complementary
+    /// rather than alternative: an affixed derivative like `walk` + `-ri` records the
+    /// **base** here and the **affix** there, because one is a lexicon entry and the
+    /// other is a declared morpheme. A non-empty `bases` is also what distinguishes a
+    /// derived lexeme from an inflected cell, both of which are
+    /// [`WordSource::Derived`] — the distinction is visible in the record, so it is
+    /// not also stored as a variant.
+    ///
+    /// Like a `MorphemeRef`, a [`BaseRef`] holds a span into the composition form and
+    /// **no surface segments**; the surface is recovered through
+    /// [`Self::morpheme_surface`], which is what keeps a compound's parts on the
+    /// record after a sound change has eroded them past recognition.
+    ///
+    /// [`BaseRef`]: crate::derivation::BaseRef
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub bases: Vec<crate::derivation::BaseRef>,
+
     /// The senses this word currently holds, **most salient first** (M9).
     ///
     /// The meaning twin of [`Self::phonemic_form`]: the current state, stored, with

@@ -1033,6 +1033,7 @@ mod tests {
             source: crate::WordSource::Authored,
             trace: None,
             morphemes: Vec::new(),
+            bases: Vec::new(),
             senses: vec![SenseRef {
                 node: SemanticNodeId::new("sn_star"),
                 gloss: "star".to_owned(),
