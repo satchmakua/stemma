@@ -296,6 +296,114 @@ enum Command {
         out: Option<PathBuf>,
     },
 
+    /// Change a word's gloss (M16).
+    ///
+    /// One of the five editing verbs. Each is `stem_genome::apply_edit` with one
+    /// `Edit` value — the **same call the desktop explorer makes**, so a file saved
+    /// from the window and a file saved from here are byte-identical. Without
+    /// `--out` nothing is written: you get the summary and any report the edit
+    /// introduced, which is the `new-lexicon` convention.
+    SetGloss {
+        /// Path to a language file (`.ron` or `.json`).
+        path: PathBuf,
+        /// The word to relabel, by id (`w_0001`).
+        word: String,
+        /// The new gloss. Empty clears the override, restoring the concept's own.
+        gloss: String,
+        /// Write the edited language here; omitted, nothing is written.
+        #[arg(long)]
+        out: Option<PathBuf>,
+    },
+
+    /// Add a hand-authored word (M16).
+    ///
+    /// The form is read against **this language's own inventory**, so a word can
+    /// only be made of sounds the language has; anything else is refused with the
+    /// offending text named.
+    AddWord {
+        /// Path to a language file (`.ron` or `.json`).
+        path: PathBuf,
+        /// The written form, e.g. `takala`.
+        #[arg(long)]
+        form: String,
+        /// Its gloss.
+        #[arg(long)]
+        gloss: String,
+        /// The concept it realises, by key (`STAR`). Omitted, it names none.
+        #[arg(long)]
+        concept: Option<String>,
+        /// Its part of speech.
+        #[arg(long, default_value = "noun")]
+        pos: String,
+        /// Write the edited language here; omitted, nothing is written.
+        #[arg(long)]
+        out: Option<PathBuf>,
+    },
+
+    /// Remove a word (M16).
+    RemoveWord {
+        /// Path to a language file (`.ron` or `.json`).
+        path: PathBuf,
+        /// The word to remove, by id (`w_0001`).
+        word: String,
+        /// Write the edited language here; omitted, nothing is written.
+        #[arg(long)]
+        out: Option<PathBuf>,
+    },
+
+    /// Declare a project concept (M16), so this language can coin a meaning the
+    /// built-in list does not hold.
+    DeclareConcept {
+        /// Path to a language file (`.ron` or `.json`).
+        path: PathBuf,
+        /// Its key, e.g. `OBSIDIAN`.
+        #[arg(long)]
+        key: String,
+        /// Its gloss.
+        #[arg(long)]
+        gloss: String,
+        /// The part of speech a coined word starts with.
+        #[arg(long, default_value = "noun")]
+        pos: String,
+        /// Authorial prose: why this language needs this meaning.
+        #[arg(long, default_value = "")]
+        note: String,
+        /// Write the edited language here; omitted, nothing is written.
+        #[arg(long)]
+        out: Option<PathBuf>,
+    },
+
+    /// Move a rule within a rule set (M16).
+    ///
+    /// Rule order is chronology and it is **observable** — M3's `*taka` gives `tag`
+    /// under one order and `tak` under another — so this is a real edit. A rotation,
+    /// not a swap: moving rule 3 to 0 makes it first and pushes the rest down one.
+    ReorderRule {
+        /// Path to a rule-set file (`.ron`, `.json` or `.sc`).
+        path: PathBuf,
+        /// The rule to move, by index (0-based).
+        #[arg(long)]
+        from: usize,
+        /// Where to move it.
+        #[arg(long)]
+        to: usize,
+        /// Write the reordered set here; omitted, nothing is written.
+        #[arg(long)]
+        out: Option<PathBuf>,
+    },
+
+    /// Print this language's grammar sketch (M17): word order, adpositions,
+    /// alignment, and the rest of §7.4's parameters, with the typological harmony
+    /// of the combination reported below them.
+    ///
+    /// **Description, not generation.** Nothing here builds a sentence — that is
+    /// M18. And nothing here refuses a language: an unusual combination earns a
+    /// note saying which way the tendency runs, never an error (§17).
+    Grammar {
+        /// Path to a language file (`.ron` or `.json`).
+        path: PathBuf,
+    },
+
     /// Explain why this language has the vocabulary it has (M15): what its culture
     /// makes fine distinctions inside, and what it has no word for **and why**.
     ///
@@ -431,6 +539,67 @@ fn run() -> Result<ExitCode> {
         } => derive(&path, pattern.as_deref(), limit, out.as_deref()),
         Command::Derivations { path } => derivations_summary(&path),
         Command::Culture { path } => culture(&path),
+        Command::Grammar { path } => grammar(&path),
+        Command::SetGloss {
+            path,
+            word,
+            gloss,
+            out,
+        } => edit_language(
+            &path,
+            stem_genome::Edit::SetGloss {
+                word: stem_core::WordId::new(word),
+                gloss,
+            },
+            out.as_deref(),
+        ),
+        Command::AddWord {
+            path,
+            form,
+            gloss,
+            concept,
+            pos,
+            out,
+        } => edit_language(
+            &path,
+            stem_genome::Edit::AddWord {
+                form,
+                gloss,
+                concept: concept.map(stem_lexicon::ConceptKey::new),
+                part_of_speech: parse_pos(&pos)?,
+            },
+            out.as_deref(),
+        ),
+        Command::RemoveWord { path, word, out } => edit_language(
+            &path,
+            stem_genome::Edit::RemoveWord {
+                word: stem_core::WordId::new(word),
+            },
+            out.as_deref(),
+        ),
+        Command::DeclareConcept {
+            path,
+            key,
+            gloss,
+            pos,
+            note,
+            out,
+        } => edit_language(
+            &path,
+            stem_genome::Edit::DeclareConcept {
+                key: stem_lexicon::ConceptKey::new(key),
+                gloss,
+                part_of_speech: parse_pos(&pos)?,
+                note,
+            },
+            out.as_deref(),
+        ),
+        Command::ReorderRule {
+            path,
+            from,
+            to,
+            out,
+        } => reorder_rule(&path, from, to, out.as_deref()),
         Command::Drift {
             path,
             drift,
@@ -1011,6 +1180,99 @@ fn inflect(
         );
     }
 
+    Ok(ExitCode::SUCCESS)
+}
+
+/// The five editing verbs, all one call (M16).
+///
+/// Every one of them is `apply_edit` with one `Edit` value and nothing else — no
+/// verb-specific logic lives here, which is what makes "the equivalent CLI command"
+/// a meaningful phrase in M16's acceptance. The window builds the same value and
+/// calls the same function.
+fn edit_language(
+    path: &std::path::Path,
+    edit: stem_genome::Edit,
+    out: Option<&std::path::Path>,
+) -> Result<ExitCode> {
+    let genome = load_genome(path)?;
+    let outcome = stem_genome::apply_edit(&genome, &edit)
+        .with_context(|| format!("editing `{}`", genome.name))?;
+
+    println!("{}", edit.summary());
+    for issue in &outcome.introduced {
+        println!("  {issue}");
+    }
+
+    match out {
+        Some(destination) => {
+            stem_io::save(destination, &outcome.genome)
+                .with_context(|| format!("writing `{}`", destination.display()))?;
+            eprintln!("-> {}", destination.display());
+        }
+        None => eprintln!("note: nothing written; pass --out to save (undo is the file)"),
+    }
+    Ok(ExitCode::SUCCESS)
+}
+
+/// `stemma reorder-rule` — move a rule within a set.
+///
+/// A rule set rather than a language, so it cannot share `edit_language`'s body; it
+/// shares the discipline instead — one library call, and nothing written without
+/// `--out`.
+fn reorder_rule(
+    path: &std::path::Path,
+    from: usize,
+    to: usize,
+    out: Option<&std::path::Path>,
+) -> Result<ExitCode> {
+    let rules = load_rule_set(path)?;
+    let moved = stem_genome::move_rule(&rules, from, to)
+        .with_context(|| format!("reordering `{}`", rules.name))?;
+
+    println!("moved rule {from} to {to} in `{}`", moved.name);
+    for (i, rule) in moved.rules.iter().enumerate() {
+        println!("  {i}  {}  {}", rule.id, rule.name);
+    }
+
+    match out {
+        Some(destination) => {
+            stem_io::save(destination, &moved)
+                .with_context(|| format!("writing `{}`", destination.display()))?;
+            eprintln!("-> {}", destination.display());
+        }
+        None => eprintln!("note: nothing written; pass --out to save (undo is the file)"),
+    }
+    Ok(ExitCode::SUCCESS)
+}
+
+/// Reads a part of speech from the command line.
+///
+/// `PartOfSpeech` is `#[non_exhaustive]` and its `name()` is the serde spelling, so
+/// this round-trips through the same strings a file uses rather than inventing a
+/// second vocabulary for the prompt.
+fn parse_pos(text: &str) -> Result<stem_lexicon::PartOfSpeech> {
+    use stem_lexicon::PartOfSpeech::*;
+    for candidate in [
+        Noun, Verb, Adjective, Adverb, Pronoun, Numeral, Determiner, Adposition, Particle,
+    ] {
+        if candidate.name() == text {
+            return Ok(candidate);
+        }
+    }
+    anyhow::bail!(
+        "`{text}` is not a part of speech (noun, verb, adjective, adverb, pronoun, \
+         numeral, determiner, adposition, particle)"
+    )
+}
+
+/// `stemma grammar` — how this language builds a clause.
+fn grammar(path: &std::path::Path) -> Result<ExitCode> {
+    let genome = load_genome(path)?;
+    print!("{}", stem_genome::render_grammar(&genome)?);
+    // The sketch already prints the harmony remarks, so this exits successfully
+    // whatever they say: every one of them is a Warning or a Note by construction,
+    // and a command that failed on "your language is unusual" would be the policing
+    // §17 forbids.
     Ok(ExitCode::SUCCESS)
 }
 

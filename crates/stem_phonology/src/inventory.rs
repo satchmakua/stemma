@@ -244,6 +244,20 @@ impl PhonemeInventory {
         self.phonemes.iter().find(|p| p.ipa == ipa)
     }
 
+    /// The phoneme whose **written** form (romanisation, else IPA) is exactly
+    /// `written`, in authored order.
+    ///
+    /// The inverse of [`Phoneme::written`], and the lookup [`Root::parse`] needs to
+    /// turn a form somebody typed back into segments (M16). Authored order decides
+    /// when two phonemes render alike — which `duplicate_ipa` reports and
+    /// `homophones` expects, so this returns the *first*, deterministically, rather
+    /// than pretending the question has one answer.
+    ///
+    /// [`Root::parse`]: crate::Root::parse
+    pub fn by_written(&self, written: &str) -> Option<&Phoneme> {
+        self.phonemes.iter().find(|p| p.written() == written)
+    }
+
     /// How many phonemes the inventory holds.
     pub fn len(&self) -> usize {
         self.phonemes.len()

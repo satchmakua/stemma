@@ -12,7 +12,7 @@ The name comes from textual criticism: a *stemma* is the reconstructed family tr
 showing how surviving manuscripts descend from a lost original. That is exactly
 this program's core data structure.
 
-**Status:** **Phases 0–3 complete (M0–M15)** — the
+**Status:** **Phases 0–4 complete (M0–M16); Phase 5 under way (M17 done)** — the
 diachronic kernel runs end to end. Languages get a feature-based phonology,
 generate seeded roots, undergo ordered sound change, fork into daughters with their
 own histories, and line up in a comparative cognate table; `stemma demo` tells the
@@ -35,10 +35,16 @@ by compounding and productive affixation, then a sound change erodes `wikikippa`
 both**. M15 closed the phase by modelling *why* a language has the words it has: two
 fixtures over one phonology and one seed coin `star` as the same word and differ only
 where their cultures do — and every meaning a people lacks is printed with the reason.
-611 tests pass, and every step is deterministic and traced.
+And M16 turned the explorer into an editor: change a gloss, add a word, declare a
+concept or reorder a rule set, in the window or from the command line — both go
+through **one library call**, so the two front ends produce byte-identical files and
+cannot drift apart. M17 opened Phase 5 with the grammar: `stemma grammar` prints
+§7.4's parameters as a readable sketch and tells you whether the combination is a
+common one — **without refusing it**, and without inventing a statistic to sound
+authoritative. 682 tests pass, and every step is deterministic and traced.
 
-Nine milestones remain, and they are the interesting ones: editing in the explorer,
-then syntax (you cannot yet form a sentence), writing systems, a constrained LLM
+Seven milestones remain, and they are the interesting ones: sentence generation (you
+still cannot form one), syntactic change, writing systems, a constrained LLM
 assistant, and alien modality. See
 [ROADMAP.md](ROADMAP.md) for the plan,
 [docs/GUIDE.md](docs/GUIDE.md) for how to use what exists, and

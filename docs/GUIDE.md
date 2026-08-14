@@ -35,8 +35,12 @@ byte**. That is a hard guarantee, not a coincidence — see
 - **Family** shows the tree and how many cognate sets survived down each branch.
 - **Profile** scores the selected language against attested typological ranges.
 - Open more files with the button, or by **dropping them on the window**.
+- **Edit** changes the language: relabel a word, add one, declare a concept. Nothing
+  is written until you press **Save**, and unsaved changes are marked `● unsaved`.
 
-The explorer is **read-only** by design. Nothing you do in it can modify a file.
+Every edit in the window is the *same library call* the matching `stemma` command
+makes, so a file saved here and a file saved from the terminal are byte-identical.
+**Undo is the file** — nothing autosaves, so close without saving to discard.
 
 ---
 
@@ -51,6 +55,7 @@ This trips people up, so plainly:
 | `morphology_asterian.ron` | 0 | Four stems and a plural suffix, for the paradigm demo. |
 | `derivation_asterian.ron` | 0 | Derivational affixes and patterns; `derive` turns its 673 roots into ~4,000 words. |
 | `desert_asterian.ron` / `seafarer_asterian.ron` | 0 | One phonology, one seed, two ecologies — the culture-profile pair. |
+| `grammar_asterian.ron` | 0 | A head-final syntax profile, for `stemma grammar`. |
 
 **None of these is a language you are meant to browse.** They are the inputs. A
 language with vocabulary is something you *generate*, which is what `stem` does and
@@ -476,6 +481,91 @@ comparative table. Meaning diverges; ancestry does not.
 
 ---
 
+## Say how your language builds a clause
+
+```bash
+stemma grammar fixtures/grammar_asterian.ron
+```
+
+```
+Grammar — Asterian (grammar)
+
+  Word order        SOV                           object before verb
+  Headedness        head-final                    derived from the orders below, never stored
+  Adpositions       postpositions                 *the house in*
+  Genitive          genitive-noun                 *the king's road*
+  Adjective         noun-adjective                *the stone black*
+  Alignment         ergative-absolutive           the one who walks patterns with the one who is hit
+  Relative clause   prenominal                    before the noun it modifies
+  Negation          affix on the verb
+  Questions         question particle
+  Pro-drop          subject pronouns droppable
+  Evidentiality     two-way
+  Switch-reference  marked on the dependent verb
+
+  Typologically harmonic: every stated order agrees with the others.
+```
+
+Declare it in the genome:
+
+```ron
+syntax: (
+    note: "Rigidly verb-final, with a rich case system.",
+    word_order: sov,
+    adpositions: postpositions,
+    genitive: genitive_noun,
+    adjective: noun_adjective,
+    alignment: ergative_absolutive,
+    relative_clause: prenominal,
+    negation: affix,
+    question: particle,
+    pro_drop: yes,
+    evidentiality: two_way,
+    switch_reference: marked,
+),
+```
+
+Leave out anything you have not decided — it prints as `—` rather than quietly
+becoming whatever is commonest. A language with no `syntax:` at all is told it has
+none; it is **not** given SVO by default.
+
+> **There is no `head_directionality` field**, deliberately. It is a summary of the
+> orders above it, so storing it would be a second source of truth that disagrees with
+> the first the moment you edit one line. `stemma grammar` works it out.
+>
+> Adjective order is left out of that calculation on purpose: it is the one noun-phrase
+> parameter that famously does not track the others, so counting it would call half the
+> world's languages mixed for a reason that is not about headedness.
+
+### It tells you what is rare. It does not stop you.
+
+Change `postpositions` to `prepositions` and run it again:
+
+```
+  Notes on harmony:
+    · object-verb order usually goes with postpositions, not prepositions;
+      this combination is attested but uncommon
+    · this language is head-initial in some constructions and head-final in others;
+      that is ordinary — English and most of Europe are mixed
+
+  These describe what is common, not what is correct. A rare language is
+  a design; Stemma reports it and does not refuse it (§17).
+```
+
+`stemma validate` agrees: one warning, nothing blocking. **No combination of these
+parameters is ever an error** — there is a test that sweeps 960 of them to make sure.
+
+The tendencies are Greenberg's word-order universals and the cross-linguistic work
+that refined them. Notice what the messages do *not* say: no percentages. It would be
+easy to write "only 4% of languages do this" and impossible for this program to back
+it up, so it doesn't — the same rule that keeps invented Concepticon ids out of the
+concept list.
+
+> **This describes; it does not generate.** You cannot yet ask Stemma to *say*
+> anything in your language. That is M18, and this profile is what it will read.
+
+---
+
 ## The one-command showcase
 
 ```bash
@@ -505,6 +595,8 @@ stemma <cmd> --help    # its options
 | `inflect` `paradigm` | morphology |
 | `derive` `derivations` | compounds and productive affixation |
 | `culture` | why this language has the vocabulary it has |
+| `grammar` | how this language builds a clause (§7.4's parameters) |
+| `set-gloss` `add-word` `remove-word` `declare-concept` `reorder-rule` | edit a language |
 | `drift` `drifts` | meaning change |
 | `rules` | validate a rule file (`.ron`, `.json`, or `.sc`) |
 | `export-md` `export-csv` `demo` | get data out |
@@ -527,7 +619,7 @@ exclusion — see [ROADMAP.md](../ROADMAP.md).
 
 | gap | today | planned |
 |---|---|---|
-| **Syntax** — you cannot form a sentence. No grammar engine, no parser, no translation. | a *lexicon* engine with morphology | **M17** syntax profile → **M18** sentence generation → **M19** syntactic change |
+| **Sentences** — you still cannot form one. A language can now *describe* its grammar (`stemma grammar`), but nothing generates or parses. | §7.4's parameters as data, validated and rendered (M17) | **M18** sentence generation → **M19** syntactic change |
 | **Writing systems** — script evolution (§7.6) is designed but unbuilt. | forms render in IPA and romanisation only | **M20** glyphs → **M21** script evolution |
 | **Alien modality** — §7.7's pulse/scent/gesture languages. | the data model assumes a vocal tract throughout | **M23** embodiment profile → **M24** non-vocal signal systems |
 | **An LLM assistant** (§6.5). | nothing, by design | **M22** — and the constraint holds: a model *proposes* a rule set, the engine applies or refuses it. No path to a stored form skips the engine. |

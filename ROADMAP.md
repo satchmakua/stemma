@@ -263,7 +263,7 @@ shaped by who speaks them (M15)._
 
 _Phase 3 makes languages big. This makes them **editable** without hand-writing RON._
 
-- [ ] **M16 — Editing in the explorer.** Lift M11's read-only fence (§20.5 says
+- [x] **M16 — Editing in the explorer.** Lift M11's read-only fence (§20.5 says
   "before adding full editing", not "never"): edit a gloss, add a word, declare a
   project concept, reorder a rule set, and save. Every edit goes through the **same
   library call the CLI would make** — the UI still holds no logic, and
@@ -273,7 +273,17 @@ _Phase 3 makes languages big. This makes them **editable** without hand-writing 
   **Test:** edit a gloss in the window, save, and `stemma validate` on the file
   agrees; a rejected edit (an id collision, a bad feature) is *reported in the
   window* and never written; a file saved from the UI is byte-identical to one the
-  equivalent CLI command produces.
+  equivalent CLI command produces. ✅ An edit is a `stem_genome::Edit` **value**
+  applied by one function; the window builds the value, the five new CLI verbs build
+  the same value, and `a_file_saved_from_the_ui_matches_the_equivalent_cli_command`
+  compares the bytes for all four genome edits. `apply` validates a **clone** and
+  returns the original untouched when the edit introduces an error, so a refusal
+  cannot leave a half-applied change. 647 tests green.
+
+  The guard test got *stricter*, not weaker: `stem_io::save` left the ban list and
+  `::derive`, `build_shaped_lexicon` and `build_proto_lexicon` joined it. And
+  `stem_genome_never_mints_a_cognate_set` refused the first draft outright — minting
+  moved to `stem_lexicon::authored_word`, beside every other word constructor.
 
 ---
 
@@ -281,7 +291,7 @@ _Phase 3 makes languages big. This makes them **editable** without hand-writing 
 
 _`DESIGN.md` §7.4. The largest remaining gap: today you cannot form a sentence._
 
-- [ ] **M17 — Syntax profile.** §7.4's parameters as **data** — word order, head
+- [x] **M17 — Syntax profile.** §7.4's parameters as **data** — word order, head
   directionality, adposition placement, genitive and adjective order, case
   alignment, relative-clause strategy, negation, question formation, topic/focus,
   pro-drop, evidentiality, switch-reference. No engine yet: a profile, its
@@ -290,7 +300,17 @@ _`DESIGN.md` §7.4. The largest remaining gap: today you cannot form a sentence.
   forbidden, and Stemma says which and why.
   **Test:** `stemma grammar <lang>` prints a readable sketch from stored parameters;
   a harmonically odd combination earns a Warning and still validates; two runs
-  byte-identical.
+  byte-identical. ✅ A new `stem_syntax` crate holds twelve parameters;
+  `fixtures/grammar_asterian.ron` is head-final Asterian and `stemma grammar` prints
+  it with a plain-English gloss per row. **Head directionality is derived, never
+  stored** — it is a summary of the other orders, so storing it would be a second
+  source of truth. Flip its adpositions and the sketch reports the tendency, names
+  which way it runs, and says it is not refusing it. 682 tests green.
+
+  Two things the milestone got right by *not* doing them: no harmony message quotes
+  a frequency (a fabricated statistic is the same sin as a fabricated Concepticon
+  id, and a test greps for digits), and `topic/focus` was left out rather than
+  shipped as an enum with nothing behind it — see `PROGRESS.md`.
 
 - [ ] **M18 — Constructions & sentence generation.** The first sentence. A
   proposition plus the profile yields an ordered, inflected string — reusing M8's

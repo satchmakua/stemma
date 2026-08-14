@@ -846,6 +846,31 @@ pub fn check_against_semantics(
             }
         }
 
+        // **The editing trap (M16).** `display_gloss` prefers a modelled sense over
+        // an authored override, deliberately — a daughter inherits `glosses`
+        // verbatim through `fork`, so if the override won, a drifted meaning would be
+        // invisible in every view. The cost is that setting a gloss on a word that
+        // holds a sense stores the label and shows nothing, which from a text box
+        // looks exactly like an edit that failed.
+        //
+        // A Note, not a Warning: nothing is wrong, and the override is doing its job
+        // of waiting for the sense to be removed. It exists so the *editor* can say
+        // so — `apply_edit` hands back the issues an edit introduced, and this is the
+        // one that explains an invisible change.
+        if let Some(shown) = entry.senses.iter().find(|s| !s.gloss.trim().is_empty())
+            && let Some(hidden) = entry.glosses.iter().find(|g| !g.trim().is_empty())
+            && shown.gloss != *hidden
+        {
+            report.note(
+                "gloss_shadowed_by_sense",
+                format!(
+                    "word `{}` stores the gloss \"{hidden}\", but sense `{}` \"{}\" is what \
+                     is displayed; the override applies again if the sense is removed",
+                    entry.id, shown.node, shown.gloss
+                ),
+            );
+        }
+
         let Some(history) = &entry.sense_history else {
             continue;
         };

@@ -10,6 +10,7 @@ use stem_lexicon::{
 };
 use stem_phonology::{PhonemeInventory, Phonotactics, Prosody};
 use stem_soundchange::{RuleSet, SoundChangeRule};
+use stem_syntax::SyntaxProfile;
 
 /// Everything that defines one language at one point in its history.
 ///
@@ -138,6 +139,20 @@ pub struct LanguageGenome {
     #[serde(default, skip_serializing_if = "EnvironmentProfile::is_empty")]
     pub environment: EnvironmentProfile,
 
+    /// This language's syntactic parameters (ROADMAP M17, `DESIGN.md` §7.4).
+    ///
+    /// How it builds a clause: word order, adpositions, alignment, and the rest.
+    /// **Description, not an engine** — nothing in the workspace generates a sentence
+    /// yet, and M18 is where that starts.
+    ///
+    /// Empty by default, so every pre-M17 file loads and round-trips byte-identically
+    /// and — more to the point — a language nobody has given a grammar *says so*
+    /// rather than silently claiming to be SVO. `fork` and `evolve` carry it verbatim:
+    /// a daughter inherits its parent's syntax until an author says otherwise, which
+    /// is the truthful default and the thing M19's syntactic change will act on.
+    #[serde(default, skip_serializing_if = "SyntaxProfile::is_empty")]
+    pub syntax: SyntaxProfile,
+
     /// Meanings **this project declares**, alongside the built-in concept list
     /// (ROADMAP M12).
     ///
@@ -203,6 +218,7 @@ impl LanguageGenome {
             applied_rules: Vec::new(),
             morphology: Morphology::default(),
             environment: EnvironmentProfile::default(),
+            syntax: SyntaxProfile::default(),
             concepts: Vec::new(),
             semantics: SemanticSpace::new(),
             applied_drifts: Vec::new(),
@@ -453,6 +469,14 @@ impl Validate for LanguageGenome {
             check_against_concepts(&self.lexicon, &self.concepts),
         );
 
+        // M17, the sixth instance of the same pattern — except this one needs no
+        // context at all, so it is an ordinary `Validate` impl absorbed under its own
+        // scope. Gated on a non-empty profile, so a pre-M17 language absorbs an empty
+        // report and gains no scope line.
+        if !self.syntax.is_empty() {
+            report.absorb("syntax", self.syntax.validate());
+        }
+
         // M15, the fifth instance: a culture trait names concepts that may be
         // built-in or project-declared, so the check needs both lists. Gated on a
         // non-empty profile, so a pre-M15 language absorbs an empty report.
@@ -552,6 +576,7 @@ impl LanguageGenome {
             // daughter keeps the same morphemes and paradigms it inherited.
             morphology: self.morphology.clone(),
             environment: self.environment.clone(),
+            syntax: self.syntax.clone(),
             // A daughter inherits the meanings its parent could express.
             concepts: self.concepts.clone(),
             // Likewise its senses and their recorded history: a daughter means what
@@ -630,6 +655,7 @@ impl LanguageGenome {
             // and paradigms themselves are unchanged by a rule run.
             morphology: self.morphology.clone(),
             environment: self.environment.clone(),
+            syntax: self.syntax.clone(),
             concepts: self.concepts.clone(),
             // A sound change moves forms, never meanings. The senses and their
             // history ride along untouched — and each word's `senses` /

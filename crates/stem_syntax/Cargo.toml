@@ -1,6 +1,6 @@
 [package]
-name = "stem_genome"
-description = "The LanguageGenome aggregate: everything that defines one language."
+name = "stem_syntax"
+description = "Syntactic parameters for Stemma: word order, headedness, alignment."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -12,9 +12,10 @@ repository.workspace = true
 stem_core.workspace = true
 stem_phonology.workspace = true
 stem_lexicon.workspace = true
-stem_soundchange.workspace = true
-stem_syntax.workspace = true
 serde.workspace = true
+
+[dev-dependencies]
+ron.workspace = true
 
 [lints]
 workspace = true

@@ -5,9 +5,9 @@ A build log of what shipped and the notable decisions behind it. **Keep it hones
 acceptance tests live in [ROADMAP.md](ROADMAP.md); this is the backward-looking
 "what got done and why" companion.
 
-**Current phase:** **Phase 3 is complete** (M12–M15). Next milestone: **M16 —
-editing in the explorer**, which opens Phase 4 (authoring). Phases 0–2 (M0–M11) are
-complete.
+**Current phase:** **Phase 5 — grammar.** M17 shipped the syntax profile; next
+milestone: **M18 — constructions & sentence generation**, the first sentence.
+Phases 0–4 (M0–M16) are complete.
 
 ## State of the tree
 
@@ -17,11 +17,240 @@ complete.
 | `stem_phonology` | features, `Phoneme`, inventory, phonotactics, root generation | working |
 | `stem_lexicon` | `WordEntry`, `Lexicon`, the **673**-concept list, cognate-set minting, morphemes / `compose` / `inflect`, senses / `apply_drift` / sense history, derivation patterns / `derive` / `BaseRef`, **culture profile / `build_shaped_lexicon`** | working |
 | `stem_soundchange` | rules, matching, ordered application, resolution, traces | working — **untouched by M8 and M9** |
+| `stem_syntax` | §7.4's parameters, derived headedness, typological harmony | working (M17) |
 | `stem_genome` | `LanguageGenome`, `fork`, `LineageGraph`, family validation, `render_family`, `render_paradigm`, **`with_drift` / `render_word_history`**, plausibility profile | working |
 | `stem_io` | RON/JSON load & save | working — **untouched since M0** |
 | `stem_export` | Markdown dictionaries, CLDF CSV, cognate table, family demo | working |
 | `stem_cli` | the `stemma` binary | …plus `profile`, `inflect`, `paradigm`, `drift`, `drifts`; rule files may be `.sc` |
-| `stem_ui` | the `stemma-ui` desktop explorer — native egui, read-only | working (M11) |
+| `stem_ui` | the `stemma-ui` desktop explorer — native egui; **edits through `apply_edit`** | working (M11, M16) |
+
+---
+
+## M17 — Syntax profile · built 2026-08-12 · ✓ verified
+
+Phase 5 opens on the largest remaining gap: you still cannot form a sentence. M17 does
+not close it — it makes the grammar **sayable**, so that M18's constructions are built
+against something that already validates. **682 tests pass**; clippy clean; fmt clean.
+
+```
+$ stemma grammar fixtures/grammar_asterian.ron
+Grammar — Asterian (grammar)
+
+  Word order        SOV                           object before verb
+  Headedness        head-final                    derived from the orders below, never stored
+  Adpositions       postpositions                 *the house in*
+  Genitive          genitive-noun                 *the king's road*
+  Adjective         noun-adjective                *the stone black*
+  Alignment         ergative-absolutive           the one who walks patterns with the one who is hit
+  Relative clause   prenominal                    before the noun it modifies
+  …
+  Typologically harmonic: every stated order agrees with the others.
+```
+
+Change one parameter and it says so:
+
+```
+    · object-verb order usually goes with postpositions, not prepositions;
+      this combination is attested but uncommon
+
+  These describe what is common, not what is correct. A rare language is
+  a design; Stemma reports it and does not refuse it (§17).
+```
+
+### Decisions worth knowing
+
+**A new crate, `stem_syntax`.** Syntax is not lexicon and not sound change, and Phase
+5 is three milestones long — constructions (M18) and syntactic change (M19) both build
+on this. It sits above `stem_core` and below `stem_genome`, and depends on nothing
+else yet: M17 needs no words to describe a word order.
+
+**Head directionality is derived, never stored.** §7.4 lists it beside the specific
+orders and it was tempting to add a thirteenth field. It is a *summary* of the other
+four, so storing it makes a second source of truth that disagrees with the first the
+moment somebody edits one — the M4 lineage graph's rule (`docs/adr/0008`), applied
+one layer up. `headedness()` computes it, and computing it is what makes the harmony
+report meaningful rather than a consistency check on redundant data. The sketch prints
+it labelled *"derived from the orders below, never stored"* so a reader does not
+mistake it for something they can edit.
+
+**Adjective order is excluded from headedness, on purpose.** It is the classic
+noun-phrase parameter that does not track the others, and counting it would report
+half the world's languages as mixed for a reason that is not about headedness at all.
+The reference fixture is head-final everywhere *except* its adjectives, precisely so
+this is visible.
+
+**Unspecified is a value, not a missing field.** Every parameter defaults to
+`Unspecified` and prints as `—`. A language nobody has given a grammar **says so**
+rather than silently claiming to be SVO — `Phonotactics::default()`'s rule, and the
+same argument M15 made about a missing word: a gap nothing shows is indistinguishable
+from a decision.
+
+**Warnings, never errors — swept.** `no_combination_of_syntactic_parameters_is_ever_an_error`
+runs all 960 combinations of the four parameters the harmony checks read, asserts each
+one validates, and renders each one. `CLAUDE.md` puts it plainly: *"Resist the urge to
+reject a weird language."*
+
+**Two severities, deliberately.** The adposition and genitive correlations are
+Warnings; the relative-clause one is a Note. They are not equally strong, and a report
+that sounded equally confident about claims of different strength would be misinforming
+its reader.
+
+### No fabricated statistics
+
+It would be easy — and it would read authoritatively — to write *"only 4% of languages
+do this"* into a harmony message. It would also be unverifiable from inside this
+program, which is exactly the false-provenance rule that keeps invented Concepticon ids
+out of the concept list. So the messages name the correlation and its direction and
+stop, and `no_harmony_message_quotes_a_frequency` greps every message for a digit.
+
+The universals themselves are cited as what they are: Greenberg's word-order universals
+(1963), refined by later cross-linguistic work into tendencies rather than laws.
+
+### What was left out, and why
+
+§7.4's list includes **topic/focus marking**, and there is no field for it. Every other
+parameter here is a closed choice with an agreed name — a language has postpositions or
+it does not. Topic and focus marking is a bundle of interacting facts (morphological
+marking, a dedicated position, intonation, and often all three at once) with no
+comparable typology to pick from, so any enum shipped now would be an invented
+taxonomy rather than a recorded one. It waits for M18, where sentence generation gives
+it something to *do* and therefore a shape it has to fit.
+
+That is the same reasoning that kept `WordEntry.ancestor` unshipped at M4 until a
+producer needed it: a union with one plausible variant is scaffolding.
+
+### The guards that shaped the code
+
+`#[non_exhaustive]` on every enum meant the renderer in `stem_genome` could not match
+on them — a downstream `match` needs a wildcard arm, and a wildcard is what stops a new
+variant from being a compile error at the place that has to learn about it. So every
+label and gloss moved into `stem_syntax` as a `row()` method, beside the enum it
+describes. `PartOfSpeech::name` and `Formation::summary` set that precedent; this is
+the third time it has paid.
+
+---
+
+## M16 — Editing in the explorer · built 2026-08-12 · ✓ verified
+
+Phase 4 opens. M11's read-only fence comes down — §20.5 said "before adding full
+editing", not "never" — and the rule it was protecting is the reason editing was worth
+waiting for. **647 tests pass**; clippy clean; fmt clean.
+
+```
+$ stemma set-gloss out/lang.ron w_0002 "the wanderer" --out out/edited.ron
+glossed `w_0002` as "the wanderer"
+-> out/edited.ron
+
+$ stemma validate out/edited.ron
+✓ no issues
+```
+
+The same edit in the window produces a **byte-identical file**, because it is the same
+call.
+
+### The design, in one sentence
+
+An edit is a **value** (`stem_genome::Edit`) applied by **one function** (`apply`), and
+the UI's whole contribution is to build the value and show the answer.
+
+That is not ceremony. A window that mutated a genome directly would be a second
+implementation of what an edit *means*, and the two would drift — the CLI refusing an
+id collision the window quietly allowed, a file saved from one not matching a file
+saved from the other. `a_file_saved_from_the_ui_matches_the_equivalent_cli_command`
+runs all four genome edits both ways and compares the bytes.
+
+### Decisions worth knowing
+
+**Validate the clone, then commit — never the other way round.** `apply` works on a
+copy, validates it, and returns the original untouched if the edit introduced an
+error. A mutate-then-check design leaves a half-applied change behind the first time a
+caller ignores a returned report; this one cannot.
+
+**A refusal is "introduced an error", not "has errors".** A file may already be
+broken, and refusing every edit to a broken file is how an editor becomes useless
+exactly when it is needed. `new_errors(before, after)` compares by `(severity, code,
+subject)` as a **multiset** — a *second* `duplicate_word_id` about a different word is
+a new fault even though the code already appeared.
+
+**Warnings never refuse anything.** Declaring a concept that shadows a built-in is
+odd, reported, and allowed: §17's report-don't-police posture, applied to editing. The
+warnings an edit introduced come back in `EditOutcome::introduced` and are shown
+beside the change.
+
+**Undo is the file.** Nothing autosaves, nothing is written until Save, and there is
+no in-memory history stack — the file on disk is a better undo than any of those and
+the user already knows how it works. Unsaved edits are marked `● unsaved` so closing
+with changes pending is a visible choice. The CLI has the same contract: without
+`--out` it prints what it *would* do and writes nothing.
+
+**Reordering rules is a real edit.** Rule order is chronology and M3 made it
+observable — `*taka` gives `tag` under one order and `tak` under another — so
+`reordering_a_rule_set_changes_what_the_engine_produces` proves the acceptance is not
+vacuous. `move_rule` is a stable rotation, not a swap: moving rule 3 to 0 pushes the
+rest down one, which is what dragging a row looks like. A swap would silently reorder
+two rules when the user asked about one.
+
+**Identity is not editable.** A `LanguageId` is what `parent` edges, the lineage graph
+and every `CognateSetId` scope point at. Renaming a language from an editor would
+orphan a family silently, so renaming is a `fork`.
+
+### Three things the existing guards refused
+
+**`stem_genome_never_mints_a_cognate_set` rejected the first draft.** `AddWord` built
+a `WordEntry` inline, which meant calling `scoped_cognate_set` from `stem_genome` —
+and that source scan bans it, because M4's fork must copy sets and never mint. The
+scan was right and the fix is better architecture: minting moved to
+`stem_lexicon::authored_word`, beside `build_shaped_lexicon`, `inflect` and `derive`.
+The editor now asks the lexicon crate for a word instead of assembling one, and the
+scan is exactly as strict as it was before there was an editor.
+
+**The UI guard got stricter, not weaker.** `stem_io::save` left the ban list — that is
+the whole of what editing adds — and `::derive`, `build_shaped_lexicon` and
+`build_proto_lexicon` joined it. `apply_edit` is deliberately *not* banned; calling it
+is the point.
+
+**A doc comment made a claim about a check that did not exist.** `Edit::SetGloss`'s
+docs said a paired `gloss_shadowed_by_sense` would explain why setting a gloss on a
+drifted word appears to do nothing. It would have — except nothing implemented it. The
+trap is real: `display_gloss` prefers a modelled sense over an authored override (M9,
+so a drifted meaning cannot be hidden by an inherited label), so glossing `w_0001` of
+the reference fixture *stores* the label and *shows* nothing, which from a text box is
+indistinguishable from a failed edit. The check now exists as a Note, comes back in
+`introduced`, and the window prints it.
+
+### Reading a form back into segments
+
+Adding a word needs the inverse of `Root::written`, so `Root::parse` arrived in
+`stem_phonology` — **longest match first**, so a two-character romanisation like `sh`
+wins over `s` followed by an unreadable `h`. Greedy without backtracking: a user who
+typed something ambiguous wants to be told, not to have a reading guessed for them.
+
+The whole form becomes one syllable whose `pattern` is read off the segments' own
+kinds. There is no resyllabifier in this project (unchanged since M3), so inventing
+syllable boundaries would be a claim the engine cannot make — and `pattern` is
+provenance, never semantics.
+
+An unreadable character reports through `StemmaError::Invalid` with a one-issue report
+rather than `NotFound`, because "no {kind} with id `{id}`" is false twice over here:
+the text is not an id, and the failure is a position in a string rather than a missed
+lookup.
+
+```
+$ stemma add-word fixtures/asterian_attested.ron --form tazbo --gloss impossible
+Caused by:
+    the form `tazbo` is invalid:
+      error: [unreadable_form] `zbo` is not written by any phoneme of this
+      language (character 3 of `tazbo`)
+```
+
+### What the tests do and do not drive
+
+They do **not** drive an `egui` window — there is no headless harness here, and a test
+that claimed to click a button while calling a function would be worse than no test.
+They drive the whole path the window uses: build an `Edit`, hand it to `apply_edit`,
+write with `stem_io::save`. That is the entirety of `App::run` and `App::save_selected`;
+everything else in those two functions is a text box and a banner. The window itself
+was launched on a real file to confirm it starts and runs.
 
 ---
 

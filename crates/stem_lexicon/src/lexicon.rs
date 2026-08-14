@@ -53,6 +53,16 @@ impl Lexicon {
     }
 
     /// Every entry, in stored order.
+    /// Mutable iteration over the entries, in stored order (M16).
+    ///
+    /// Editing needs it, and there is no safe way to hand out a `&mut WordEntry`
+    /// without it. Order is preserved by construction — this cannot re-sort, and
+    /// nothing here mints: `scoped_cognate_set` is still the only site, and the
+    /// source scan over this file still proves it.
+    pub fn iter_mut(&mut self) -> std::slice::IterMut<'_, WordEntry> {
+        self.entries.iter_mut()
+    }
+
     pub fn iter(&self) -> std::slice::Iter<'_, WordEntry> {
         self.entries.iter()
     }
