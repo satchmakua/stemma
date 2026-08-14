@@ -3160,6 +3160,7 @@ dependencies = [
  "stem_lexicon",
  "stem_phonology",
  "stem_soundchange",
+ "stem_syntax",
 ]
 
 [[package]]
@@ -3194,6 +3195,7 @@ dependencies = [
  "stem_lexicon",
  "stem_phonology",
  "stem_soundchange",
+ "stem_syntax",
 ]
 
 [[package]]
@@ -3238,6 +3240,15 @@ dependencies = [
  "stem_core",
  "stem_lexicon",
  "stem_phonology",
+]
+
+[[package]]
+name = "stem_syntax"
+version = "0.1.0"
+dependencies = [
+ "ron",
+ "serde",
+ "stem_core",
 ]
 
 [[package]]

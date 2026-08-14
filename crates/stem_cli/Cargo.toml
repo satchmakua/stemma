@@ -22,6 +22,7 @@ clap.workspace = true
 stem_lexicon.workspace = true
 stem_export.workspace = true
 stem_soundchange.workspace = true
+stem_syntax.workspace = true
 
 [dev-dependencies]
 sha2.workspace = true

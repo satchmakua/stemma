@@ -48,7 +48,7 @@ pub mod semantics;
 pub mod trace;
 pub mod word;
 
-pub use build::{build_proto_lexicon, build_shaped_lexicon, scoped_cognate_set};
+pub use build::{authored_word, build_proto_lexicon, build_shaped_lexicon, scoped_cognate_set};
 pub use concept::{
     CONCEPT_COUNT, CONCEPTS, Concept, ConceptKey, Meaning, PRE_M13_CONCEPT_COUNT, PartOfSpeech,
     ProjectConcept, SWADESH_COUNT, meanings,

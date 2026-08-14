@@ -74,6 +74,55 @@ pub fn scoped_cognate_set(language: &LanguageId, ordinal: usize) -> CognateSetId
     CognateSetId::new(format!("cog_{language}_{ordinal:04}"))
 }
 
+/// Builds one **hand-authored** word, minting its cognate set (M16).
+///
+/// The third and last producer of a `WordEntry` from nothing — beside
+/// [`build_shaped_lexicon`] (coined) and `inflect`/`derive` (composed). It lives here,
+/// in the module that defines [`scoped_cognate_set`], because minting is the one
+/// operation the whole cognate invariant rests on and the source scans keep it in
+/// this crate: `stem_genome`'s editor calls *this*, so the editor never names a mint
+/// function and `stem_genome_never_mints_a_cognate_set` stays exactly as strict as it
+/// was before there was an editor.
+///
+/// # A hand-added word starts its own descent class
+///
+/// It is not a reflex of anything. Giving it an existing set would claim it descends
+/// from that word, and put the two on one row of M5's comparative table — the precise
+/// falsehood `docs/adr/0007` exists to prevent. `source` is
+/// [`WordSource::Authored`], which is that variant's own definition: "written by hand
+/// in the project file".
+///
+/// The caller supplies `ordinal`; nothing here checks it is free, because a collision
+/// is `lexicon.duplicate_word_id`'s question and the editor refuses on it (M16's
+/// validate-then-commit rule) rather than silently choosing a different id.
+pub fn authored_word(
+    language: &LanguageId,
+    ordinal: usize,
+    phonemic_form: stem_phonology::Root,
+    gloss: &str,
+    concept: Option<ConceptKey>,
+    part_of_speech: crate::concept::PartOfSpeech,
+) -> WordEntry {
+    WordEntry {
+        id: WordId::sequential(ordinal),
+        concept,
+        phonemic_form,
+        glosses: if gloss.trim().is_empty() {
+            Vec::new()
+        } else {
+            vec![gloss.trim().to_owned()]
+        },
+        part_of_speech,
+        cognate_set: scoped_cognate_set(language, ordinal),
+        source: WordSource::Authored,
+        trace: None,
+        morphemes: Vec::new(),
+        bases: Vec::new(),
+        senses: Vec::new(),
+        sense_history: None,
+    }
+}
+
 /// Builds a proto-lexicon: one word per concept, in concept-list order.
 ///
 /// Takes an inventory and phonotactics rather than a genome, so `stem_lexicon`

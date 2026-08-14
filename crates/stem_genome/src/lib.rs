@@ -17,7 +17,9 @@
 //! DAG and keeps `stem_core` a true foundation. See `docs/adr/0002-crate-layering.md`.
 
 pub mod culture;
+pub mod edit;
 pub mod etymology;
+pub mod grammar;
 pub mod language;
 pub mod lineage;
 pub mod paradigm;
@@ -25,7 +27,9 @@ pub mod profile;
 pub mod semantics_view;
 
 pub use culture::{absences, render_culture};
+pub use edit::{Edit, EditOutcome, apply as apply_edit, move_rule, new_errors, new_issues};
 pub use etymology::render_etymology;
+pub use grammar::render_grammar;
 pub use language::LanguageGenome;
 pub use lineage::{
     BranchSpec, CognateCell, CognateColumn, CognateCoverage, CognateRow, CognateTable, LineageEdge,

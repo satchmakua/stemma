@@ -144,7 +144,112 @@ pub struct Root {
     pub syllables: Vec<Syllable>,
 }
 
+/// Why a written form could not be read, as a graded report (M16).
+///
+/// `StemmaError::Invalid` rather than `NotFound`, because `NotFound` renders as
+/// "no {kind} with id `{id}`" and neither half of that sentence is true here — the
+/// text is not an id, and the failure is a position in a string rather than a missed
+/// lookup. `Invalid` carries a `ValidationReport`, which is the shape a reader
+/// already knows from `stemma validate`, and it has room for the one thing that makes
+/// the message actionable: **where** the form stopped being readable.
+fn unreadable(text: &str, chars: &[char], at: usize) -> stem_core::StemmaError {
+    let mut report = stem_core::ValidationReport::new();
+    let message = if chars.is_empty() {
+        "a word needs at least one segment; this form is empty".to_owned()
+    } else {
+        let rest: String = chars[at..].iter().collect();
+        let position = at + 1;
+        format!(
+            "`{rest}` is not written by any phoneme of this language (character {position} of `{text}`)"
+        )
+    };
+    report.push(stem_core::Issue::new(
+        stem_core::Severity::Error,
+        "unreadable_form",
+        message,
+    ));
+    stem_core::StemmaError::Invalid(format!("the form `{text}`"), report)
+}
+
 impl Root {
+    /// Reads a written form back into segments (M16), the inverse of
+    /// [`Root::written`].
+    ///
+    /// **Longest match first**, so a two-character romanisation like `sh` wins over
+    /// `s` followed by an unparseable `h`. Greedy and without backtracking, which is
+    /// correct for an inventory whose written forms are a prefix code and is the only
+    /// behaviour worth having in an editor: a user who typed something ambiguous
+    /// wants to be told, not to have one reading guessed for them.
+    ///
+    /// # One syllable, and why that is honest
+    ///
+    /// The whole form becomes a single [`Syllable`] whose `pattern` is read off the
+    /// segments' own kinds (`CVC`), with `stress: None`. There is no resyllabifier in
+    /// this project (unchanged since M3), so inventing syllable boundaries here would
+    /// be a claim the engine cannot make — and `pattern` is provenance, never
+    /// semantics, so a hand-typed word honestly recording "this is what its segments
+    /// are" is better than a guessed division. Prosody is assigned per whole word
+    /// inside `apply_rules`, exactly as it is for a composed form.
+    ///
+    /// # Failure
+    ///
+    /// An unreadable character is a [`StemmaError::NotFound`] naming the offending
+    /// text and where it started, because the caller is a person typing into a box
+    /// and "invalid form" is not a thing they can act on. An empty string is an error
+    /// too: a word with no segments is the one genuinely broken state here.
+    pub fn parse(written: &str, inventory: &crate::PhonemeInventory) -> stem_core::Result<Self> {
+        let text = written.trim();
+        if text.is_empty() {
+            return Err(unreadable("", &[], 0));
+        }
+
+        // The longest written form in the inventory bounds the greedy window, so a
+        // multi-character romanisation is tried before its own first character.
+        let longest = inventory
+            .iter()
+            .map(|p| p.written().chars().count())
+            .max()
+            .unwrap_or(1)
+            .max(1);
+
+        let chars: Vec<char> = text.chars().collect();
+        let mut segments: Vec<PhonemeId> = Vec::new();
+        let mut kinds: Vec<crate::SegmentKind> = Vec::new();
+        let mut at = 0usize;
+
+        while at < chars.len() {
+            let remaining = chars.len() - at;
+            let matched = (1..=longest.min(remaining)).rev().find_map(|take| {
+                let slice: String = chars[at..at + take].iter().collect();
+                inventory.by_written(&slice).map(|p| (take, p))
+            });
+            match matched {
+                Some((take, phoneme)) => {
+                    segments.push(phoneme.id.clone());
+                    kinds.push(phoneme.kind);
+                    at += take;
+                }
+                None => return Err(unreadable(text, &chars, at)),
+            }
+        }
+
+        let pattern: String = kinds
+            .iter()
+            .map(|k| match k {
+                crate::SegmentKind::Vowel => 'V',
+                _ => 'C',
+            })
+            .collect();
+
+        Ok(Root {
+            syllables: vec![Syllable {
+                pattern,
+                segments,
+                stress: None,
+            }],
+        })
+    }
+
     /// Every segment, flattened.
     pub fn segments(&self) -> impl Iterator<Item = &PhonemeId> {
         self.syllables.iter().flat_map(|s| s.segments.iter())
@@ -470,6 +575,100 @@ impl<'a> RootGenerator<'a> {
     /// also real. Deduplication belongs to M2, where `WordEntry` gives it a home.
     pub fn generate(&self, rng: &mut StemmaRng, count: usize) -> Vec<Root> {
         (0..count).map(|_| self.next_root(rng)).collect()
+    }
+}
+
+#[cfg(test)]
+mod parse_tests {
+    use super::*;
+    use crate::{Phoneme, PhonemeInventory, SegmentKind};
+
+    /// An inventory with a **two-character romanisation** (`sh`) that shares its
+    /// first character with a one-character one (`s`) — the case longest-match
+    /// exists for.
+    fn inventory() -> PhonemeInventory {
+        PhonemeInventory::from_phonemes([
+            Phoneme::new("ph_t", "t", SegmentKind::Consonant),
+            Phoneme::new("ph_s", "s", SegmentKind::Consonant),
+            Phoneme::new("ph_esh", "ʃ", SegmentKind::Consonant).with_romanization("sh"),
+            Phoneme::new("ph_a", "a", SegmentKind::Vowel),
+            Phoneme::new("ph_i", "i", SegmentKind::Vowel),
+        ])
+    }
+
+    fn segments(root: &Root) -> Vec<&str> {
+        root.segments().map(|s| s.as_str()).collect()
+    }
+
+    #[test]
+    fn a_written_form_reads_back_to_its_segments() {
+        let root = Root::parse("tasi", &inventory()).expect("readable");
+        assert_eq!(segments(&root), ["ph_t", "ph_a", "ph_s", "ph_i"]);
+    }
+
+    /// The reason the match is longest-first: `sh` must win over `s`, or the `h`
+    /// becomes an unreadable character and a perfectly good word is refused.
+    #[test]
+    fn a_two_character_romanisation_wins_over_its_own_first_character() {
+        let root = Root::parse("shi", &inventory()).expect("readable");
+        assert_eq!(segments(&root), ["ph_esh", "ph_i"]);
+        // And a bare `s` still reads as `s` when nothing longer matches.
+        assert_eq!(
+            segments(&Root::parse("si", &inventory()).unwrap()),
+            ["ph_s", "ph_i"]
+        );
+    }
+
+    #[test]
+    fn parsing_is_the_inverse_of_writing() {
+        let inventory = inventory();
+        for text in ["tasi", "shi", "ata", "t"] {
+            let root = Root::parse(text, &inventory).expect("readable");
+            assert_eq!(
+                root.written(&inventory).expect("renders"),
+                text,
+                "`{text}` did not survive the round trip"
+            );
+        }
+    }
+
+    /// The pattern is read off the segments' own kinds — provenance, honestly
+    /// recorded, since no resyllabifier exists to divide the word.
+    #[test]
+    fn the_pattern_records_the_shape_and_the_whole_form_is_one_syllable() {
+        let root = Root::parse("tasi", &inventory()).expect("readable");
+        assert_eq!(
+            root.syllables.len(),
+            1,
+            "no resyllabifier exists to divide it"
+        );
+        assert_eq!(root.syllables[0].pattern, "CVCV");
+        assert!(
+            root.syllables[0].stress.is_none(),
+            "prosody is assigned per whole word inside apply_rules"
+        );
+    }
+
+    #[test]
+    fn an_unreadable_character_names_the_text_and_where_it_stopped() {
+        let err = Root::parse("taz", &inventory()).expect_err("no /z/ here");
+        let message = err.to_string();
+        assert!(message.contains('z'), "{message}");
+        assert!(message.contains("character 3"), "{message}");
+        assert!(message.contains("taz"), "{message}");
+    }
+
+    #[test]
+    fn an_empty_form_is_refused() {
+        assert!(Root::parse("   ", &inventory()).is_err());
+    }
+
+    #[test]
+    fn surrounding_whitespace_is_trimmed_rather_than_being_a_failure() {
+        assert_eq!(
+            segments(&Root::parse("  ta  ", &inventory()).expect("readable")),
+            ["ph_t", "ph_a"]
+        );
     }
 }
 
