@@ -55,7 +55,7 @@ This trips people up, so plainly:
 | `morphology_asterian.ron` | 0 | Four stems and a plural suffix, for the paradigm demo. |
 | `derivation_asterian.ron` | 0 | Derivational affixes and patterns; `derive` turns its 673 roots into ~4,000 words. |
 | `desert_asterian.ron` / `seafarer_asterian.ron` | 0 | One phonology, one seed, two ecologies — the culture-profile pair. |
-| `grammar_asterian.ron` | 0 | A head-final syntax profile, for `stemma grammar`. |
+| `grammar_asterian.ron` / `grammar_svo_asterian.ron` | 0 | One phonology, one seed, two grammars — the sentence-generation pair. |
 
 **None of these is a language you are meant to browse.** They are the inputs. A
 language with vocabulary is something you *generate*, which is what `stem` does and
@@ -566,6 +566,101 @@ concept list.
 
 ---
 
+## Say something
+
+```bash
+stemma new-lexicon fixtures/grammar_asterian.ron --out out/sov.ron
+stemma say out/sov.ron 'SEE(KING, STAR)'
+```
+
+```
+mostair sosema ponti
+  SEE(KING, STAR)  ·  Asterian (grammar)
+
+  mostair  agent      king-ERG  [w_0102 · cog_asterian_grammar_0102]
+  sosema   patient    star-ABS  [w_0080 · cog_asterian_grammar_0080]
+  ponti    predicate  see       [w_0072 · cog_asterian_grammar_0072]
+
+Constructions:
+  0  case_marking  marked the agent `ERG`
+     because alignment = ergative-absolutive
+  1  case_marking  marked the patient `ABS`
+     because alignment = ergative-absolutive
+  2  clause  ordered the clause SOV
+     because word_order = SOV
+```
+
+Every word is a real dictionary entry with a real id, so you can go straight from a
+sentence to any word's full history: `stemma trace out/sov.ron w_0102`.
+
+### The notation
+
+You give it a **proposition** — meanings, not words:
+
+```
+PREDICATE(ARGUMENT, ARGUMENT)     a transitive clause
+PREDICATE(ARGUMENT)               an intransitive one
+
+ARGUMENT := CONCEPT [":" ADJECTIVE] ["/" POSSESSOR]
+```
+
+```bash
+stemma say out/sov.ron 'SEE(KING:BIG/PRIEST, STAR)'   # the priest's big king sees the star
+```
+
+Concept keys, exactly as they appear in the dictionary — so the notation needs no
+vocabulary of its own and cannot drift from one. `:` and `/` are shell-safe unquoted.
+
+### One proposition, two grammars
+
+`grammar_asterian.ron` and `grammar_svo_asterian.ron` have the **same phonemes and the
+same seed**, so they coin the same words. Everything that differs is the grammar:
+
+```bash
+stemma new-lexicon fixtures/grammar_svo_asterian.ron --out out/svo.ron
+stemma say out/sov.ron 'SEE(KING:BIG, STAR/PRIEST)'
+stemma say out/svo.ron 'SEE(KING:BIG, STAR/PRIEST)'
+```
+
+```
+head-final:    mostair sa taot sosema ponti
+head-initial:  sa mostau ponti sosemta taot
+```
+
+Same five words. Different order, different side for the adjective and the possessor,
+different case endings.
+
+### Watch the alignment
+
+That last difference is the one that is not a reordering at all:
+
+```bash
+stemma say out/sov.ron 'SEE(KING, STAR)'   # transitive
+stemma say out/sov.ron 'SEE(KING)'         # intransitive
+```
+
+```
+                 transitive     intransitive
+  ergative:      mostair        mostaa        ← two different endings
+  nominative:    mostau         mostau        ← one
+```
+
+An **ergative** language marks the agent of a transitive clause and leaves the lone
+argument of an intransitive one alone with the object's ending. A **nominative** one
+marks both the same. That is the whole content of those two words, and your language
+does it because you wrote `alignment:` in its genome.
+
+> **What it will not do.** One clause: a verb, up to two arguments, one adjective and
+> one possessor each. No subordination, no coordination, no tense, no agreement, and no
+> relative clauses — even though the profile records a relative-clause strategy.
+>
+> If your language has no morpheme for a case it needs, you still get the sentence,
+> unmarked, with a line telling you which morpheme to declare. If it has no *word* for
+> a concept, that is an error: there is no sentence to be had, and Stemma will not coin
+> one on the spot.
+
+---
+
 ## The one-command showcase
 
 ```bash
@@ -596,6 +691,7 @@ stemma <cmd> --help    # its options
 | `derive` `derivations` | compounds and productive affixation |
 | `culture` | why this language has the vocabulary it has |
 | `grammar` | how this language builds a clause (§7.4's parameters) |
+| `say` | put a proposition through a language and get a sentence |
 | `set-gloss` `add-word` `remove-word` `declare-concept` `reorder-rule` | edit a language |
 | `drift` `drifts` | meaning change |
 | `rules` | validate a rule file (`.ron`, `.json`, or `.sc`) |
@@ -619,7 +715,7 @@ exclusion — see [ROADMAP.md](../ROADMAP.md).
 
 | gap | today | planned |
 |---|---|---|
-| **Sentences** — you still cannot form one. A language can now *describe* its grammar (`stemma grammar`), but nothing generates or parses. | §7.4's parameters as data, validated and rendered (M17) | **M18** sentence generation → **M19** syntactic change |
+| **Syntax that changes** — a language's grammar is fixed once written. Case erosion does not force stricter word order; nothing becomes an article or an auxiliary. | one clause generated from stored parameters (M17, M18) | **M19** syntactic change, where grammaticalization lands |
 | **Writing systems** — script evolution (§7.6) is designed but unbuilt. | forms render in IPA and romanisation only | **M20** glyphs → **M21** script evolution |
 | **Alien modality** — §7.7's pulse/scent/gesture languages. | the data model assumes a vocal tract throughout | **M23** embodiment profile → **M24** non-vocal signal systems |
 | **An LLM assistant** (§6.5). | nothing, by design | **M22** — and the constraint holds: a model *proposes* a rule set, the engine applies or refuses it. No path to a stored form skips the engine. |

@@ -117,9 +117,9 @@ impl Proposition {
     /// from a command line by a person, so "invalid proposition" would be useless.
     pub fn parse(text: &str) -> Result<Self> {
         let text = text.trim();
-        let open = text.find('(').ok_or_else(|| {
-            invalid(text, "expected `PREDICATE(ARGUMENT, …)` — no `(` found")
-        })?;
+        let open = text
+            .find('(')
+            .ok_or_else(|| invalid(text, "expected `PREDICATE(ARGUMENT, …)` — no `(` found"))?;
         if !text.ends_with(')') {
             return Err(invalid(text, "expected a closing `)`"));
         }
@@ -465,7 +465,13 @@ fn mark_case(
 
     let mut apply = |phrase: Option<Vec<Slot>>, case: Option<&str>, role: &str| {
         let mut phrase = phrase?;
-        let case = case?;
+        // **Not `case?`.** A `?` here returns `None` for the whole closure and
+        // therefore deletes the noun phrase — an alignment that marks nothing would
+        // silently produce a sentence with no arguments in it. Marking nothing means
+        // the phrase passes through untouched, which is what `Neutral` *is*.
+        let Some(case) = case else {
+            return Some(phrase);
+        };
         match find_case_morpheme(morphology, case) {
             Some(morpheme) => {
                 // The head of the phrase carries the case. Which word in a phrase
@@ -764,11 +770,7 @@ mod tests {
     fn a_transitive_clause_comes_out_in_the_declared_order() {
         let sentence = say("SEE(KING, STAR)", &sov());
         assert_eq!(
-            sentence
-                .slots
-                .iter()
-                .map(|s| s.role)
-                .collect::<Vec<_>>(),
+            sentence.slots.iter().map(|s| s.role).collect::<Vec<_>>(),
             ["agent", "patient", "predicate"],
             "SOV"
         );
@@ -873,7 +875,10 @@ mod tests {
 
     #[test]
     fn generating_twice_produces_an_identical_sentence() {
-        assert_eq!(say("SEE(KING, STAR)", &sov()), say("SEE(KING, STAR)", &sov()));
+        assert_eq!(
+            say("SEE(KING, STAR)", &sov()),
+            say("SEE(KING, STAR)", &sov())
+        );
     }
 
     // ------------------------------------------------------------- honest gaps
@@ -884,8 +889,7 @@ mod tests {
     fn a_missing_case_marker_is_reported_rather_than_invented() {
         let bare = Morphology::default();
         let proposition = Proposition::parse("SEE(KING, STAR)").expect("parses");
-        let sentence =
-            generate(&proposition, &sov(), &lexicon(), &bare).expect("still generates");
+        let sentence = generate(&proposition, &sov(), &lexicon(), &bare).expect("still generates");
 
         assert_eq!(
             sentence.written(&inventory()).expect("renders"),
@@ -912,7 +916,40 @@ mod tests {
         let sentence =
             generate(&proposition, &profile, &lexicon(), &morphology()).expect("generates");
         assert!(sentence.gaps.is_empty(), "{:?}", sentence.gaps);
-        assert_eq!(sentence.written(&inventory()).expect("renders"), "tak kir san");
+        assert_eq!(
+            sentence.written(&inventory()).expect("renders"),
+            "tak kir san"
+        );
+    }
+
+    /// **The bug this test was written for.** Case marking was written with `case?`,
+    /// which returns `None` for the whole closure when there is no case to apply — and
+    /// therefore deleted the noun phrase. Every language with `Neutral` or unstated
+    /// alignment produced a sentence containing only its verb.
+    ///
+    /// Swept over every alignment, because the failing one was the *default*: a
+    /// language that had said nothing about its alignment lost both its arguments.
+    #[test]
+    fn no_alignment_ever_drops_an_argument() {
+        for alignment in [
+            Alignment::Unspecified,
+            Alignment::NominativeAccusative,
+            Alignment::ErgativeAbsolutive,
+            Alignment::Tripartite,
+            Alignment::ActiveStative,
+            Alignment::Neutral,
+        ] {
+            let profile = SyntaxProfile { alignment, ..sov() };
+            let proposition = Proposition::parse("SEE(KING, STAR)").expect("parses");
+            let sentence =
+                generate(&proposition, &profile, &lexicon(), &morphology()).expect("generates");
+            assert_eq!(
+                sentence.slots.len(),
+                3,
+                "{alignment:?} produced {:?}",
+                sentence.slots.iter().map(|s| s.role).collect::<Vec<_>>()
+            );
+        }
     }
 
     /// A concept the lexicon has no word for is an **error**: there is no sentence to

@@ -24,6 +24,7 @@ pub mod language;
 pub mod lineage;
 pub mod paradigm;
 pub mod profile;
+pub mod say;
 pub mod semantics_view;
 
 pub use culture::{absences, render_culture};
@@ -36,6 +37,7 @@ pub use lineage::{
     LineageGraph, grow_family, render_cognate_table, render_family,
 };
 pub use paradigm::render_paradigm;
+pub use say::{render_sentence, say};
 
 /// The spaces needed to pad `text` out to `width` **display characters**.
 ///

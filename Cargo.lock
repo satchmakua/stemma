@@ -3249,6 +3249,8 @@ dependencies = [
  "ron",
  "serde",
  "stem_core",
+ "stem_lexicon",
+ "stem_phonology",
 ]
 
 [[package]]
