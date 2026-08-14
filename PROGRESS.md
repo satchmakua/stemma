@@ -5,9 +5,9 @@ A build log of what shipped and the notable decisions behind it. **Keep it hones
 acceptance tests live in [ROADMAP.md](ROADMAP.md); this is the backward-looking
 "what got done and why" companion.
 
-**Current phase:** **Phase 5 — grammar.** M17 shipped the syntax profile; next
-milestone: **M18 — constructions & sentence generation**, the first sentence.
-Phases 0–4 (M0–M16) are complete.
+**Current phase:** **Phase 5 — grammar.** M17 shipped the syntax profile and M18 the
+first sentence; next milestone: **M19 — syntactic change**, where grammaticalization
+finally lands. Phases 0–4 (M0–M16) are complete.
 
 ## State of the tree
 
@@ -17,12 +17,140 @@ Phases 0–4 (M0–M16) are complete.
 | `stem_phonology` | features, `Phoneme`, inventory, phonotactics, root generation | working |
 | `stem_lexicon` | `WordEntry`, `Lexicon`, the **673**-concept list, cognate-set minting, morphemes / `compose` / `inflect`, senses / `apply_drift` / sense history, derivation patterns / `derive` / `BaseRef`, **culture profile / `build_shaped_lexicon`** | working |
 | `stem_soundchange` | rules, matching, ordered application, resolution, traces | working — **untouched by M8 and M9** |
-| `stem_syntax` | §7.4's parameters, derived headedness, typological harmony | working (M17) |
+| `stem_syntax` | §7.4's parameters, derived headedness, typological harmony, **propositions / `generate` / constructions** | working (M17, M18) |
 | `stem_genome` | `LanguageGenome`, `fork`, `LineageGraph`, family validation, `render_family`, `render_paradigm`, **`with_drift` / `render_word_history`**, plausibility profile | working |
 | `stem_io` | RON/JSON load & save | working — **untouched since M0** |
 | `stem_export` | Markdown dictionaries, CLDF CSV, cognate table, family demo | working |
 | `stem_cli` | the `stemma` binary | …plus `profile`, `inflect`, `paradigm`, `drift`, `drifts`; rule files may be `.sc` |
 | `stem_ui` | the `stemma-ui` desktop explorer — native egui; **edits through `apply_edit`** | working (M11, M16) |
+
+---
+
+## M18 — Constructions & sentence generation · built 2026-08-12 · ✓ verified
+
+**The first sentence.** Every milestone before this one produced words; this one
+produces an utterance. **711 tests pass**; clippy clean; fmt clean.
+
+```
+$ stemma say out/sov.ron 'SEE(KING, STAR)'
+mostair sosema ponti
+  SEE(KING, STAR)  ·  Asterian (grammar)
+
+  mostair  agent      king-ERG  [w_0102 · cog_asterian_grammar_0102]
+  sosema   patient    star-ABS  [w_0080 · cog_asterian_grammar_0080]
+  ponti    predicate  see       [w_0072 · cog_asterian_grammar_0072]
+
+Constructions:
+  0  case_marking  marked the agent `ERG`
+     because alignment = ergative-absolutive
+  1  case_marking  marked the patient `ABS`
+     because alignment = ergative-absolutive
+  2  clause  ordered the clause SOV
+     because word_order = SOV
+```
+
+Every word in it is a real lexicon entry with a real id and a real cognate set — so
+each one already has a sound-change history and an etymology, and `stemma trace` takes
+you straight from a sentence to any word's past.
+
+### The acceptance is about *why* the two differ, not that they do
+
+Two languages producing two sentences is trivially satisfiable by two languages with
+different words. So `grammar_asterian.ron` and `grammar_svo_asterian.ron` share a
+phonology, a concept list **and a seed** — they coin identical words. Every difference
+in the output is therefore grammatical:
+
+```
+SEE(KING:BIG, STAR/PRIEST)
+
+  head-final:    mostair sa taot sosema ponti
+  head-initial:  sa mostau ponti sosemta taot
+```
+
+`the_same_words_come_out_in_a_different_order` pins it by comparing the *multiset of
+word ids* used: identical in both, in different order.
+
+**Alignment is the sharpest of the four differences, because it is not a reordering
+at all.** An ergative language marks the agent of a transitive clause and leaves the
+lone argument of an intransitive one absolutive; a nominative language marks both the
+same. So:
+
+```
+                 transitive     intransitive
+  ergative:      mostair        mostaa          ← two different endings
+  nominative:    mostau         mostau          ← one
+```
+
+That is the definition of the two terms, produced by the engine rather than asserted.
+
+### §3.3, one level up
+
+A word carries a `Derivation`; a sentence carries a `Vec<Construction>`, and it is
+produced the same way — **emitted as the generator goes**, never reconstructed from
+the output afterwards. Each construction names the syntax parameter that decided it,
+so "why is the verb last?" gets the same kind of answer "why does this word start with
+/t/?" has had since M3: *because this parameter, from this file*.
+
+A `Slot` stores a `WordId` and a `CognateSetId`, never a rendered string. The surface
+is a view; a stored one would desynchronise the first time anything upstream changed
+(`docs/adr/0007`), and echoing the descent class is what keeps a sentence comparable
+across a family — `BaseRef`'s reasoning, reused.
+
+### Decisions worth knowing
+
+**A proposition names meanings, not words.** `SEE(KING, STAR)` is `ConceptKey`s, which
+is exactly why one proposition can go through two languages and the difference be
+theirs. A notation over `WordId`s would have made the acceptance impossible to state.
+
+**The notation is about forty lines and shell-safe.** `PREDICATE(ARG, ARG)`, with
+`ARG := CONCEPT [":" ADJECTIVE] ["/" POSSESSOR]`. `:` and `/` need no quoting, which
+matters for something whose purpose is to be typed at a prompt. There is **no parser
+for natural language** and none is planned.
+
+**Case is found by an affix's gloss.** M8 defined an affix's `gloss` as its feature
+label ("PL", "PST"), so `ERG` is where the ergative marker lives. A typed `case` field
+would need a closed enum of cases compiled in — a taxonomy this project has no reason
+to invent before something needs it.
+
+**`compose` is reused, not reimplemented.** A slot is wrapped as a `Morpheme` so
+M8's composition kernel lays out the stem and its case suffix. M14 made the same call
+from the other direction with `lay_out`; there is still exactly one composer.
+
+**A gap is stated, never faked.** A language with no `ERG` morpheme gets an unmarked
+sentence and a printed line saying which morpheme is missing and how to declare it.
+A missing *word*, though, is an error: there is no sentence to be had, and coining one
+on the spot would be the fabrication this project exists to avoid.
+
+**An unstated parameter falls back visibly.** No word order means SVO — and the
+construction record says *"word_order = not stated; fell back to the commonest
+order"*, so the fallback is on the record rather than passing as a decision.
+
+### The bug the tests caught
+
+Case marking was written as:
+
+```rust
+let mut phrase = phrase?;
+let case = case?;          // ← deletes the noun phrase
+```
+
+The second `?` returns `None` for the whole closure when there is no case to apply —
+so it did not skip the marking, it **dropped the entire noun phrase**. Every language
+with `Neutral` or *unstated* alignment produced a sentence containing only its verb.
+The default was the broken case, which is the worst possible one to get wrong.
+
+`no_alignment_ever_drops_an_argument` now sweeps all six alignments and asserts the
+slot count, because the failing path was the one nobody would think to write a test
+for.
+
+### The scope fence
+
+§20.1 names scope explosion as the top risk and this was the milestone most able to
+cause it. v0 generates **one clause**: a predicate, up to two arguments, one adjective
+and one possessor each. No recursion, no subordination, no coordination, no tense, no
+agreement, and **no relative clauses** — even though M17 records a relative-clause
+strategy, because recording a parameter and building an engine for it are different
+milestones. That ordering was the point of splitting Phase 5 in three.
 
 ---
 

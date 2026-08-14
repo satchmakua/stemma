@@ -392,6 +392,28 @@ enum Command {
         out: Option<PathBuf>,
     },
 
+    /// Say something in this language (M18) — the first sentence.
+    ///
+    /// Takes a **proposition**, which names meanings rather than words, and puts it
+    /// through this language's own syntax profile, lexicon and morphology. The same
+    /// proposition in two languages comes out differently, and the difference is
+    /// theirs.
+    ///
+    ///   PREDICATE(ARGUMENT, ARGUMENT)     a transitive clause
+    ///   PREDICATE(ARGUMENT)               an intransitive one
+    ///   ARGUMENT := CONCEPT [":" ADJECTIVE] ["/" POSSESSOR]
+    ///
+    /// e.g. `SEE(KING:BIG/PRIEST, STAR)` — "the priest's big king sees the star".
+    ///
+    /// §3.3 applies: every sentence prints the constructions that built it, each
+    /// naming the syntax parameter that decided it.
+    Say {
+        /// Path to a language file (`.ron` or `.json`) with a lexicon.
+        path: PathBuf,
+        /// The proposition, e.g. `SEE(KING, STAR)`.
+        proposition: String,
+    },
+
     /// Print this language's grammar sketch (M17): word order, adpositions,
     /// alignment, and the rest of §7.4's parameters, with the typological harmony
     /// of the combination reported below them.
@@ -540,6 +562,7 @@ fn run() -> Result<ExitCode> {
         Command::Derivations { path } => derivations_summary(&path),
         Command::Culture { path } => culture(&path),
         Command::Grammar { path } => grammar(&path),
+        Command::Say { path, proposition } => say(&path, &proposition),
         Command::SetGloss {
             path,
             word,
@@ -1263,6 +1286,26 @@ fn parse_pos(text: &str) -> Result<stem_lexicon::PartOfSpeech> {
         "`{text}` is not a part of speech (noun, verb, adjective, adverb, pronoun, \
          numeral, determiner, adposition, particle)"
     )
+}
+
+/// `stemma say` — the first sentence.
+///
+/// Holds no logic: it parses a string into a `Proposition` and hands it to
+/// `stem_genome::say`, which is the same call the M11 window would make.
+fn say(path: &std::path::Path, proposition: &str) -> Result<ExitCode> {
+    let genome = load_genome(path)?;
+    let proposition = stem_syntax::Proposition::parse(proposition)?;
+    let sentence = stem_genome::say(&genome, &proposition)
+        .with_context(|| format!("saying `{proposition}` in `{}`", genome.name))?;
+
+    print!("{}", stem_genome::render_sentence(&genome, &sentence)?);
+
+    // A gap is not a failure — the sentence exists and is printed. Reported on
+    // stderr so a pipeline can take the sentence alone from stdout.
+    for gap in &sentence.gaps {
+        eprintln!("note: {gap}");
+    }
+    Ok(ExitCode::SUCCESS)
 }
 
 /// `stemma grammar` — how this language builds a clause.

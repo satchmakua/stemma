@@ -46,6 +46,10 @@
 //! redundant data. Same rule as the M4 lineage graph, which derives its edges from
 //! `parent` and stores none (`docs/adr/0008`).
 
+pub mod sentence;
+
+pub use sentence::{Argument, Construction, Proposition, Sentence, Slot, generate};
+
 use serde::{Deserialize, Serialize};
 use stem_core::{Issue, Severity, Validate, ValidationReport};
 

@@ -12,7 +12,7 @@ The name comes from textual criticism: a *stemma* is the reconstructed family tr
 showing how surviving manuscripts descend from a lost original. That is exactly
 this program's core data structure.
 
-**Status:** **Phases 0–4 complete (M0–M16); Phase 5 under way (M17 done)** — the
+**Status:** **Phases 0–4 complete (M0–M16); Phase 5 under way (M17–M18 done)** — the
 diachronic kernel runs end to end. Languages get a feature-based phonology,
 generate seeded roots, undergo ordered sound change, fork into daughters with their
 own histories, and line up in a comparative cognate table; `stemma demo` tells the
@@ -41,11 +41,15 @@ through **one library call**, so the two front ends produce byte-identical files
 cannot drift apart. M17 opened Phase 5 with the grammar: `stemma grammar` prints
 §7.4's parameters as a readable sketch and tells you whether the combination is a
 common one — **without refusing it**, and without inventing a statistic to sound
-authoritative. 682 tests pass, and every step is deterministic and traced.
+authoritative. And M18 produced **the first sentence**: `stemma say` puts a
+proposition through a language's own grammar, and the same proposition through two
+grammars built on one phonology and one seed comes out in a different order with
+different case marking — because the grammars differ, not the words. 711 tests pass,
+and every step is deterministic and traced.
 
-Seven milestones remain, and they are the interesting ones: sentence generation (you
-still cannot form one), syntactic change, writing systems, a constrained LLM
-assistant, and alien modality. See
+Six milestones remain, and they are the interesting ones: syntactic change (where
+grammaticalization lands), writing systems, a constrained LLM assistant, and alien
+modality. See
 [ROADMAP.md](ROADMAP.md) for the plan,
 [docs/GUIDE.md](docs/GUIDE.md) for how to use what exists, and
 [PROGRESS.md](PROGRESS.md) for what has shipped.

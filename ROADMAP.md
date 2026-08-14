@@ -312,14 +312,25 @@ _`DESIGN.md` §7.4. The largest remaining gap: today you cannot form a sentence.
   id, and a test greps for digits), and `topic/focus` was left out rather than
   shipped as an enum with nothing behind it — see `PROGRESS.md`.
 
-- [ ] **M18 — Constructions & sentence generation.** The first sentence. A
+- [x] **M18 — Constructions & sentence generation.** The first sentence. A
   proposition plus the profile yields an ordered, inflected string — reusing M8's
   morphology and M14's derivation, so a generated sentence is made of words that
   already have histories. §3.3 applies unchanged: **every sentence carries a record
   of the constructions that built it**, exactly as a word carries its derivation.
   **Test:** `stemma say <lang> '<proposition>'` produces a sentence; the same
   proposition through two daughters differs *because* their profiles differ; the
-  trace names every construction applied.
+  trace names every construction applied. ✅ `stemma say out/sov.ron 'SEE(KING, STAR)'`
+  gives **`mostair sosema ponti`** — "the king-ERG the star-ABS sees". The fixture
+  pair shares a phonology, a concept list and a seed, so both coin *the same words*
+  and every difference is grammatical: `SEE(KING:BIG, STAR/PRIEST)` is
+  `mostair sa taot sosema ponti` in one and `sa mostau ponti sosemta taot` in the
+  other. Alignment is the sharpest difference and is not a reordering at all — the
+  ergative language marks `KING` two different ways depending on transitivity, and
+  the nominative one marks it the same. 711 tests green.
+
+  Scope fenced hard (§20.1): **one clause**, up to two arguments, one adjective and
+  one possessor each. No recursion, no subordination, no coordination, no tense, no
+  agreement — and no relative clauses, even though M17 records the parameter.
 
 - [ ] **M19 — Syntactic change.** §7.4's closing claim, made real: syntax evolves.
   Case erosion forces stricter word order; topic markers become articles; serial

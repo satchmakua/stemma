@@ -1,41 +1,29 @@
-// Asterian grammar — the M17 acceptance fixture.
+// Asterian as a head-initial language — the other half of the M18 acceptance pair.
 //
-// The REFERENCE ASTERIAN INVENTORY VERBATIM (the same 15 phonemes and initial-stress
-// prosody as every other Asterian fixture) plus a `syntax:` profile: DESIGN §7.4's
-// parameters, as data.
+// The SAME 15 phonemes, the SAME phonotactics and the SAME seed as
+// `grammar_asterian.ron`, so `new-lexicon` coins THE SAME WORDS for both. Everything
+// that differs between the sentences they produce is the syntax profile.
 //
-//   stemma grammar     fixtures/grammar_asterian.ron
-//   stemma new-lexicon fixtures/grammar_asterian.ron --out out/sov.ron
-//   stemma say         out/sov.ron 'SEE(KING, STAR)'
+//   stemma new-lexicon fixtures/grammar_asterian.ron     --out out/sov.ron
+//   stemma new-lexicon fixtures/grammar_svo_asterian.ron --out out/svo.ron
+//   stemma say out/sov.ron 'SEE(KING:BIG, STAR/PRIEST)'
+//   stemma say out/svo.ron 'SEE(KING:BIG, STAR/PRIEST)'
 //
-// Its mirror is `grammar_svo_asterian.ron`: the SAME phonemes, the SAME seed, and
-// therefore the SAME words — with the opposite grammar. Put one proposition through
-// both and everything that differs is the syntax profile's doing.
+// Four parameters are flipped, and each one moves something visible:
 //
-// THE POINT (ROADMAP M17): a language should be able to say how it builds a clause,
-// and Stemma should be able to say whether that combination is a common one — WITHOUT
-// refusing it. This profile is deliberately DISHARMONIC in one place, so the sketch
-// has something true and interesting to report about it.
+//   word_order      sov              -> svo              the verb moves to the middle
+//   adjective       noun_adjective   -> adjective_noun   the adjective changes side
+//   genitive        genitive_noun    -> noun_genitive    so does the possessor
+//   alignment       ergative         -> nominative       and the case marking inverts
 //
-// Asterian is verb-final and head-final almost everywhere: postpositions, possessor
-// before possessed, relative clauses before the noun they modify. The one exception
-// is its adjectives, which follow the noun. That is not a mistake in the fixture and
-// it is not rare in the world either — adjective order is the classic noun-phrase
-// parameter that goes its own way, which is exactly why `headedness()` does not count
-// it.
-//
-// The deliberate oddity is ALIGNMENT + FREE-ish morphology interacting with the case
-// system: Asterian is ergative-absolutive, which is uncommon among verb-final
-// languages but far from unknown (Basque, Georgian, much of Australia). Stemma has no
-// warning for that pairing, and should not invent one — which is itself the lesson:
-// only correlations this program can state honestly are reported.
-//
-// To see the harmony machinery actually fire, flip `adpositions` to `prepositions`.
-// The sketch will tell you that object-verb order usually goes with postpositions,
-// that the combination is attested but uncommon, and that it is not refusing it.
+// The alignment flip is the sharpest of the four, because it is not a reordering: an
+// ergative language marks the agent of a TRANSITIVE clause and leaves an intransitive
+// argument bare-absolutive, and a nominative language does the reverse. Run
+// `SEE(KING)` through both and the same word takes two different suffixes for a
+// reason that is about grammar rather than about order.
 (
-    id: "asterian_grammar",
-    name: "Asterian (grammar)",
+    id: "asterian_grammar_svo",
+    name: "Asterian (grammar, head-initial)",
     lineage_depth_years: 0,
     seed: 42,
 
@@ -99,57 +87,39 @@
 
     prosody: (stress: fixed(from: left, offset: 0)),
 
-    // The case morphemes `stemma say` attaches (M18). An affix's `gloss` is its
-    // feature label — M8's own definition ("PL", "PST") — so `ERG` is where the
-    // ergative marker lives. No typed `case` field: that would need a closed enum of
-    // cases compiled in, and this project does not invent a taxonomy before something
-    // needs one.
-    //
-    // Asterian is ergative-absolutive, so a TRANSITIVE agent takes -ir and everything
-    // else takes -a. Watch what that means for an intransitive clause: the lone
-    // argument takes the ABSOLUTIVE, patterning with the object of a transitive verb
-    // rather than with its subject. That is the whole content of the term, and
-    // `stemma say SEE(KING)` shows it.
+    // The nominative-accusative case pair, to match this language's alignment.
     morphology: (
         morphemes: [
-            (id: "m_erg", role: suffix, gloss: "ERG", form: (syllables: [
-                (pattern: "VC", segments: ["ph_i", "ph_r"]),
+            (id: "m_nom", role: suffix, gloss: "NOM", form: (syllables: [
+                (pattern: "V", segments: ["ph_u"]),
             ])),
-            (id: "m_abs", role: suffix, gloss: "ABS", form: (syllables: [
-                (pattern: "V", segments: ["ph_a"]),
+            (id: "m_acc", role: suffix, gloss: "ACC", form: (syllables: [
+                (pattern: "CV", segments: ["ph_t", "ph_a"]),
             ])),
         ],
     ),
 
-    // DESIGN §7.4's parameters. Every one is a claim about the language, and every
-    // one may be left out — an omitted parameter prints as `—` in the sketch rather
-    // than silently defaulting to whatever is commonest.
-    //
-    // `head_directionality` is NOT here, deliberately: it is a summary of the orders
-    // below, so storing it would be a second source of truth that disagrees with the
-    // first the moment somebody edits one field. `stemma grammar` derives it.
+    // Head-initial throughout, and harmonically so: `stemma grammar` reports no
+    // disharmony for this one either. The pair differs in grammar, not in quality.
     syntax: (
-        note: "Rigidly verb-final, with a rich case system and an evidential contrast the priests are said to have introduced.",
+        note: "Verb-medial and head-initial, with a nominative-accusative case system.",
 
-        word_order: sov,
-        adpositions: postpositions,
-        genitive: genitive_noun,
-        // The one head-initial thing in the language. Adjective order does not track
-        // headedness cross-linguistically, so this is ordinary rather than odd.
-        adjective: noun_adjective,
+        word_order: svo,
+        adpositions: prepositions,
+        genitive: noun_genitive,
+        adjective: adjective_noun,
 
-        alignment: ergative_absolutive,
-        relative_clause: prenominal,
+        alignment: nominative_accusative,
+        relative_clause: postnominal,
 
-        negation: affix,
-        question: particle,
-        pro_drop: yes,
-        evidentiality: two_way,
-        switch_reference: marked,
+        negation: particle,
+        question: intonation,
+        pro_drop: no,
+        evidentiality: none,
+        switch_reference: none,
     ),
 
     notes: [
-        "The M17 acceptance fixture: `stemma grammar` prints §7.4's parameters and reports the harmony of the combination.",
-        "Flip `adpositions` to `prepositions` to see a disharmony warning fire; the language still validates.",
+        "The M18 acceptance fixture (head-initial half). Same phonology and seed as grammar_asterian.ron; only the grammar differs.",
     ],
 )
