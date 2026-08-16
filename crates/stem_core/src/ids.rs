@@ -140,6 +140,21 @@ define_id!(
     MorphemeId,
     "m"
 );
+define_id!(
+    /// Identifies a glyph — one sign of one writing system (M20, `DESIGN.md` §7.6).
+    ///
+    /// Language-scoped and readable like every other id (`docs/adr/0003`): `g_aleph`,
+    /// `g_ka`. It exists so a glyph can have a **history** — §7.6's "a glyph should
+    /// have ancestry just like a word" is the whole reason script is a phase rather
+    /// than a font picker, and an entity with no id cannot descend from anything.
+    ///
+    /// Deliberately not the glyph's *form*: two scripts may draw the same sign
+    /// differently, one sign may be written several ways, and a form changes over
+    /// time while the identity must not — the same argument that keeps `WordEntry`
+    /// keyed by `WordId` rather than by its letters.
+    GlyphId,
+    "g"
+);
 
 #[cfg(test)]
 mod tests {

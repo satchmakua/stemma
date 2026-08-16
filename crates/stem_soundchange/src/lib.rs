@@ -154,4 +154,53 @@ mod guard {
             }
         }
     }
+
+    /// **The engine must not learn what a script is** (M21, §7.6). The third of these
+    /// guards, and the one that makes script *evolution* mean anything.
+    ///
+    /// §7.6's claim is that a glyph's history and a word's history are **independent**.
+    /// The only way that claim can be honest is if a sound change is incapable of
+    /// consulting the spelling — so a rule that deleted /w/ would run identically on a
+    /// language nobody had ever written down, and the four signs it strands are
+    /// discovered afterwards rather than arranged in advance.
+    ///
+    /// If this scan ever fails, the finding in `stemma scripts` has stopped being a
+    /// finding: a rule that could see a glyph could be written to target one, and the
+    /// drift would be staged rather than measured.
+    #[test]
+    fn the_engine_never_references_script() {
+        for (name, src) in [
+            ("apply.rs", include_str!("apply.rs")),
+            ("check.rs", include_str!("check.rs")),
+            ("resolve.rs", include_str!("resolve.rs")),
+            ("rule.rs", include_str!("rule.rs")),
+            ("view.rs", include_str!("view.rs")),
+            ("lib.rs", include_str!("lib.rs")),
+        ] {
+            for (n, line) in src.lines().enumerate() {
+                if line.contains("mod guard") {
+                    break;
+                }
+                let code = line.split("//").next().unwrap_or("");
+                for banned in [
+                    "Glyph", // Glyph, GlyphId, GlyphRole, GlyphStage
+                    "WritingSystem",
+                    "ScriptKind",
+                    "ScriptDrift",
+                    "stem_script",
+                    "script_drift",
+                    "written_phonemes",
+                ] {
+                    assert!(
+                        !code.contains(banned),
+                        "{name}:{} references script (`{banned}`); the engine must stay \
+                         phonology-only — a sound change that could see the spelling could \
+                         be written to target it, and §7.6's independence claim would be \
+                         staged rather than measured (M21)",
+                        n + 1
+                    );
+                }
+            }
+        }
+    }
 }

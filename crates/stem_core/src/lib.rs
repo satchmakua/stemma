@@ -23,7 +23,8 @@ pub mod validate;
 
 pub use errors::{Result, StemmaError};
 pub use ids::{
-    CognateSetId, EventId, LanguageId, MorphemeId, PhonemeId, RuleId, SemanticNodeId, WordId,
+    CognateSetId, EventId, GlyphId, LanguageId, MorphemeId, PhonemeId, RuleId, SemanticNodeId,
+    WordId,
 };
 pub use rng::{RngDomain, StemmaRng, rng_for, rng_for_indexed};
 pub use validate::{Issue, Severity, Validate, ValidationReport};
