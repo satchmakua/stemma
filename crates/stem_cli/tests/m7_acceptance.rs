@@ -150,16 +150,20 @@ fn stemma_profile_prints_the_scored_block_and_stays_quiet_for_the_proto() {
         text.contains("Morphological irregularity"),
         "morphology is a scored dimension now: {text}"
     );
-    // M9 did the same for the semantic row. The deferred block now names design
-    // sections (§7.6 script history, §18 alien modality) rather than milestone
-    // numbers, because neither sits at a numbered milestone.
+    // M9 did the same for the semantic row, M21 for script history and **M23 for
+    // alien embodiment — the last one**. Every dimension §17 names is scored, so the
+    // deferred block is empty and says so.
     assert!(
         text.contains("Semantic drift"),
         "semantics is a scored dimension now: {text}"
     );
+    // The BLOCK survives being empty. It is where this profile admits what it cannot
+    // measure, and a heading that vanishes when the list empties is one nobody notices
+    // going missing when the list refills.
+    assert!(text.contains("not yet modelled"), "{text}");
     assert!(
-        text.contains("§7.6") || text.contains("§18"),
-        "names a deferred dimension: {text}"
+        text.contains("every dimension §17 names is scored"),
+        "an empty deferred block says it is empty: {text}"
     );
     // Honest: no fabricated percentage, no syntax dimension, no new warning.
     assert!(!text.contains('%'), "no fabricated percentage: {text}");

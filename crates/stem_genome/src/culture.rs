@@ -34,7 +34,7 @@ use crate::pad;
 /// language has every meaning on the built-in list" is itself a claim about its
 /// speakers, just an undeliberate one.
 pub fn render_culture(genome: &LanguageGenome) -> Result<String> {
-    let profile = &genome.environment;
+    let profile = genome.ecology();
     let meanings = stem_lexicon::meanings(&genome.concepts);
     let mut out = String::new();
 
@@ -115,7 +115,7 @@ fn render_arithmetic(
     genome: &LanguageGenome,
     meanings: &[Meaning<'_>],
 ) -> Result<()> {
-    let (absent, elaborated, extra) = shaping_counts(&genome.environment, meanings);
+    let (absent, elaborated, extra) = shaping_counts(genome.ecology(), meanings);
     let coined = meanings.len() - absent + extra;
 
     writeln!(out, "  Vocabulary").map_err(fmt_err)?;
@@ -161,7 +161,7 @@ pub fn absences(genome: &LanguageGenome) -> Vec<(&str, &str, &str)> {
             culture_trait,
             reason,
         } = salience(
-            &genome.environment,
+            genome.ecology(),
             &stem_lexicon::ConceptKey::new(meaning.key),
         ) {
             // The key is borrowed from `meanings`, which borrows the compiled table

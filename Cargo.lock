@@ -3191,6 +3191,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "stem_embodiment"
+version = "0.1.0"
+dependencies = [
+ "ron",
+ "serde",
+ "stem_core",
+ "stem_lexicon",
+]
+
+[[package]]
 name = "stem_export"
 version = "0.1.0"
 dependencies = [
@@ -3209,6 +3219,7 @@ dependencies = [
  "ron",
  "serde",
  "stem_core",
+ "stem_embodiment",
  "stem_lexicon",
  "stem_phonology",
  "stem_script",

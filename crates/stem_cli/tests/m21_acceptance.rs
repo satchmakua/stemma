@@ -365,9 +365,13 @@ fn the_script_history_row_finally_scores() {
         !out.contains("§7.6"),
         "script history left the not-yet-modelled block: {out}"
     );
+    // M21 left one deferred dimension, alien embodiment (§18). **M23 filled it**, so
+    // the block is empty now — asserted as the absence of §7.6 rather than the
+    // presence of §18, because the second would have to be rewritten again the moment
+    // the list changed, which is how a test goes quietly dishonest.
     assert!(
-        out.contains("§18"),
-        "alien modality is the last deferred dimension: {out}"
+        !out.contains("§7.6"),
+        "script history left the not-yet-modelled block at M21: {out}"
     );
     // The raw basis rides along, so the band can be checked rather than trusted — the
     // `recorded_changes` discipline.

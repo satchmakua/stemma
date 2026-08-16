@@ -18,6 +18,7 @@
 
 pub mod culture;
 pub mod edit;
+pub mod embodiment_view;
 pub mod etymology;
 pub mod grammar;
 pub mod language;
@@ -31,6 +32,7 @@ pub mod shift;
 
 pub use culture::{absences, render_culture};
 pub use edit::{Edit, EditOutcome, apply as apply_edit, move_rule, new_errors, new_issues};
+pub use embodiment_view::{render_embodiment, unavailable};
 pub use etymology::render_etymology;
 pub use grammar::render_grammar;
 pub use language::LanguageGenome;
@@ -64,8 +66,8 @@ pub(crate) fn pad(text: &str, width: usize) -> String {
     " ".repeat(width.saturating_sub(text.chars().count()))
 }
 pub use profile::{
-    HistoricalDepth, MorphologicalIrregularity, NOT_MODELLED, NotModelled, PlausibilityProfile,
-    ScriptHistory, SemanticDrift, VocabularyShaping, render_profile,
+    EmbodimentDependence, HistoricalDepth, MorphologicalIrregularity, NOT_MODELLED, NotModelled,
+    PlausibilityProfile, ScriptHistory, SemanticDrift, VocabularyShaping, render_profile,
 };
 pub use semantics_view::{render_sense_history, render_word_history};
 // The phonology bands the profile is built from, re-exported so a consumer needs

@@ -1,0 +1,119 @@
+// The Kethi — the M23 acceptance fixture, and the roadmap's own test case:
+// *a profile with no vocal tract but a bioluminescent channel validates, and the
+// engine reports which existing machinery does not apply to it rather than silently
+// producing vowels.*
+//
+//   stemma validate fixtures/luminous_kethi.ron     # valid, and says what it set aside
+//   stemma embodiment fixtures/luminous_kethi.ron   # the body, and what applies to it
+//
+// THIS LANGUAGE HAS NO PHONEMES, AND THAT IS THE POINT.
+//
+// A creature with no vocal tract has no consonants and no vowels, and the honest thing
+// for `phonemes:` to hold is nothing at all. Filling it with fifteen sounds so that
+// `new-lexicon` would run is exactly the failure the acceptance is written against —
+// the tool handing a species that communicates in light a five-vowel system because
+// its machinery had nowhere else to go.
+//
+// So there is nothing here to say words with, and `stemma embodiment` explains that in
+// eight lines rather than leaving it to be discovered. §18.1 IS THE MILESTONE; giving
+// the Kethi a signal system is M24, which generalises a phoneme to a channel signal.
+//
+// WHAT M0 ALREADY KNEW. `PhonemeInventory::validate` errors with `no_nucleus` on an
+// inventory with no vowels, and that error's message has ended with
+// "(a non-vocal language will need the alien modality model of §7.6)" since the first
+// commit. M23 is where that parenthesis comes due: the genome sets `no_nucleus` aside
+// for a speaker with no mouth, names it as set aside, and says why.
+//
+// EVERY CONSEQUENCE BELOW IS REPORTED, NEVER ENFORCED. §18.3 says a simultaneous
+// channel encourages simultaneous morphology; Stemma prints that as a Note and does
+// not go looking for it in the grammar. The Kethi are allowed to be strange in ways
+// their body does not predict, exactly as M17's languages are allowed to be
+// typologically disharmonic.
+(
+    id: "luminous_kethi",
+    name: "Kethi",
+    seed: 108,
+
+    // Nothing. Not an oversight — see the header.
+    phonemes: [],
+
+    embodiment: (
+        note: "A colonial cephalopod of the lightless shelf. It has no lungs, no larynx and no mouth it can shape; it speaks by lighting up.",
+
+        // §18.1's `Option<VocalTractProfile>`, and `None` is the whole alien case.
+        // The field is simply absent.
+
+        channels: [
+            (
+                id: "mantle",
+                name: "The mantle bands",
+                kind: bioluminescent,
+                note: "Four bands along the mantle, each independently coloured and pulsed. A Kethi says four things at once and finds it strange that anyone would say them one after another.",
+
+                // The four constraints that drive a reported consequence (§18.3).
+                persistence: fleeting,          // light is gone as it is made
+                simultaneity: simultaneous,     // -> simultaneous morphology
+                directionality: omnidirectional,
+                privacy: broadcast,
+
+                // The six §18.2 carries and Stemma only prints. Bands, not numbers:
+                // there is no measuring a creature that does not exist.
+                bandwidth: high,
+                range: moderate,
+                energy_cost: high,
+                learnability: moderate,
+                noise: low,
+                cultural_salience: high,
+            ),
+            (
+                id: "ink",
+                name: "Ink marks",
+                kind: chemical,
+                note: "A slow, deliberate register: a packet of ink left on a surface, read hours later by whoever passes. Kethi law is written in it.",
+
+                persistence: persistent,        // -> evidential marking, source tracking
+                simultaneity: sequential,
+                directionality: omnidirectional,
+                privacy: broadcast,             // + persistent -> nothing is said privately
+
+                bandwidth: low,
+                range: low,
+                energy_cost: low,
+                learnability: high,
+                noise: moderate,
+                cultural_salience: high,
+            ),
+        ],
+
+        manipulators: [
+            (name: "the feeding arms", count: 8, dexterity: high,
+             note: "Used to hold and to point, and in the ink register to place a mark precisely."),
+        ],
+
+        social_cognition: (
+            structure: collective,
+            speakers_per_utterance: 1,
+            note: "Not a hive — a Kethi is one mind — but bands are read by everyone in the water, so an utterance has no single addressee.",
+        ),
+
+        // §18.1 makes M15's EnvironmentProfile a field OF the embodiment profile,
+        // which is why the roadmap calls M15 the precursor rather than a detour.
+        environment: (
+            traits: [
+                (
+                    id: "lightless_shelf",
+                    name: "The lightless shelf",
+                    note: "Below the last of the sunlight, on a cold rock shelf. Everything a Kethi sees, something made.",
+                    lacks: [
+                        (concept: "SUN", reason: "No Kethi has seen it. What they have a word for is the warm layer far above, and that word is not this one."),
+                        (concept: "SKY", reason: "There is water, and then there is more water."),
+                    ],
+                ),
+            ],
+        ),
+    ),
+
+    notes: [
+        "The M23 acceptance fixture: no vocal tract, two non-vocal channels, and a tool honest about what it cannot do with them.",
+    ],
+)

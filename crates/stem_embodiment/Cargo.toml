@@ -1,6 +1,6 @@
 [package]
-name = "stem_genome"
-description = "The LanguageGenome aggregate: everything that defines one language."
+name = "stem_embodiment"
+description = "Bodies and channels: what a speaker is, and which of Stemma's machinery applies to it."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -10,12 +10,7 @@ repository.workspace = true
 
 [dependencies]
 stem_core.workspace = true
-stem_phonology.workspace = true
 stem_lexicon.workspace = true
-stem_soundchange.workspace = true
-stem_syntax.workspace = true
-stem_script.workspace = true
-stem_embodiment.workspace = true
 serde.workspace = true
 
 [dev-dependencies]
