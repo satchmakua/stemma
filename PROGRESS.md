@@ -5,9 +5,10 @@ A build log of what shipped and the notable decisions behind it. **Keep it hones
 acceptance tests live in [ROADMAP.md](ROADMAP.md); this is the backward-looking
 "what got done and why" companion.
 
-**Current phase:** **Phase 5 — grammar.** M17 shipped the syntax profile and M18 the
-first sentence; next milestone: **M19 — syntactic change**, where grammaticalization
-finally lands. Phases 0–4 (M0–M16) are complete.
+**Current phase:** **Phase 7 is complete** (M22) — a model can propose the same
+artefacts a person writes, and the engine applies or refuses them by the ordinary code
+path. Next milestone: **M23 — the embodiment profile**, which opens Phase 8 (alien
+modality). Phases 0–6 (M0–M21) are complete.
 
 ## State of the tree
 
@@ -18,11 +19,609 @@ finally lands. Phases 0–4 (M0–M16) are complete.
 | `stem_lexicon` | `WordEntry`, `Lexicon`, the **673**-concept list, cognate-set minting, morphemes / `compose` / `inflect`, senses / `apply_drift` / sense history, derivation patterns / `derive` / `BaseRef`, **culture profile / `build_shaped_lexicon`** | working |
 | `stem_soundchange` | rules, matching, ordered application, resolution, traces | working — **untouched by M8 and M9** |
 | `stem_syntax` | §7.4's parameters, derived headedness, typological harmony, **propositions / `generate` / constructions** | working (M17, M18) |
-| `stem_genome` | `LanguageGenome`, `fork`, `LineageGraph`, family validation, `render_family`, `render_paradigm`, **`with_drift` / `render_word_history`**, plausibility profile | working |
+| `stem_script` | glyphs, `ScriptKind`, sound/meaning→sign mappings, `write`, lossiness, **glyph biographies / `script_drift`** | working (M20, M21) |
+| `stem_assist` | briefings out, proposals in, and one gate between them — no network, no key, no model in the process | working (M22) |
+| `stem_genome` | `LanguageGenome`, `fork`, `LineageGraph`, family validation, renderers, `apply_edit`, `say`, **`apply_shifts` / syntactic history** | working |
 | `stem_io` | RON/JSON load & save | working — **untouched since M0** |
 | `stem_export` | Markdown dictionaries, CLDF CSV, cognate table, family demo | working |
 | `stem_cli` | the `stemma` binary | …plus `profile`, `inflect`, `paradigm`, `drift`, `drifts`; rule files may be `.sc` |
 | `stem_ui` | the `stemma-ui` desktop explorer — native egui; **edits through `apply_edit`** | working (M11, M16) |
+
+---
+
+## M22 — Constrained LLM assistant · built 2026-08-16 · ✓ verified
+
+Phase 7, and the phase with the sharpest constraint on it. **799 tests pass** (up from
+785); clippy clean; fmt clean.
+
+```
+$ stemma accept out/proto.ron --proposal fixtures/proposal_raising.ron \
+      --id raised --name "Raised Asterian" --years 450 --out out/raised.ron
+
+Proposal `raising_and_voicing` — for proto_asterian
+  `rules_raising` — 2 rule(s)  ·  a sound-change rule set
+  written by claude-opus-5 (from `stemma brief fixtures/proto_asterian.ron --for rules`)
+
+  ── the proposer's own words, not the engine's ──
+  │ Two changes: one that destroys a contrast and one that creates one.
+  │ …
+  ── nothing above was parsed, matched, or stored ──
+
+  accepted — `rules_raising` — 2 rule(s) applies cleanly and would produce a traced,
+  reproducible language
+
+  note: [soundchange.phoneme_innovated] the language gained /b/ (`ph_b`) — phonemic split…
+```
+
+And the other half:
+
+```
+$ stemma accept out/proto.ron --proposal fixtures/proposal_incoherent.ron …
+
+  refused — the rule set `rules_assimilation` cannot be applied; nothing was applied
+
+  error: [rules.change_references_unmatched_position] the change copies from After(0),
+  but the environment declares no slot there (r_a01)
+```
+
+No file was written.
+
+### The architecture is decided by the constraint
+
+*No LLM output may mutate a language without passing through validation* (§3.2),
+enforced since M0 when there was nothing to enforce it against. The strongest possible
+enforcement of "the model is not the source of truth" is that **the model is not in the
+process** — so `stem_assist` has no HTTP client, no API key, no `async`, and nothing
+that can fail at a network boundary.
+
+Stemma writes a **briefing** and reads back a **proposal**: a file, in the same formats
+a human writes, which the engine applies by the ordinary code path or refuses. The
+model runs wherever the user likes. That is not a limitation dressed up as a principle
+— it is what makes the guarantee checkable, and it keeps `cargo test --workspace`
+offline and deterministic, which an in-process model would have ended.
+
+It also satisfies the roadmap's third clause exactly: *with the assistant disabled,
+every other command behaves identically, byte for byte.* Operationally, **the assistant
+added no genome field**. A `proposed_by` stamp was the tempting alternative and is
+refused on purpose — an accepted rule set is the same artefact whichever hand wrote it,
+and a field recording otherwise is the engine learning a distinction §3.2 forbids it to
+make. `the_assistant_added_no_field_to_a_language` scans saved files for it.
+
+### The load-bearing test is not the refusal
+
+The constraint does not die by someone writing a bypass. It dies by someone adding a
+*second* path: a fast route for machine-written artefacts, a validator tuned for what
+models tend to get wrong, a flag that skips a check because the briefing already
+covered it. Each is reasonable alone; each ends with two code paths, one less examined
+than the other.
+
+So the test that carries this milestone is
+`an_accepted_proposal_is_byte_identical_to_the_same_rules_typed_by_hand`: the same
+`RuleSet` through `stem_assist::accept` and through `LanguageGenome::evolve` must
+serialise to identical bytes. If a difference ever appears there, a second path exists
+whatever the docs say.
+
+`the_assistant_never_does_the_engines_job` is the structural half — a source scan, the
+shape of `stem_soundchange`'s three guards. `stem_assist` may not name `WordEntry`,
+`Derivation`, `scoped_cognate_set`, `StemmaRng` or `apply_rules`. It is an envelope and
+a gate; everything else goes through `evolve` / `drift` / `apply_edit`.
+
+### The envelope, and why prose needs somewhere to go
+
+A `Proposal` is **artefact + provenance + rationale**, kept apart:
+
+- `artefact` is the only thing the engine sees — a `RuleSet`, a `DriftSet`, a concept
+  list, with no field marking it machine-made.
+- `rationale` is the model's own words. Never parsed, never matched, never stored.
+- `provenance` says who wrote it, for the reader, never for the code.
+
+Without the envelope a model's reasoning ends up in a `note:` field *inside* the rule
+set — stored in the language file, indistinguishable from the author's own. That is
+what "prose it writes is labelled as prose" costs structurally, and
+`the_proposers_prose_is_labelled_as_prose_and_never_stored` hunts four distinctive
+strings from the fixture's rationale through the saved daughter.
+
+The rationale prints **above** the verdict, fenced and attributed, because that is the
+order it happened in: a claim, then a check of the claim. Printed underneath an
+"accepted" it would read as though the engine had endorsed the argument.
+
+### `review` is `accept` with the result thrown away
+
+Not a re-implementation of the engine's checks — the **actual application against a
+clone**, discarded. M16's validate-a-clone rule, and here it makes disagreement
+impossible by construction: a gate that could say "accepted" where accepting then
+refused would be theatre. `a_review_never_disagrees_with_what_accepting_would_do`
+holds both fixtures to it.
+
+### The fixtures are real model output, and one of them was wrong
+
+Both were written by Claude (Opus 5) from `stemma brief`, in this session, and say so
+in their headers. A fixture claiming a provenance it does not have would be the exact
+dishonesty this milestone exists to prevent.
+
+**The first draft of the accepted one was wrong**, and that is recorded in the file. It
+proposed velar palatalization — /k/ fronting to /t/ before a front vowel — and argued
+it well. The engine accepted it and then reported `unnameable_output` on every site:
+setting `[-dorsal, +coronal]` on /k/ leaves the dorsal-dependent `+back` and `-round`
+still specified, and no phoneme and no reference row carries that bundle. The prose was
+right about the sound change and the formalism did not do it. Nothing but running it
+through the engine would have shown that.
+
+The replacement proposes a merger and a split, and makes a **checkable** claim: that
+raising the mid vowels would create homophones. `stemma validate` reports 62 shared
+written forms before and 79 after. The claim was testable and it held.
+
+**The refused fixture is the interesting failure.** Its prose is correct linguistics —
+nasal place assimilation, §7.2's own example, accurately described — and its rule
+copies place from `after[0]` while the environment declares no `after` slot. One
+missing line in a file where every other line is right. Reading the rationale finds
+nothing wrong; only running it does. That is the entire argument for the gate.
+
+And the refusal is **whole**: the set's second rule is fine and does not run either.
+`a_refusal_takes_the_good_rules_down_with_the_bad_one` proves the second rule applies
+cleanly on its own, so its failure in the set is the refusal being whole rather than
+the rule being bad.
+
+### One crash fixed on the way
+
+Adding three subcommands pushed the clap-derived `Command` tree past Windows' 1 MiB
+default main-thread stack **in debug builds** — every invocation overflowed, `--help`
+included, before a line of Stemma's own code ran. Release builds inlined it away and
+looked fine.
+
+That mattered beyond comfort: the acceptance tests shell out to `CARGO_BIN_EXE_stemma`,
+which is the *debug* binary, so the whole suite would have gone down. `main` now runs
+`run()` on a thread with a 16 MiB stack, with the reasoning recorded on the constant —
+the command set growing is the normal course of this project, so the fix belongs there
+rather than in a diet on the help text.
+
+### Invariants worth carrying to M23
+
+- **One apply path, and it is the authored one.** Every arm of `accept` hands the
+  artefact to the function an authored file would have reached.
+- **No genome field, ever, that records how an artefact was written.**
+- **`review` is a dry run of `accept`, not a second opinion.**
+- **Prose lives in the envelope**, printed fenced and attributed, and never in a
+  language file.
+- **A proposal names its target**, and one aimed at another language is refused before
+  anything is tried.
+
+### What is deliberately unbuilt
+
+**In-process model invocation.** No HTTP client, no key handling, no `--model` flag.
+Adding one would make the test suite network-dependent and nondeterministic, and would
+put an API client in a tool whose project format is files (§19.2). The out-of-process
+boundary is the enforcement mechanism, not an omission — and a user who wants
+automation can pipe `stemma brief` into any assistant and `stemma review` the answer.
+
+**§6.5's "translate small phrases".** `stemma say` (M18) already puts a proposition
+through the formal grammar; a model translating *free* text would be producing surface
+forms the engine never made, which is the one thing that must not happen.
+
+---
+
+## M21 — Script evolution · built 2026-08-16 · ✓ verified
+
+Phase 6 closes with §7.6's real claim made real: **a glyph has a history of its own,
+and it comes apart from the language's.** **785 tests pass** (up from 761); clippy
+clean; fmt clean.
+
+§7.6's worked chain, walked:
+
+```
+$ stemma glyph-trace out/written.ron ge_star
+
+★  ge_star — the star
+  The Emmen signs (logography)
+
+  0  pictogram      ✶    = STAR
+                  Six scratches from a common centre. A drawing of the thing.
+  1  logogram       ✶    = STAR
+                  The same shape, but now a WORD rather than a picture.
+  2  determinative  ✶    (neither sound nor meaning)
+                  Silent. Written before a god's name, and never read aloud.
+  3  rebus sign     ✶    /s/
+                  The hinge: borrowed for the SOUND its old word began with.
+  4  phonogram      ★    /s/
+                  Three strokes, written fast with a reed.
+  →  now            ★    = STAR
+```
+
+And then the half that makes it *evolution* rather than a biography field:
+
+```
+$ stemma apply-rules out/written.ron --rules fixtures/rules_glide_loss.sc \
+      --id asterian_late --name "Late Written Asterian" --years 450 --out out/written_late.ron
+$ stemma glyph-trace out/written_late.ron g_w --script kirran
+
+w  g_w — the hook
+  0  pictogram   ʖ    = WATER
+  1  rebus sign  ʖ    /w/
+  →  now         w    /w/
+
+  This sign has outlived its sound: no word of Late Written Asterian contains what it
+  writes any more, and it is still on the page. It is recorded writing /w/ in the past.
+```
+
+### The clause the milestone turns on
+
+§7.6 says *a glyph should have ancestry just like a word* — and that the two are
+**independent**. The second half is the whole milestone. A biography hung on a sign is
+a `Vec` with prose in it; any file format can hold one, and holding one proves nothing.
+What makes this script *evolution* is that the sign's history and the language's are
+measured separately and observed to come apart.
+
+So the fixture does it the only honest way. `fixtures/rules_glide_loss.sc` is two
+ordinary sound changes that **have never heard of the script**: glide loss deletes
+/w/ and /j/, intervocalic voicing mints /b/ /d/ /ɡ/. They name feature bundles. They
+would run identically on a language nobody had ever written down. What they do to the
+Kirran alphabet is *found afterwards*:
+
+- four signs (`g_w`, `g_y`, `gt_w`, `gt_y`) are left writing sounds no word contains;
+- three new sounds have no letters, and 125 words can no longer be spelled in full.
+
+Two tests attack the alternative. `nothing_in_the_change_file_mentions_the_script`
+scans the rule directives for `glyph`, `script`, `kirran`… — and the structural version
+that actually lasts is a new source-scan guard,
+`the_engine_never_references_script`, the **third** of `stem_soundchange`'s guards
+after morphology (M8) and semantics (M9). The engine cannot name a glyph type, so a
+rule cannot be written to target one, so the drift cannot be staged.
+
+### The trap: the inventory is the wrong place to ask
+
+`apply_rules` only ever **grows** an inventory — a phoneme stays in it after the last
+word containing it changed, so earlier trace steps keep resolving. Asking the inventory
+"does this language still have /w/?" therefore answers *yes* forever, and the fossil
+finding would never fire once.
+
+Every count in `script_drift` comes from the **lexicon**.
+`the_finding_comes_from_the_lexicon_and_not_from_the_inventory` pins it by asserting
+both halves at once: /w/ is still sitting in the daughter's inventory, no word contains
+it, and the sign is reported as a fossil anyway. That is the test that would catch a
+future "simplification" to the obvious-looking check.
+
+### A stage is a `RuleApplicationTrace`, and the present is not one
+
+`Glyph::history` is `Derivation`'s shape exactly: `history[0]` is the pictogram the way
+`Derivation::input` is the proto-form, the entries are the steps, and **the present is
+not in there** — the current shape is `Glyph::form` and the current job is whatever the
+script's `mappings` say. Storing the present twice is the desynchronisation M2 banned
+when it refused to keep a rendered string beside `phonemic_form`, and the fixture
+demonstrates why it matters: `ge_star`'s last *recorded* stage is a phonogram for /s/,
+while its job *today* is logographic. The two differ, and only one of them is stored.
+
+An empty `form` on a stage means the shape did not change — most stages change the job
+only — and the renderer prints nothing rather than filling in the current shape, which
+would claim a redraw that never happened.
+
+**No stage carries a year.** M19's rule: a trigger is verified, never asserted. A
+glyph's biography is authored prose the engine cannot check, so a date would dress an
+assertion up as a measurement. The order is the claim, and order is all §7.6 states.
+
+### §17's last-but-one row
+
+`ScriptHistoryCoherence` left `NOT_MODELLED` — M7's deferred list is down to
+**one** row (alien embodiment, §18). `ScriptHistory` is a band over the same
+`DEEP_ORTHOGRAPHY` the `deep_orthography` Note reads, so band and Note cannot disagree
+(`docs/adr/0009`, fourth instance). The reference daughter reads `historical` at five
+mismatches and sits deliberately below the bar of eight — M8's rule that the tool's own
+showcase must not trip the extreme threshold.
+
+The constant is a deliberately loose tripwire and says so: there is no attested
+"orthographic depth" scale, and inventing one would be the fabrication §17 forbids.
+
+### The lie the logography nearly told
+
+The first working version reported the Emmen signs as *"the spelling still matches the
+pronunciation"* — and it passed its tests, because `script_drift` correctly returned
+zero for it. But a logography encodes no sound; crediting it with keeping up is
+crediting it with winning a race it is not running, and `Phonemic` in the profile would
+have claimed every sound had a sign in a script that has no sound signs at all.
+
+Three places now say the true thing instead, and one band value exists for it:
+
+```
+    writes no sounds, so no pronunciation can leave it behind
+    This sign writes no sound, so no sound change can strand it — which is why signs
+    like it outlast the pronunciations around them.
+    Script history   sound-independent  (writes meanings; no pronunciation to drift from)
+```
+
+That independence is not a gap in the model. It is the reason logographic scripts
+outlive the pronunciations around them, and it deserved a sentence rather than a zero.
+
+### Invariants worth carrying to M22
+
+- **The drift is a finding, not a field.** Nothing in any fixture declares that a
+  script fell behind; `script_drift` computes it from the word list. That is the M19
+  discipline — author proposes, engine verifies — and M22's LLM assistant needs it
+  intact, because a model that could *assert* a finding could assert a false one.
+- **`the_engine_never_references_script`** joins the morphology and semantics guards.
+  Three source scans now hold `apply_rules` to phonology.
+- **Every script issue is a Note or a Warning.** A drifted orthography is the normal
+  fate of writing, not a defect: English is deep and is not thereby broken.
+- **A glyph id is script-scoped**, so `resolve_glyph` refuses an ambiguous one and
+  names the scripts rather than tracing the wrong sign's biography.
+- **`history` is additive.** An M20 glyph with no biography serialises with no
+  `history` bytes at all.
+
+### What is deliberately unbuilt
+
+**Cross-glyph ancestry** — one sign descending from a sign in *another* script, the way
+Latin `A` descends from Phoenician *aleph*. M21 builds the same-identity chain §7.6's
+example describes and the roadmap's test asks for ("walks a glyph back to its
+pictogram"). Script *borrowing* is a contact fact between two writing systems, and
+modelling it without a donor script in the file would be M15's borrowed-looking
+words again.
+
+**A logogram whose meaning the language lost.** A real kind of fossil, but it arrives
+through semantic drift (M9) rather than the sound change this milestone measures, and
+answering it properly needs sense reasoning rather than a mapping lookup. `fossils` is
+phonographic signs only, and the doc comment says so.
+
+---
+
+## M20 — Glyphs & writing systems · built 2026-08-15 · ✓ verified
+
+Phase 6 opens: a language can be **written down**, and the tool says what the writing
+lost. **761 tests pass** (up from 728); clippy clean; fmt clean.
+
+```
+$ stemma new-lexicon fixtures/written_asterian.ron --out out/written.ron
+$ stemma write out/written.ron star
+
+sosem
+  sosem  "star"  ·  The Kirran alphabet (alphabet)
+
+  s     /s/           [g_s]
+  o     /o/           [g_o]
+  s     /s/           [g_s]
+  e     /e/           [g_e]
+  m     /m/           [g_m]
+
+  every sound is written; this spelling can be read back exactly.
+
+$ stemma write out/written.ron star --script tirran
+
+SSM
+  sosem  "star"  ·  The Tirran abjad (abjad)
+
+  S     /s/           [gt_s]
+  S     /s/           [gt_s]
+  M     /m/           [gt_m]
+
+  Not written:
+    /o/  — by design
+    /e/  — by design
+
+  2 sound(s) are not written, which is what an abjad does — a reader supplies them
+  from knowing the language. This spelling does not round-trip, and is not meant to.
+```
+
+One phonology, one seed, three scripts. Everything that differs between the spellings
+is attributable to the mapping — the M15 (two ecologies) and M18 (two grammars) shape
+again.
+
+### The clause the milestone turns on
+
+ROADMAP M20's acceptance ends *"rather than pretending round-trip."* Writing a word in
+a script is a lookup table and would be a morning's work. What makes it a milestone is
+that a script is **allowed to lose things**, and there are two comfortable lies
+available:
+
+1. **Invent the missing signs** so the round trip works. An abjad with vowel letters is
+   an alphabet, and the author asked for an abjad.
+2. **Drop them quietly**, so `SSM` reads as a complete spelling of *sosem*.
+
+So `Written` carries `unwritten` alongside `glyphs` **every time**, `lossiness()` states
+which situation you are in **including when nothing was lost**, and the round-trip claim
+is *measured* rather than announced: `the_round_trip_claim_is_true_of_the_alphabet_and_false_of_the_abjad`
+replays each sign's `covers` into a segment list and compares it with the word.
+
+A report that only ever spoke up about failure would let silence read as completeness —
+which is lie (2) wearing a different hat.
+
+### A glyph is an entity, not a character
+
+§7.6's claim is that *a glyph should have ancestry just like a word*, and that decides
+the model. `Glyph` is `{ id, form, name, note }` — `form` is how it is drawn **today**,
+`id` is what it **is**. `a_glyph_keeps_its_identity_when_its_form_is_redrawn` redraws
+every sign in the abjad and asserts the same glyphs still wrote the word: the page looks
+different, the mapping is untouched. That identity is what M21's descent hangs from, and
+it would be impossible if the character were the identity.
+
+`GlyphId` joins the typed-id family in `stem_core` with prefix `g`.
+
+### What the `kind` is for, and what it is not for
+
+`ScriptKind` does **not** decide the mapping — the author declares that sign by sign.
+The kind decides exactly one thing: what counts as *expected*. An abjad with no vowel
+signs is doing its job (a Note naming the design); an alphabet with none has a hole (a
+Warning naming the gap). Same fact, two readings, and
+`a_hole_in_an_alphabet_reads_as_a_gap_and_not_as_a_design` pins that they never print
+the same sentence. `Unwritten::expected` is a field rather than a judgement made at the
+point of printing for that reason.
+
+### The logography was nearly scaffolding
+
+The first draft declared `Mapping::Concept` and `ScriptKind::Logography` — and nothing
+consumed either. A grep during the inline review found it: `write` never looked at the
+`Concept` variant, so `kind: logography` was a label that changed nothing observable,
+and a logographic script would have spelled nothing while reporting all ten of its
+consonants as *gaps in the mapping*. Exactly the failure M19's notes name ("a
+`Consequence` that changed nothing observable would be scaffolding"), and logography is
+in M20's own scope line.
+
+So it is built. A logogram wins outright over the letters, covers no sounds, and puts
+**every** segment in `unwritten` — because you cannot read a pronunciation off `★`.
+`ScriptKind::expects_unwritten(is_vowel)` replaced `expects_unwritten_vowels()`: a
+logography answers `true` regardless, since asking per-vowel would report its consonants
+as holes in a mapping that was never phonographic.
+
+### Written nothing ≠ written incompletely
+
+Running it turned up a second lie the first version told. A logography has signs only
+for the words that earned one; ask for `king`, which has none, and the output was an
+empty spelling explained as *"5 sound(s) are not written, which is what a logography
+does — a reader supplies them from knowing the language."* False on both halves: nothing
+was written, and there is nothing for a reader to supply *from*.
+
+Two fixes. `write_with_inventory` refines the kind's general answer with the per-word
+fact (`expected` is true for a logography only when a sign actually fired), and
+`lossiness` gets a case ahead of the others:
+
+```
+`emmen` has no sign for this word, so none of its 5 sound(s) reached the page at all.
+Nothing was written — which is not the same as something written incompletely.
+```
+
+The renderer names the empty spelling too, rather than leaving a blank line that reads
+as a rendering bug. The spelling line itself stays genuinely empty: a placeholder
+character there would be inventing a sign.
+
+### Reported, never enforced
+
+`written_asterian.ron` has an abjad that cannot write five of its fifteen sounds and a
+logography that cannot write any of them, and the file is **valid** —
+`a_script_that_cannot_write_the_language_is_a_note_and_not_an_error`. Two `lossy_script`
+Notes, no Warnings, no Errors. §17 again.
+
+The two silences get different explanations: the abjad `writes no vowels`, the logography
+`writes meanings rather than sounds`. Reusing one message for both would be the tool
+asserting something false about a script kind in order to save a branch.
+
+### Invariants worth carrying to M21
+
+- **Every sound is accounted for**: written or listed as unwritten, never simply gone.
+  `no_sound_is_ever_lost_without_being_named` sweeps all three scripts × 673 words.
+- **The abjad writes no vowel anywhere in the lexicon** — checked over the whole
+  lexicon, not one convenient word, because inventing a sign is the failure this
+  milestone exists to prevent.
+- **A logogram is keyed by `ConceptKey`, never `WordId`** — the M14 rule, which applies
+  to scripts too: `w_0080` means whatever the concept list holds at position 80, so an
+  append would silently repoint every sign in the block.
+- **`scripts` is additive.** `proto_asterian.ron` gains no `scripts` bytes on a save
+  round trip, pinned by `a_pre_m20_file_loads_and_saves_without_gaining_a_scripts_block`.
+- **Naming a script that does not exist errors** rather than falling back to the first.
+  A language may have several, and writing in the wrong one quietly is worse than saying
+  so.
+- **`stem_script` names no engine type.** `write` is pure, total and RNG-free, and the
+  crate sits above `stem_lexicon` (for `ConceptKey`) and `stem_phonology`, below
+  `stem_genome`. The renderer lives in `stem_genome::script_view`, the `render_grammar`
+  precedent.
+
+### What is deliberately unbuilt
+
+**Morphographic mapping.** §7.6 mentions it and it is real — Chinese radicals, Egyptian
+determinatives — but a morphographic sign needs a morpheme to point at, and this
+project's morphemes are language-scoped citation forms rather than the shared components
+a determinative system uses. Shipping a `Mapping::Morpheme` that pointed at a citation
+form would be the same scaffolding the logography nearly was.
+
+**Glyph ancestry.** M20 gives a glyph the *identity* that lets it descend from
+something. M21 gives it the descent, and with it §17's script-history row — M7's last
+deferred plausibility dimension.
+
+---
+
+## M19 — Syntactic change · built 2026-08-12 · ✓ verified
+
+Phase 5 closes with §7.4's closing claim made real: **syntax evolves, and the cause is
+on the record.** **728 tests pass**; clippy clean; fmt clean.
+
+```
+$ stemma apply-rules out/old.ron --rules fixtures/rules_case_erosion.sc \
+      --id middle --name "Middle Asterian" --years 600 --out out/middle.ron
+$ stemma shift out/middle.ron --changes fixtures/shift_asterian.ron \
+      --id modern --name "Modern Asterian" --years 60 --out out/modern.ron
+
+Syntactic history — Modern Asterian
+
+  0  Word order fixes as the ergative erodes  (sx_0001)
+     word order became SOV
+     because `m_erg` surfaces on no word of this language; `r_e02` is the recorded
+     sound change that erased it
+     the cause is on the record: sound change `r_e02`
+```
+
+And the language changes with it:
+
+```
+                word order   alignment              SEE(KING, STAR)
+  Old Asterian  free         ergative-absolutive    mostair ponti sosema
+  Modern        SOV          neutral                most sosem pont
+```
+
+### The clause the whole design turns on
+
+ROADMAP M19's acceptance ends *"— not asserted by the author."* That decides
+everything. It would have been trivial and worthless to let an author write "at year
+640, word order becomes SVO"; the claim worth making is that the shift happened
+*because* a sound change destroyed the case marking, and a claim like that is only
+worth anything if the program can check it.
+
+So the work is split where the knowledge actually is:
+
+- The **author** proposes a consequence — *when the ergative is gone, order fixes to
+  SOV*. No engine can derive that. Real languages that lose case go several different
+  ways, and which one this people went is a fact about them. Compiling a choice in
+  would be M15's ecology→vocabulary inference table, one layer up.
+- The **engine** establishes the antecedent. It inflects **every noun in the lexicon**
+  with the named affix, runs the language's own recorded sound changes over the
+  results, and looks at what is left. If the marker survives anywhere, the change is
+  refused and says on which word.
+- **Neither writes down the rule.** That is found by replaying each word's derivation
+  one step at a time to see which step emptied the affix's span — `render_paradigm`'s
+  technique, put to a new use.
+
+That is the same relationship a `RuleSet` has to the sound-change engine and a
+`DriftSet` has to `apply_drift`: authored data, applied or refused by code. It is also
+— deliberately — the exact shape M22's LLM assistant needs.
+
+### Decisions worth knowing
+
+**A trigger is never a date.** `Trigger::CaseMarkerLost` is the only variant, and a
+date-based one would be an assertion wearing a condition's clothes.
+
+**Probing is the measurement, not a proxy for it.** Composing the affix onto real
+nouns and running the real history is exactly what a speaker of that stage does when
+they inflect a noun. Running the affix's citation form *alone* would have been cheaper
+and wrong — sound changes are conditioned by environment, and `-a` survives after a
+consonant and vanishes after a vowel under one rule.
+
+**The probe starts from `Derivation::input`, not from the current form.** That field
+is documented as "the form entering the first rule this word ever met", so composing
+from it and running the whole history reproduces the stage correctly. Composing from
+`phonemic_form` — which has already been through those rules — would apply the history
+twice and report erosion that never happened. This was caught while writing the
+module, not by a test, and it is the kind of error that produces plausible output.
+
+**Lost means lost everywhere.** A marker that erodes in some environments and not
+others is *allomorphy*, which M8 already models and which is not a syntactic event.
+
+**Refusal is reported per change.** "Why did this not apply?" is M10's diagnostic
+discipline, and it is the question an author has when nothing happened. A run in which
+nothing fired also earns a Warning, so a silent no-op is impossible to miss.
+
+### Rule order reaches the grammar
+
+`-ir` ends in a rhotic, so final-vowel loss alone leaves it intact; the rhotic has to
+go first, and only then is the stranded `-i` a word-final vowel like any other.
+`reordering_the_sound_changes_stops_the_shift_from_firing` swaps the two rules with
+M16's `move_rule` and shows the ergative surviving — so the shift is refused.
+
+M3 proved rule order was observable in one word (`tag` vs `tak`). This is the same
+fact deciding whether a language keeps its case system.
+
+### What is deliberately not built
+
+M19 names three examples. **Only case erosion is implemented.** Topic markers becoming
+articles and serial verbs becoming auxiliaries are not a matter of effort: this
+project has no article, no auxiliary and no serial verb in its model, so "becomes an
+article" could only be a string. A `Trigger::TopicMarkerLost` with a
+`Consequence::BecomesArticle` that changed nothing observable would be scaffolding
+pretending to be a feature — what `docs/adr/0008` refused for `LineageEdgeKind` and M4
+refused for `WordEntry.ancestor`. They arrive when there is a category to become.
 
 ---
 

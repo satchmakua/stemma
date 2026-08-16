@@ -12,8 +12,8 @@ The name comes from textual criticism: a *stemma* is the reconstructed family tr
 showing how surviving manuscripts descend from a lost original. That is exactly
 this program's core data structure.
 
-**Status:** **Phases 0–4 complete (M0–M16); Phase 5 under way (M17–M18 done)** — the
-diachronic kernel runs end to end. Languages get a feature-based phonology,
+**Status:** **Phases 0–7 complete (M0–M22)** — the diachronic kernel runs end to
+end. Languages get a feature-based phonology,
 generate seeded roots, undergo ordered sound change, fork into daughters with their
 own histories, and line up in a comparative cognate table; `stemma demo` tells the
 whole story as one Markdown document, and `stemma profile` scores a language
@@ -44,12 +44,31 @@ common one — **without refusing it**, and without inventing a statistic to sou
 authoritative. And M18 produced **the first sentence**: `stemma say` puts a
 proposition through a language's own grammar, and the same proposition through two
 grammars built on one phonology and one seed comes out in a different order with
-different case marking — because the grammars differ, not the words. 711 tests pass,
-and every step is deterministic and traced.
+different case marking — because the grammars differ, not the words. And M19 closed
+the phase by making grammar itself historical: two ordinary sound changes erode a
+language's case endings, and Stemma **finds** that the marking is gone, applies the
+consequence its author proposed, and records the sound change that caused it — a rule
+name nobody wrote down. **M20 opened Phase 6** by giving a language a way to be
+written down: one phonology under three scripts, and `stemma write` renders a word in
+any of them **and says what did not reach the page**. The alphabet writes `sosem` and
+can be read back exactly; the abjad writes `SSM` and cannot — which is what an abjad
+is, not a bug in it — and the logography writes `★`, one sign for the meaning and
+none of the sounds. A script is allowed to lose things; what Stemma is not allowed to
+do is hide it. And **M21 closed the phase** by giving the spelling a history of its
+own: `stemma glyph-trace` walks a sign back through §7.6's chain — pictogram, logogram,
+silent determinative, rebus, letter — and then two ordinary sound changes that have
+never heard of the script leave four letters writing sounds nobody says any more.
+Stemma **finds** that, from the word list, and §17's script-history row finally scores.
+And **M22 let a model in, on the tool's terms**: `stemma brief` writes everything a
+model needs to know about a language, and what comes back is a *proposal* — a rule set
+in the same format a person writes, which the engine applies or refuses by the ordinary
+code path. There is no model in the process, no API key, no network; the boundary *is*
+the enforcement. A proposal whose prose is impeccable and whose formalism is incoherent
+gets refused whole, and the reasoning that argued for it is printed as prose and never
+stored in the language. 799 tests pass, and every step is deterministic and traced.
 
-Six milestones remain, and they are the interesting ones: syntactic change (where
-grammaticalization lands), writing systems, a constrained LLM assistant, and alien
-modality. See
+Two milestones remain, both about alien modality — §7.7's pulse, scent and gesture
+languages. See
 [ROADMAP.md](ROADMAP.md) for the plan,
 [docs/GUIDE.md](docs/GUIDE.md) for how to use what exists, and
 [PROGRESS.md](PROGRESS.md) for what has shipped.
@@ -394,29 +413,75 @@ Phase 1 capstone. (The exact bytes are pinned as a snapshot at
 
 ### Commands
 
+**Inspect a language**
+
 | Command | What it does |
 |---|---|
 | `stemma validate <file>` | Check a language for structural errors and typological oddities (exit 1 if invalid) |
-| `stemma profile <file>` | Print the §17 plausibility profile: scored typological dimensions plus the report |
 | `stemma info <file>` | Print a language's inventory, lineage, and root shapes |
 | `stemma features <file>` | Show each phoneme's resolved feature matrix |
+| `stemma profile <file>` | Print the §17 plausibility profile: scored typological dimensions plus the report |
+| `stemma grammar <file>` | Print §7.4's parameters as a sketch, with the typological harmony of the combination (M17) |
+| `stemma culture <file>` | Say *why* this language has the vocabulary it has — its elaborations, and every gap with its reason (M15) |
+| `stemma scripts <file>` | List its writing systems, what each carries, and how far each has fallen behind the language (M20, M21) |
+
+**Make words**
+
+| Command | What it does |
+|---|---|
 | `stemma generate-roots <file>` | Generate root words (`--count`, `--seed`, `--ipa`) |
 | `stemma new-lexicon <file>` | Coin one word per concept (`--seed`, `--concepts`, `--out`) |
+| `stemma derive <file>` | Coin new words out of the words already there: compounds and productive affixation (M14) |
+| `stemma inflect <file> --paradigm <id>` | Materialise a paradigm's cells into the lexicon — the regular forms (M8) |
+
+**Change it over time**
+
+| Command | What it does |
+|---|---|
+| `stemma apply-rules <file>` | Apply an ordered rule set, producing a descendant language |
+| `stemma drift <file> --drift <f>` | Apply authored semantic shifts, producing a language with new *meanings* (M9) |
+| `stemma shift <file> --changes <f>` | Apply proposed syntactic changes — each one the engine verifies before it fires (M19) |
+| `stemma fork <parent>` | Fork a daughter (`--id`, `--name`, `--rules`, `--years`, `--out`) |
+
+**Ask why**
+
+| Command | What it does |
+|---|---|
+| `stemma trace <file> <word>` | Print a word's derivation, rule by rule |
+| `stemma trace-word <file> <meaning>` | The same, addressed by meaning (§10.2) |
+| `stemma paradigm <file> --paradigm <id>` | Render a paradigm: regular on a proto, irregular after sound change, with each cell's why |
+| `stemma shifts <file>` | Print the recorded syntactic history: what changed, and which sound change caused it (M19) |
+| `stemma glyph-trace <file> <glyph>` | Walk a sign back to its pictogram, and say whether its sound is still spoken (M21) |
+| `stemma brief <file>` | Write the briefing a model needs before proposing anything (`--for rules\|drift\|concepts`) (M22) |
+| `stemma review <file> --proposal <p>` | Dry-run a proposal through the engine and report the verdict; writes nothing (M22) |
+| `stemma accept <file> --proposal <p>` | Apply a proposal by the ordinary path, or refuse it whole (M22) |
+| `stemma family <files>…` | Assemble a lineage; print the family tree, cognate coverage, and report |
+| `stemma cognates <files>… --meanings <m>…` | The comparative table: each meaning's reflexes across the family, joined by ancestry |
+
+**Use it**
+
+| Command | What it does |
+|---|---|
+| `stemma say <file> <proposition>` | Put a proposition through this language's grammar and print the constructions that built it (M18) |
+| `stemma write <file> <word>` | Write a word in its script, and say what did not reach the page (`--script`) (M20) |
 | `stemma export-md <file>` | Write the lexicon as a Markdown dictionary |
 | `stemma export-csv <file>` | Write the lexicon as CLDF-shaped CSV |
-| `stemma apply-rules <file>` | Apply an ordered rule set, producing a descendant language |
-| `stemma inflect <file> --paradigm <id>` | Materialise a paradigm's cells into the lexicon — the regular forms (`--out`) |
-| `stemma paradigm <file> --paradigm <id>` | Render a paradigm: regular on a proto, irregular after sound change, with each cell's why |
-| `stemma drift <file> --drift <f>` | Apply authored semantic shifts, producing a language with new *meanings* |
-| `stemma drifts <file>` | Validate and summarise a drift-set file |
-| `stemma fork <parent>` | Fork a daughter (`--id`, `--name`, `--rules`, `--years`, `--out`) |
-| `stemma family <files>…` | Assemble a lineage; print the family tree, cognate coverage, and report |
-| `stemma cognates <files>… --meanings <m>…` | Print the comparative table of each meaning's reflexes across the family |
-| `stemma trace <file> <word>` | Print a word's derivation, rule by rule |
-| `stemma trace-word <file> <meaning>` | Print a word's derivation, addressed by meaning |
 | `stemma demo` | Write the "Growing a Language Family in 90 Seconds" document (`--out`) |
-| `stemma-ui [files…]` | Open the desktop explorer: trace a word, compare daughters (read-only) |
+| `stemma-ui [files…]` | Open the desktop explorer: trace a word, compare daughters, edit behind Save (M11, M16) |
+
+**Edit, and check an authored file** — every edit goes through one library call, so the
+window and the command line produce byte-identical files (M16).
+
+| Command | What it does |
+|---|---|
+| `stemma set-gloss <file> <id> <gloss>` | Change a word's gloss |
+| `stemma add-word <file> --form <f> --gloss <g>` | Add a hand-authored word |
+| `stemma remove-word <file> <id>` | Remove a word |
+| `stemma declare-concept <file> --key <K> --gloss <g>` | Declare a project concept the built-in list does not hold |
+| `stemma reorder-rule <file> --from <i> --to <j>` | Move a rule within a rule set |
 | `stemma rules <file>` | Validate and summarise a rule-set file (`.ron`, `.json`, or `.sc`) |
+| `stemma drifts <file>` | The same, for a drift set |
+| `stemma derivations <file>` | The same, for derivation patterns |
 | `stemma convert <in> <out>` | Convert a project between RON and JSON |
 
 | Task | Command |

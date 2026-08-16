@@ -1,0 +1,133 @@
+// Old Asterian — the M19 acceptance fixture, and the "before" of a grammaticalization.
+//
+// A language with FREE constituent order and a working ergative case system. The two
+// go together: if every noun phrase says what it is doing by its ending, order is
+// free to carry emphasis instead of grammatical role. That is not a coincidence in
+// the world's languages and it is not one here either — M17's own
+// `free_order_without_case` check knows the pairing, and stays quiet on this file
+// because the case system is intact.
+//
+// THE POINT (ROADMAP M19): syntax evolves, and the cause is on the record.
+//
+//   stemma new-lexicon fixtures/grammar_free_asterian.ron --out out/old.ron
+//   stemma apply-rules out/old.ron --rules fixtures/rules_case_erosion.sc \
+//       --id eroded --name "Middle Asterian" --years 600 --out out/middle.ron
+//   stemma shift out/middle.ron --changes fixtures/shift_asterian.ron \
+//       --id modern --name "Modern Asterian" --years 60 --out out/modern.ron
+//   stemma shifts out/modern.ron
+//
+// Two ordinary sound changes — final rhotic loss, then final unstressed vowel loss —
+// eat both case suffixes. Nothing in that rule set knows what a case is; it is the
+// same engine that has been deleting final vowels since M3.
+//
+// Then `shift` checks whether the ergative marker still surfaces ANYWHERE, finds it
+// does not, and applies the author's proposed consequence — recording the RuleId that
+// erased it. The author never wrote that rule's name down. That is the difference
+// between a causal chain and an assertion, and it is the whole milestone.
+(
+    id: "asterian_free",
+    name: "Old Asterian",
+    lineage_depth_years: 0,
+    seed: 42,
+
+    phonemes: [
+        // --- Stops ---
+        (id: "ph_p", ipa: "p", kind: consonant, frequency_weight: 30,
+         features: ["-syllabic", "+consonantal", "-sonorant", "-approximant", "-continuant", "-nasal", "-lateral", "-trill", "-voice", "+labial", "-coronal", "-dorsal", "-round"]),
+        (id: "ph_t", ipa: "t", kind: consonant, frequency_weight: 50,
+         features: ["-syllabic", "+consonantal", "-sonorant", "-approximant", "-continuant", "-nasal", "-lateral", "-trill", "-voice", "-labial", "+coronal", "-dorsal"]),
+        (id: "ph_k", ipa: "k", kind: consonant, frequency_weight: 45,
+         features: ["-syllabic", "+consonantal", "-sonorant", "-approximant", "-continuant", "-nasal", "-lateral", "-trill", "-voice", "-labial", "-coronal", "+dorsal", "+high", "-low", "+back", "-round"]),
+
+        // --- Nasals ---
+        (id: "ph_m", ipa: "m", kind: consonant, frequency_weight: 35,
+         features: ["-syllabic", "+consonantal", "+sonorant", "-approximant", "-continuant", "+nasal", "-lateral", "-trill", "+voice", "+labial", "-coronal", "-dorsal", "-round"]),
+        (id: "ph_n", ipa: "n", kind: consonant, frequency_weight: 40,
+         features: ["-syllabic", "+consonantal", "+sonorant", "-approximant", "-continuant", "+nasal", "-lateral", "-trill", "+voice", "-labial", "+coronal", "-dorsal"]),
+
+        // --- Fricative ---
+        (id: "ph_s", ipa: "s", kind: consonant, frequency_weight: 35,
+         features: ["-syllabic", "+consonantal", "-sonorant", "-approximant", "+continuant", "-nasal", "-lateral", "-trill", "-voice", "-labial", "+coronal", "-dorsal"]),
+
+        // --- Liquids ---
+        (id: "ph_l", ipa: "l", kind: consonant, frequency_weight: 30,
+         features: ["-syllabic", "+consonantal", "+sonorant", "+approximant", "+continuant", "-nasal", "+lateral", "-trill", "+voice", "-labial", "+coronal", "-dorsal"]),
+        (id: "ph_r", ipa: "r", kind: consonant, frequency_weight: 25,
+         features: ["-syllabic", "+consonantal", "+sonorant", "-approximant", "+continuant", "-nasal", "-lateral", "+trill", "+voice", "-labial", "+coronal", "-dorsal"]),
+
+        // --- Glides ---
+        (id: "ph_w", ipa: "w", kind: consonant, frequency_weight: 20,
+         features: ["-syllabic", "-consonantal", "+sonorant", "+approximant", "+continuant", "-nasal", "-lateral", "-trill", "+voice", "+labial", "-coronal", "+dorsal", "+high", "-low", "+back", "+round"]),
+        (id: "ph_j", ipa: "j", romanization: "y", kind: consonant, frequency_weight: 10,
+         features: ["-syllabic", "-consonantal", "+sonorant", "+approximant", "+continuant", "-nasal", "-lateral", "-trill", "+voice", "-labial", "-coronal", "+dorsal", "+high", "-low", "-back", "-round"]),
+
+        // --- Vowels ---
+        (id: "ph_a", ipa: "a", kind: vowel, frequency_weight: 60,
+         features: ["+syllabic", "-consonantal", "+sonorant", "+approximant", "+continuant", "-nasal", "-lateral", "-trill", "+voice", "-labial", "-coronal", "+dorsal", "-high", "+low", "+back", "-round"]),
+        (id: "ph_e", ipa: "e", kind: vowel, frequency_weight: 35,
+         features: ["+syllabic", "-consonantal", "+sonorant", "+approximant", "+continuant", "-nasal", "-lateral", "-trill", "+voice", "-labial", "-coronal", "+dorsal", "-high", "-low", "-back", "-round"]),
+        (id: "ph_i", ipa: "i", kind: vowel, frequency_weight: 40,
+         features: ["+syllabic", "-consonantal", "+sonorant", "+approximant", "+continuant", "-nasal", "-lateral", "-trill", "+voice", "-labial", "-coronal", "+dorsal", "+high", "-low", "-back", "-round"]),
+        (id: "ph_o", ipa: "o", kind: vowel, frequency_weight: 30,
+         features: ["+syllabic", "-consonantal", "+sonorant", "+approximant", "+continuant", "-nasal", "-lateral", "-trill", "+voice", "+labial", "-coronal", "+dorsal", "-high", "-low", "+back", "+round"]),
+        (id: "ph_u", ipa: "u", kind: vowel, frequency_weight: 35,
+         features: ["+syllabic", "-consonantal", "+sonorant", "+approximant", "+continuant", "-nasal", "-lateral", "-trill", "+voice", "+labial", "-coronal", "+dorsal", "+high", "-low", "+back", "+round"]),
+    ],
+
+    phonotactics: (
+        templates: [
+            (pattern: "CV",  weight: 45),
+            (pattern: "CVC", weight: 35),
+            (pattern: "V",   weight: 12),
+            (pattern: "VC",  weight: 8),
+        ],
+        syllables_per_root: [
+            (count: 1, weight: 25),
+            (count: 2, weight: 55),
+            (count: 3, weight: 20),
+        ],
+    ),
+
+    prosody: (stress: fixed(from: left, offset: 0)),
+
+    // The ergative case system, while it lasts. `-ir` on the transitive agent, `-a`
+    // on everything else.
+    //
+    // Both are about to be destroyed by sound change, and neither knows it: an affix
+    // is an ordinary `Root` and the rules that erode it are ordinary rules.
+    morphology: (
+        morphemes: [
+            (id: "m_erg", role: suffix, gloss: "ERG", form: (syllables: [
+                (pattern: "VC", segments: ["ph_i", "ph_r"]),
+            ])),
+            (id: "m_abs", role: suffix, gloss: "ABS", form: (syllables: [
+                (pattern: "V", segments: ["ph_a"]),
+            ])),
+        ],
+    ),
+
+    // FREE order plus a live case system — a coherent combination, and the one that
+    // stops being coherent the moment the case marking goes.
+    syntax: (
+        note: "Order carries emphasis, not grammatical role; the case endings say who did what.",
+
+        word_order: free,
+        adpositions: postpositions,
+        genitive: genitive_noun,
+        adjective: noun_adjective,
+
+        alignment: ergative_absolutive,
+        relative_clause: prenominal,
+
+        negation: affix,
+        question: particle,
+        pro_drop: yes,
+        evidentiality: two_way,
+        switch_reference: marked,
+    ),
+
+    notes: [
+        "The M19 acceptance fixture: free order with ergative case, before the erosion that takes the case away.",
+        "Apply fixtures/rules_case_erosion.sc, then fixtures/shift_asterian.ron.",
+    ],
+)

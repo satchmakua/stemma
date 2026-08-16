@@ -392,6 +392,133 @@ enum Command {
         out: Option<PathBuf>,
     },
 
+    /// Write a word in this language's script (M20).
+    ///
+    /// Prints the spelling, then sign by sign what each one carries, then **what did
+    /// not reach the page**. An abjad drops its vowels; that is what an abjad does,
+    /// and the closing line says so rather than letting the spelling pass as
+    /// complete.
+    Write {
+        /// Path to a language file (`.ron` or `.json`) with a `scripts:` block.
+        path: PathBuf,
+        /// The word, by id (`w_0001`) or by meaning (`star`).
+        word: String,
+        /// Which script, by id. Omitted, the first the language declares.
+        #[arg(long)]
+        script: Option<String>,
+    },
+
+    /// List a language's writing systems and what each can carry (M20).
+    ///
+    /// From M21 it also reports whether each script has kept up with the language:
+    /// sounds it can no longer write, and signs whose sound is gone.
+    Scripts {
+        /// Path to a language file (`.ron` or `.json`).
+        path: PathBuf,
+    },
+
+    /// Write the briefing a model needs before proposing anything (M22).
+    ///
+    /// Everything in it is generated from the language file, so it cannot be out of
+    /// date with respect to the thing being proposed against. Deterministic: two runs
+    /// are byte-identical.
+    Brief {
+        /// Path to a language file (`.ron` or `.json`).
+        path: PathBuf,
+        /// What to ask for: `rules` (default), `drift`, or `concepts`.
+        #[arg(long, default_value = "rules")]
+        r#for: String,
+    },
+
+    /// Run a proposal through the engine against a throwaway copy, and report (M22).
+    ///
+    /// A **dry run of `accept`** — the same code path, with the result discarded — so
+    /// a verdict here cannot differ from what accepting would do. Writes nothing.
+    Review {
+        /// Path to a language file (`.ron` or `.json`).
+        path: PathBuf,
+        /// Path to the proposal file.
+        #[arg(long)]
+        proposal: PathBuf,
+    },
+
+    /// Apply a proposal, producing the next stage of the lineage (M22).
+    ///
+    /// The same call `review` makes, with the result kept. The artefact goes through
+    /// the ordinary apply path — `apply-rules`, `drift`, `declare-concept` — with no
+    /// branch on the fact that a model wrote it, and a refusal applies nothing at all.
+    Accept {
+        /// Path to a language file (`.ron` or `.json`).
+        path: PathBuf,
+        /// Path to the proposal file.
+        #[arg(long)]
+        proposal: PathBuf,
+        /// The descendant's id.
+        #[arg(long)]
+        id: String,
+        /// The descendant's display name.
+        #[arg(long)]
+        name: String,
+        /// Simulated years this step covers.
+        #[arg(long, default_value_t = 0)]
+        years: i32,
+        /// Where to write the result. Without it, nothing is written.
+        #[arg(long)]
+        out: Option<PathBuf>,
+    },
+
+    /// Walk a glyph back to its pictogram (M21).
+    ///
+    /// The glyph analogue of `trace`. Prints the sign's recorded stages oldest first,
+    /// then what it is **now**, then whether the sound it writes is still spoken —
+    /// which the engine measures from the lexicon rather than taking on the author's
+    /// word.
+    GlyphTrace {
+        /// Path to a language file (`.ron` or `.json`).
+        path: PathBuf,
+        /// The glyph, by id (`ge_star`).
+        glyph: String,
+        /// Which script, by id. Needed only when two scripts use the same glyph id.
+        #[arg(long)]
+        script: Option<String>,
+    },
+
+    /// Apply proposed syntactic changes, producing the next stage of the lineage
+    /// with a different **grammar** (M19).
+    ///
+    /// The syntactic twin of `apply-rules` (forms) and `drift` (meanings). Each
+    /// proposed change carries a condition the **engine verifies against this
+    /// language's own history** — it inflects every noun and runs the recorded sound
+    /// changes to see whether a case marker still surfaces. A change whose condition
+    /// does not hold is refused and says why; one that does hold is applied, and the
+    /// record names the sound change that caused it.
+    Shift {
+        /// Path to a language file (`.ron` or `.json`).
+        path: PathBuf,
+        /// Path to a syntactic-change file (`.ron` or `.json`).
+        #[arg(long)]
+        changes: PathBuf,
+        /// The shifted language's id.
+        #[arg(long)]
+        id: String,
+        /// The shifted language's display name.
+        #[arg(long)]
+        name: String,
+        /// Simulated years the shift spans, added to the parent's depth.
+        #[arg(long, default_value_t = 0, value_parser = clap::value_parser!(i32).range(0..))]
+        years: i32,
+        /// Write the shifted language here; omitted, print the report only.
+        #[arg(long)]
+        out: Option<PathBuf>,
+    },
+
+    /// Print a language's recorded syntactic history (M19): what changed about its
+    /// grammar, and which sound change caused it.
+    Shifts {
+        /// Path to a language file (`.ron` or `.json`).
+        path: PathBuf,
+    },
+
     /// Say something in this language (M18) — the first sentence.
     ///
     /// Takes a **proposition**, which names meanings rather than words, and puts it
@@ -491,13 +618,41 @@ enum Command {
     },
 }
 
+/// The stack `run` is given, in bytes.
+///
+/// **Not a tuning knob — a fix for a real crash.** Windows gives the main thread 1 MiB
+/// by default, and clap's derive expands the ~40-variant [`Command`] enum into one
+/// enormous builder chain. An optimised build inlines it away; an unoptimised one does
+/// not, and at M22 the debug binary began overflowing on *every* invocation, `--help`
+/// included, before a single line of Stemma's own code ran.
+///
+/// That mattered beyond developer comfort: the acceptance tests shell out to
+/// `CARGO_BIN_EXE_stemma`, which is the **debug** binary, so the whole suite would have
+/// gone down the moment the command set grew past the limit. Growth of that set is the
+/// normal course of this project, so the fix belongs here rather than in a diet on the
+/// help text.
+const STACK: usize = 16 * 1024 * 1024;
+
 fn main() -> ExitCode {
-    match run() {
+    // Run on a thread with a stack we choose, rather than the one the platform picked.
+    // A failure to spawn is not a domain error and has nothing useful to say about a
+    // language, so it falls through to the same reporting as everything else.
+    let worker = std::thread::Builder::new()
+        .stack_size(STACK)
+        .spawn(|| match run() {
+            Ok(code) => code,
+            Err(err) => {
+                // `{err:?}` on an anyhow error prints the whole context chain, which is
+                // what makes "could not read X: no such file" readable rather than bare.
+                eprintln!("error: {err:?}");
+                ExitCode::FAILURE
+            }
+        });
+
+    match worker.and_then(|handle| handle.join().map_err(|_| std::io::Error::other("panicked"))) {
         Ok(code) => code,
         Err(err) => {
-            // `{err:?}` on an anyhow error prints the whole context chain, which is
-            // what makes "could not read X: no such file" readable rather than bare.
-            eprintln!("error: {err:?}");
+            eprintln!("error: {err}");
             ExitCode::FAILURE
         }
     }
@@ -563,6 +718,32 @@ fn run() -> Result<ExitCode> {
         Command::Culture { path } => culture(&path),
         Command::Grammar { path } => grammar(&path),
         Command::Say { path, proposition } => say(&path, &proposition),
+        Command::Shift {
+            path,
+            changes,
+            id,
+            name,
+            years,
+            out,
+        } => shift(&path, &changes, &id, &name, years, out.as_deref()),
+        Command::Shifts { path } => shifts(&path),
+        Command::Write { path, word, script } => write_word(&path, &word, script.as_deref()),
+        Command::Scripts { path } => scripts(&path),
+        Command::GlyphTrace {
+            path,
+            glyph,
+            script,
+        } => glyph_trace(&path, &glyph, script.as_deref()),
+        Command::Brief { path, r#for } => brief(&path, &r#for),
+        Command::Review { path, proposal } => review(&path, &proposal),
+        Command::Accept {
+            path,
+            proposal,
+            id,
+            name,
+            years,
+            out,
+        } => accept(&path, &proposal, &id, &name, years, out.as_deref()),
         Command::SetGloss {
             path,
             word,
@@ -1286,6 +1467,163 @@ fn parse_pos(text: &str) -> Result<stem_lexicon::PartOfSpeech> {
         "`{text}` is not a part of speech (noun, verb, adjective, adverb, pronoun, \
          numeral, determiner, adposition, particle)"
     )
+}
+
+/// `stemma write` — a word in this language's script.
+///
+/// Resolves `word` as an id first and as a meaning second, so both
+/// `stemma write lang w_0080` and `stemma write lang star` work. Id first because it
+/// is unambiguous; `by_meaning`'s first-in-stored-order policy settles the rest.
+fn write_word(path: &std::path::Path, word: &str, script: Option<&str>) -> Result<ExitCode> {
+    let genome = load_genome(path)?;
+    let script = stem_script::resolve(&genome.scripts, script)
+        .with_context(|| format!("choosing a script for `{}`", genome.name))?;
+
+    let id = stem_core::WordId::new(word);
+    let entry = match genome.lexicon.get(&id) {
+        Some(entry) => entry,
+        None => genome
+            .lexicon
+            .by_meaning(word)
+            .first()
+            .copied()
+            .ok_or_else(|| stem_core::StemmaError::not_found("word (by id or meaning)", word))?,
+    };
+
+    print!("{}", stem_genome::render_written(&genome, entry, script)?);
+    Ok(ExitCode::SUCCESS)
+}
+
+/// `stemma scripts` — this language's writing systems.
+fn scripts(path: &std::path::Path) -> Result<ExitCode> {
+    let genome = load_genome(path)?;
+    print!("{}", stem_genome::render_scripts(&genome)?);
+    Ok(ExitCode::SUCCESS)
+}
+
+/// `stemma brief` — what a model is told before it proposes anything.
+fn brief(path: &std::path::Path, kind: &str) -> Result<ExitCode> {
+    let genome = load_genome(path)?;
+    print!(
+        "{}",
+        stem_assist::render_briefing(&genome, proposal_kind(kind)?)?
+    );
+    Ok(ExitCode::SUCCESS)
+}
+
+/// `stemma review` — the dry run, and the verdict.
+///
+/// Exit code follows the verdict: a refused proposal exits 1, so a script can gate on
+/// it without parsing the prose.
+fn review(path: &std::path::Path, proposal: &std::path::Path) -> Result<ExitCode> {
+    let genome = load_genome(path)?;
+    let proposal: stem_assist::Proposal = stem_io::load(proposal)
+        .with_context(|| format!("loading the proposal from `{}`", proposal.display()))?;
+
+    let verdict = stem_assist::review(&proposal, &genome)?;
+    print!("{}", stem_assist::render_verdict(&proposal, &verdict)?);
+    Ok(if verdict.accepted {
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::FAILURE
+    })
+}
+
+/// `stemma accept` — apply a proposal through the ordinary path, or refuse it whole.
+fn accept(
+    path: &std::path::Path,
+    proposal_path: &std::path::Path,
+    id: &str,
+    name: &str,
+    years: i32,
+    out: Option<&std::path::Path>,
+) -> Result<ExitCode> {
+    let genome = load_genome(path)?;
+    let proposal: stem_assist::Proposal = stem_io::load(proposal_path)
+        .with_context(|| format!("loading the proposal from `{}`", proposal_path.display()))?;
+
+    // Reviewed first, so a refusal prints the engine's own report rather than an
+    // error string — and so the refusal path and the acceptance path print alike.
+    let verdict = stem_assist::review(&proposal, &genome)?;
+    print!("{}", stem_assist::render_verdict(&proposal, &verdict)?);
+    if !verdict.accepted {
+        return Ok(ExitCode::FAILURE);
+    }
+
+    let (descendant, _) = stem_assist::accept(&proposal, &genome, id, name, years)?;
+    match out {
+        Some(path) => {
+            stem_io::save(path, &descendant)
+                .with_context(|| format!("writing `{}`", path.display()))?;
+            println!();
+            println!("{} -> {}", descendant.name, path.display());
+        }
+        None => {
+            println!();
+            println!("(no --out given, so nothing was written)");
+        }
+    }
+    Ok(ExitCode::SUCCESS)
+}
+
+fn proposal_kind(name: &str) -> Result<stem_assist::ProposalKind> {
+    match name {
+        "rules" => Ok(stem_assist::ProposalKind::Rules),
+        "drift" => Ok(stem_assist::ProposalKind::Drift),
+        "concepts" => Ok(stem_assist::ProposalKind::Concepts),
+        other => Err(anyhow::anyhow!(
+            "`{other}` is not a proposal kind; use `rules`, `drift` or `concepts`"
+        )),
+    }
+}
+
+/// `stemma glyph-trace` — one sign's biography, and whether its sound survives.
+fn glyph_trace(path: &std::path::Path, glyph: &str, script: Option<&str>) -> Result<ExitCode> {
+    let genome = load_genome(path)?;
+    let (system, sign) = stem_script::resolve_glyph(&genome.scripts, glyph, script)
+        .with_context(|| format!("finding glyph `{glyph}` in `{}`", genome.name))?;
+    print!(
+        "{}",
+        stem_genome::render_glyph_trace(&genome, system, sign)?
+    );
+    Ok(ExitCode::SUCCESS)
+}
+
+/// `stemma shift` — apply proposed syntactic changes the engine verifies.
+fn shift(
+    path: &std::path::Path,
+    changes: &std::path::Path,
+    id: &str,
+    name: &str,
+    years: i32,
+    out: Option<&std::path::Path>,
+) -> Result<ExitCode> {
+    let genome = load_genome(path)?;
+    let changes: stem_genome::SyntacticChangeSet =
+        stem_io::load(changes).with_context(|| format!("loading `{}`", changes.display()))?;
+
+    let (shifted, report) = stem_genome::apply_shifts(&genome, &changes, id, name, years)
+        .with_context(|| format!("shifting `{}`", genome.name))?;
+
+    // The record, to stdout — it is the milestone's deliverable.
+    print!("{}", stem_genome::render_shifts(&shifted));
+    print_report(&report);
+
+    if let Some(destination) = out {
+        stem_io::save(destination, &shifted)
+            .with_context(|| format!("writing `{}`", destination.display()))?;
+        eprintln!("{} -> {}", shifted.name, destination.display());
+    } else {
+        eprintln!("note: nothing written; pass --out to save");
+    }
+    Ok(ExitCode::SUCCESS)
+}
+
+/// `stemma shifts` — a language's recorded syntactic history.
+fn shifts(path: &std::path::Path) -> Result<ExitCode> {
+    let genome = load_genome(path)?;
+    print!("{}", stem_genome::render_shifts(&genome));
+    Ok(ExitCode::SUCCESS)
 }
 
 /// `stemma say` — the first sentence.

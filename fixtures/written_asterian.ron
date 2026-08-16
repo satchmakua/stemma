@@ -1,0 +1,234 @@
+// Written Asterian — the M20 acceptance fixture.
+//
+// The REFERENCE ASTERIAN INVENTORY VERBATIM, plus TWO writing systems over the same
+// fifteen sounds. That pairing is the milestone:
+//
+//   stemma scripts fixtures/written_asterian.ron
+//   stemma new-lexicon fixtures/written_asterian.ron --out out/written.ron
+//   stemma write out/written.ron star                    # the alphabet
+//   stemma write out/written.ron star --script tirran    # the abjad
+//
+// THE POINT (ROADMAP M20): a script is a mapping, and a mapping can lose things.
+//
+// The ALPHABET writes every sound, so a spelling in it can be read back exactly.
+// The ABJAD writes only consonants, so it cannot — and that is not a bug in the
+// abjad. Semitic scribes wrote `ktb` for a word with three vowels in it for three
+// thousand years, and readers supplied the rest from knowing the language.
+//
+// What Stemma must not do is either of the two easy lies: invent vowel signs so the
+// round trip works, or drop them quietly so a reader believes the spelling is
+// complete. `stemma write` prints what reached the page, what did not, and one
+// sentence saying which of those two situations you are in.
+//
+// The scripts share a phonology and differ only in their mapping, so the comparison
+// is exactly like M15's two ecologies and M18's two grammars: one thing, several
+// treatments, and everything that differs is attributable.
+//
+// A THIRD script, the Emmen signs, writes MEANINGS rather than sounds — a logography,
+// the one script kind that does not map from phonology at all. It is here because a
+// `Mapping::Concept` variant nothing ever wrote with would be scaffolding: the kind is
+// named in M20's own scope line, so it has to do something observable.
+//
+// A GLYPH HAS AN ID because §7.6 wants it to have a HISTORY — "a glyph should have
+// ancestry just like a word". M20 gives it the identity; M21 gives it the descent.
+// `g_aleph` is not the character `\u0294`; the character is how it is drawn today.
+(
+    id: "asterian_written",
+    name: "Written Asterian",
+    lineage_depth_years: 0,
+    seed: 42,
+
+    phonemes: [
+        // --- Stops ---
+        (id: "ph_p", ipa: "p", kind: consonant, frequency_weight: 30,
+         features: ["-syllabic", "+consonantal", "-sonorant", "-approximant", "-continuant", "-nasal", "-lateral", "-trill", "-voice", "+labial", "-coronal", "-dorsal", "-round"]),
+        (id: "ph_t", ipa: "t", kind: consonant, frequency_weight: 50,
+         features: ["-syllabic", "+consonantal", "-sonorant", "-approximant", "-continuant", "-nasal", "-lateral", "-trill", "-voice", "-labial", "+coronal", "-dorsal"]),
+        (id: "ph_k", ipa: "k", kind: consonant, frequency_weight: 45,
+         features: ["-syllabic", "+consonantal", "-sonorant", "-approximant", "-continuant", "-nasal", "-lateral", "-trill", "-voice", "-labial", "-coronal", "+dorsal", "+high", "-low", "+back", "-round"]),
+
+        // --- Nasals ---
+        (id: "ph_m", ipa: "m", kind: consonant, frequency_weight: 35,
+         features: ["-syllabic", "+consonantal", "+sonorant", "-approximant", "-continuant", "+nasal", "-lateral", "-trill", "+voice", "+labial", "-coronal", "-dorsal", "-round"]),
+        (id: "ph_n", ipa: "n", kind: consonant, frequency_weight: 40,
+         features: ["-syllabic", "+consonantal", "+sonorant", "-approximant", "-continuant", "+nasal", "-lateral", "-trill", "+voice", "-labial", "+coronal", "-dorsal"]),
+
+        // --- Fricative ---
+        (id: "ph_s", ipa: "s", kind: consonant, frequency_weight: 35,
+         features: ["-syllabic", "+consonantal", "-sonorant", "-approximant", "+continuant", "-nasal", "-lateral", "-trill", "-voice", "-labial", "+coronal", "-dorsal"]),
+
+        // --- Liquids ---
+        (id: "ph_l", ipa: "l", kind: consonant, frequency_weight: 30,
+         features: ["-syllabic", "+consonantal", "+sonorant", "+approximant", "+continuant", "-nasal", "+lateral", "-trill", "+voice", "-labial", "+coronal", "-dorsal"]),
+        (id: "ph_r", ipa: "r", kind: consonant, frequency_weight: 25,
+         features: ["-syllabic", "+consonantal", "+sonorant", "-approximant", "+continuant", "-nasal", "-lateral", "+trill", "+voice", "-labial", "+coronal", "-dorsal"]),
+
+        // --- Glides ---
+        (id: "ph_w", ipa: "w", kind: consonant, frequency_weight: 20,
+         features: ["-syllabic", "-consonantal", "+sonorant", "+approximant", "+continuant", "-nasal", "-lateral", "-trill", "+voice", "+labial", "-coronal", "+dorsal", "+high", "-low", "+back", "+round"]),
+        (id: "ph_j", ipa: "j", romanization: "y", kind: consonant, frequency_weight: 10,
+         features: ["-syllabic", "-consonantal", "+sonorant", "+approximant", "+continuant", "-nasal", "-lateral", "-trill", "+voice", "-labial", "-coronal", "+dorsal", "+high", "-low", "-back", "-round"]),
+
+        // --- Vowels ---
+        (id: "ph_a", ipa: "a", kind: vowel, frequency_weight: 60,
+         features: ["+syllabic", "-consonantal", "+sonorant", "+approximant", "+continuant", "-nasal", "-lateral", "-trill", "+voice", "-labial", "-coronal", "+dorsal", "-high", "+low", "+back", "-round"]),
+        (id: "ph_e", ipa: "e", kind: vowel, frequency_weight: 35,
+         features: ["+syllabic", "-consonantal", "+sonorant", "+approximant", "+continuant", "-nasal", "-lateral", "-trill", "+voice", "-labial", "-coronal", "+dorsal", "-high", "-low", "-back", "-round"]),
+        (id: "ph_i", ipa: "i", kind: vowel, frequency_weight: 40,
+         features: ["+syllabic", "-consonantal", "+sonorant", "+approximant", "+continuant", "-nasal", "-lateral", "-trill", "+voice", "-labial", "-coronal", "+dorsal", "+high", "-low", "-back", "-round"]),
+        (id: "ph_o", ipa: "o", kind: vowel, frequency_weight: 30,
+         features: ["+syllabic", "-consonantal", "+sonorant", "+approximant", "+continuant", "-nasal", "-lateral", "-trill", "+voice", "+labial", "-coronal", "+dorsal", "-high", "-low", "+back", "+round"]),
+        (id: "ph_u", ipa: "u", kind: vowel, frequency_weight: 35,
+         features: ["+syllabic", "-consonantal", "+sonorant", "+approximant", "+continuant", "-nasal", "-lateral", "-trill", "+voice", "+labial", "-coronal", "+dorsal", "+high", "-low", "+back", "+round"]),
+    ],
+
+    phonotactics: (
+        templates: [
+            (pattern: "CV",  weight: 45),
+            (pattern: "CVC", weight: 35),
+            (pattern: "V",   weight: 12),
+            (pattern: "VC",  weight: 8),
+        ],
+        syllables_per_root: [
+            (count: 1, weight: 25),
+            (count: 2, weight: 55),
+            (count: 3, weight: 20),
+        ],
+    ),
+
+    prosody: (stress: fixed(from: left, offset: 0)),
+
+    // Three writing systems. A language may have several at once — Japanese does,
+    // and so does any language with a liturgical script beside a daily one — so this
+    // is a list, and the first is what `stemma write` uses unless told otherwise.
+    scripts: [
+        (
+            id: "kirran",
+            name: "The Kirran alphabet",
+            kind: alphabet,
+            note: "The clerks' script: one sign per sound, vowels included. Late, and invented for bookkeeping.",
+            glyphs: [
+                (id: "g_p", form: "p"), (id: "g_t", form: "t"), (id: "g_k", form: "k"),
+                (id: "g_m", form: "m"), (id: "g_n", form: "n"), (id: "g_s", form: "s"),
+                (id: "g_l", form: "l"), (id: "g_r", form: "r"),
+                // A short history, so the fossil finding has a sign with a past to
+                // print. Glide loss (fixtures/rules_glide_loss.sc) deletes every /w/,
+                // and this letter is then writing a sound the language no longer says.
+                (id: "g_w", form: "w", name: "the hook",
+                 history: [
+                     (role: pictogram, form: "ʖ", meant: "WATER",
+                      note: "A wave, drawn twice."),
+                     (role: rebus, form: "ʖ", wrote: "ph_w",
+                      note: "Borrowed for the sound the word for water began with."),
+                 ]),
+                (id: "g_y", form: "y"),
+                (id: "g_a", form: "a"), (id: "g_e", form: "e"), (id: "g_i", form: "i"),
+                (id: "g_o", form: "o"), (id: "g_u", form: "u"),
+            ],
+            mappings: [
+                phoneme(phoneme: "ph_p", glyph: "g_p"),
+                phoneme(phoneme: "ph_t", glyph: "g_t"),
+                phoneme(phoneme: "ph_k", glyph: "g_k"),
+                phoneme(phoneme: "ph_m", glyph: "g_m"),
+                phoneme(phoneme: "ph_n", glyph: "g_n"),
+                phoneme(phoneme: "ph_s", glyph: "g_s"),
+                phoneme(phoneme: "ph_l", glyph: "g_l"),
+                phoneme(phoneme: "ph_r", glyph: "g_r"),
+                phoneme(phoneme: "ph_w", glyph: "g_w"),
+                phoneme(phoneme: "ph_j", glyph: "g_y"),
+                phoneme(phoneme: "ph_a", glyph: "g_a"),
+                phoneme(phoneme: "ph_e", glyph: "g_e"),
+                phoneme(phoneme: "ph_i", glyph: "g_i"),
+                phoneme(phoneme: "ph_o", glyph: "g_o"),
+                phoneme(phoneme: "ph_u", glyph: "g_u"),
+            ],
+        ),
+        (
+            id: "tirran",
+            name: "The Tirran abjad",
+            kind: abjad,
+            note: "The old temple hand. Consonants only; a reader who knows the language supplies the vowels, and one who does not is not the intended reader.",
+            glyphs: [
+                (id: "gt_p", form: "P", name: "the mouth"),
+                (id: "gt_t", form: "T", name: "the mark"),
+                (id: "gt_k", form: "K", name: "the palm"),
+                (id: "gt_m", form: "M", name: "water"),
+                (id: "gt_n", form: "N", name: "the seed"),
+                (id: "gt_s", form: "S", name: "the tooth"),
+                (id: "gt_l", form: "L", name: "the goad"),
+                (id: "gt_r", form: "R", name: "the head"),
+                (id: "gt_w", form: "W", name: "the peg"),
+                (id: "gt_y", form: "Y", name: "the hand"),
+            ],
+            mappings: [
+                phoneme(phoneme: "ph_p", glyph: "gt_p"),
+                phoneme(phoneme: "ph_t", glyph: "gt_t"),
+                phoneme(phoneme: "ph_k", glyph: "gt_k"),
+                phoneme(phoneme: "ph_m", glyph: "gt_m"),
+                phoneme(phoneme: "ph_n", glyph: "gt_n"),
+                phoneme(phoneme: "ph_s", glyph: "gt_s"),
+                phoneme(phoneme: "ph_l", glyph: "gt_l"),
+                phoneme(phoneme: "ph_r", glyph: "gt_r"),
+                phoneme(phoneme: "ph_w", glyph: "gt_w"),
+                phoneme(phoneme: "ph_j", glyph: "gt_y"),
+                // No vowel signs. Deliberately, and it is what makes this an abjad.
+            ],
+        ),
+        (
+            id: "emmen",
+            name: "The Emmen signs",
+            kind: logography,
+            note: "Older than either. One sign, one meaning, no sounds — so a reader of another language could read it aloud in their own, and only the words that earned a sign can be written at all.",
+            glyphs: [
+                // §7.6'S WORKED CHAIN, VERBATIM. The design document gives one example
+                // glyph history and this is it, so `stemma glyph-trace out/... ge_star`
+                // walks the exact six stages §7.6 lists:
+                //
+                //   six-point star pictogram → logogram for STAR → divine determinative
+                //   → rebus sign for the syllable /sa/ → simplified three-stroke
+                //   manuscript form → modern royal-name marker
+                //
+                // OLDEST FIRST, and the present is NOT in here — `form` above is how it
+                // is drawn today and the `mappings` block says what it does today. A
+                // stage repeating the present would be the second source of truth M2
+                // banned when it refused to store a rendered form beside `phonemic_form`.
+                //
+                // No stage carries a year. M19's rule: a trigger is verified, never
+                // asserted — and nothing here can be verified, so a date would dress an
+                // authorial claim up as a measurement. The ORDER is the whole claim.
+                (id: "ge_star",   form: "★", name: "the star",
+                 note: "The oldest sign in the language, and the one that has been most things.",
+                 history: [
+                     (role: pictogram, form: "✶", meant: "STAR",
+                      note: "Six scratches from a common centre. A drawing of the thing, and anyone could read it."),
+                     (role: logogram, form: "✶", meant: "STAR",
+                      note: "The same shape, but now a WORD rather than a picture — you had to know the language to say it."),
+                     (role: determinative, form: "✶",
+                      note: "Silent. Written before a god's name to say `what follows is divine`, and never read aloud."),
+                     (role: rebus, form: "✶", wrote: "ph_s",
+                      note: "The hinge: borrowed for the SOUND its old word began with, so it could spell words nobody had drawn."),
+                     (role: phonogram, form: "★", wrote: "ph_s",
+                      note: "Three strokes, written fast with a reed. The borrowing is forgotten; it is simply the letter for /s/."),
+                 ]),
+                (id: "ge_sun",    form: "☉", name: "the sun"),
+                (id: "ge_water",  form: "≈", name: "running water"),
+                (id: "ge_mother", form: "○", name: "the round one"),
+                (id: "ge_stone",  form: "◆", name: "the stone"),
+            ],
+            // Keyed by ConceptKey, never by WordId — the M14 rule. A `w_0080` means
+            // whatever the concept list happens to hold at position 80, so an append
+            // to CONCEPTS would silently repoint every sign in this block.
+            mappings: [
+                concept(concept: "STAR",   glyph: "ge_star"),
+                concept(concept: "SUN",    glyph: "ge_sun"),
+                concept(concept: "WATER",  glyph: "ge_water"),
+                concept(concept: "MOTHER", glyph: "ge_mother"),
+                concept(concept: "STONE",  glyph: "ge_stone"),
+            ],
+        ),
+    ],
+
+    notes: [
+        "The M20 acceptance fixture: one phonology, three scripts, and only one of them round-trips.",
+    ],
+)

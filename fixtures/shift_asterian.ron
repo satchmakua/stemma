@@ -1,0 +1,45 @@
+// The Asterian word-order fixing — the M19 acceptance change set.
+//
+// WHAT AN AUTHOR MAY SAY AND WHAT THEY MAY NOT.
+//
+// The `when:` is a condition the ENGINE checks against this language's own history.
+// It is not a date and it is not an assertion. `stemma shift` inflects every noun in
+// the lexicon with the named morpheme, runs the language's recorded sound changes over
+// the results, and looks at what is left. If the marker still surfaces on so much as
+// one word, the change is REFUSED and says which word — try it on the un-eroded
+// language and see.
+//
+// The `then:` is authored, and deliberately so. A language that loses its case
+// marking may fix its word order, or lean harder on adpositions, or develop verb
+// agreement; which one it does is a fact about a people, and compiling that choice
+// into Stemma would be the tool asserting the history of a language it did not invent.
+// The author makes the claim; the engine establishes that the ground for it exists.
+//
+// What neither of them writes is the NAME OF THE SOUND CHANGE. That is found by
+// replaying each word's own derivation one step at a time to see which step emptied
+// the affix's span — so the causal chain in `stemma shifts` is a finding, not a
+// restatement of this file.
+(
+    id: "shift_asterian",
+    name: "The fixing of Asterian word order",
+    description: "DESIGN §7.4's closing claim: case erosion forces stricter order.",
+
+    changes: [
+        (
+            id: "sx_0001",
+            name: "Word order fixes as the ergative erodes",
+            note: "With no ending to say who acted, position has to. The southern dialects fixed on verb-final; these did not.",
+            when: case_marker_lost(morpheme: "m_erg"),
+            then: word_order(sov),
+            chronology_years: 640,
+        ),
+        (
+            id: "sx_0002",
+            name: "Alignment goes neutral",
+            note: "Both endings are gone, so nothing distinguishes an agent from a patient by form. Stated separately from the order change because they are two claims, and one could hold without the other.",
+            when: case_marker_lost(morpheme: "m_abs"),
+            then: alignment(neutral),
+            chronology_years: 640,
+        ),
+    ],
+)

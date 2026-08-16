@@ -6,7 +6,9 @@ members = [
     "crates/stem_lexicon",
     "crates/stem_soundchange",
     "crates/stem_syntax",
+    "crates/stem_script",
     "crates/stem_genome",
+    "crates/stem_assist",
     "crates/stem_export",
     "crates/stem_io",
     "crates/stem_cli",
@@ -29,7 +31,9 @@ stem_phonology = { path = "crates/stem_phonology", version = "0.1.0" }
 stem_lexicon = { path = "crates/stem_lexicon", version = "0.1.0" }
 stem_soundchange = { path = "crates/stem_soundchange", version = "0.1.0" }
 stem_syntax = { path = "crates/stem_syntax", version = "0.1.0" }
+stem_script = { path = "crates/stem_script", version = "0.1.0" }
 stem_genome = { path = "crates/stem_genome", version = "0.1.0" }
+stem_assist = { path = "crates/stem_assist", version = "0.1.0" }
 stem_export = { path = "crates/stem_export", version = "0.1.0" }
 stem_io = { path = "crates/stem_io", version = "0.1.0" }
 

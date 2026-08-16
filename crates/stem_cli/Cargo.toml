@@ -23,9 +23,12 @@ stem_lexicon.workspace = true
 stem_export.workspace = true
 stem_soundchange.workspace = true
 stem_syntax.workspace = true
+stem_script.workspace = true
+stem_assist.workspace = true
 
 [dev-dependencies]
 sha2.workspace = true
+ron.workspace = true
 serde_json.workspace = true
 
 [lints]

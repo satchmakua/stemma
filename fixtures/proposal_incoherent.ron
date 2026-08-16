@@ -1,0 +1,88 @@
+// A proposal the engine REFUSES — the other half of the M22 acceptance.
+//
+// PROVENANCE: written by Claude (Opus 5), deliberately, to be the failure this
+// milestone exists to catch. It is not a strawman — it is the failure mode of fluency
+// without grounding, and it is the one I would most plausibly produce by accident.
+//
+// READ THE RATIONALE FIRST, AND THE RULE SECOND.
+//
+// The prose is correct linguistics. Nasal place assimilation is real, it is §7.2's own
+// example, and the description of it here is accurate: a nasal takes the place of a
+// following stop, which is why English writes `input` and everybody says `imput`. A
+// reader who stopped at the rationale would have no reason to doubt any of it.
+//
+// The RULE does not do that. `copy place from after[0]` reads the place features of
+// whatever sits one slot after the target — and the environment declares no `after`
+// slot at all, so there is nothing there to read. The rule is formally incoherent, and
+// it is incoherent in a way that looks like a typo rather than a misunderstanding:
+// one missing line, in a file where every other line is right.
+//
+// That is the whole argument for the gate. No amount of reading the prose finds this,
+// and no amount of the model being careful is a substitute for the engine trying it.
+// `change_references_unmatched_position` is an ERROR, so:
+//
+//   $ stemma accept out/proto.ron --proposal fixtures/proposal_incoherent.ron ...
+//   refused — the rule set `rules_assimilation` cannot be applied; nothing was applied
+//
+// NOTHING IS PARTIALLY APPLIED. The second rule in this set is perfectly fine, and it
+// does not run either — a rule set is accepted or refused whole, because a language
+// that had half of a proposed history in it would be a language nobody could reason
+// about.
+(
+    id: "assimilation_attempt",
+    target: "proto_asterian",
+
+    provenance: (
+        author: "claude-opus-5",
+        method: "from `stemma brief fixtures/proto_asterian.ron --for rules`",
+    ),
+
+    rationale: "One change, and it is the most common assimilation there is.
+
+A nasal takes the place of articulation of a following stop. English spells `input`
+and pronounces `imput`; Latin `in-` surfaces as `im-` before `p` and `b`. Asterian has
+/m/ and /n/ and a three-place stop series, so the rule has somewhere to go: /n/ before
+/p/ becomes /m/, /n/ before /k/ becomes the velar nasal, which the language does not
+currently have and which this rule would innovate.
+
+I have used `copy` rather than `set` deliberately. The rule does not know which place
+the nasal ends up with — that is whatever the following stop has — and writing three
+rules, one per place, would be exactly the enumeration the briefing says not to write.
+One rule over a feature node is the right shape.
+
+I have also added a second rule, final vowel loss, because assimilation is more
+interesting when something later obscures its conditioning environment.",
+
+    artefact: rules((
+        id: "rules_assimilation",
+        name: "Nasal assimilation",
+        description: "A nasal takes the place of a following stop, and final vowels are lost.",
+        rules: [
+            (
+                id: "r_a01",
+                name: "Nasal place assimilation",
+                description: "A nasal takes the place of articulation of a following stop.",
+                chronology_years: 300,
+                target: (features: ["+nasal"]),
+                // THE ERROR. The change reads `after[0]`, and no `after` slot is
+                // declared — the environment below constrains only what precedes.
+                // Everything about this file except these three lines is correct.
+                environment: (
+                    before: [segment((features: ["+syllabic"]))],
+                ),
+                change: copy(from: after(0), node: place),
+            ),
+            (
+                id: "r_a02",
+                name: "Final vowel loss",
+                description: "A word-final unstressed vowel is lost.",
+                chronology_years: 500,
+                target: (features: ["+syllabic"], stress: Some(unstressed)),
+                environment: (
+                    after: [boundary],
+                ),
+                change: delete,
+            ),
+        ],
+    )),
+)

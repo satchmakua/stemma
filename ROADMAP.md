@@ -332,14 +332,33 @@ _`DESIGN.md` §7.4. The largest remaining gap: today you cannot form a sentence.
   one possessor each. No recursion, no subordination, no coordination, no tense, no
   agreement — and no relative clauses, even though M17 records the parameter.
 
-- [ ] **M19 — Syntactic change.** §7.4's closing claim, made real: syntax evolves.
+- [x] **M19 — Syntactic change.** §7.4's closing claim, made real: syntax evolves.
   Case erosion forces stricter word order; topic markers become articles; serial
   verbs become auxiliaries. This is where **grammaticalization** finally lands — it
   was fenced out of M8 as "a morpheme changing role over time is diachronic
   morphology proper, a later milestone" (`docs/adr/0010`). This is that milestone.
   **Test:** a daughter whose case suffixes were eroded by an *ordered sound change*
-  shows stricter word order in its profile, and the causal chain from the rule to
-  the syntactic shift is on the record — not asserted by the author.
+  shows stricter word order in its profile, and the causal chain from the rule to the
+  syntactic shift is on the record — not asserted by the author. ✅ Two ordinary sound
+  changes eat Old Asterian's ergative `-ir` and absolutive `-a`; `stemma shift` then
+  finds that neither surfaces on any word, applies the author's proposed consequence,
+  and records **`r_e02`** as the cause — a `RuleId` that appears nowhere in the change
+  file. Free order becomes SOV, alignment becomes neutral, and the sentence goes from
+  `mostair ponti sosema` to `most sosem pont`.
+
+  Three tests attack the "not asserted" clause: the same change set applied *before*
+  the erosion is refused and names a word still carrying `-ir`; the recorded `RuleId`
+  is absent from the change file and present in the applied history; and **swapping
+  the two sound changes stops the shift firing at all**, because `-ir` ends in a
+  rhotic and vowel loss cannot reach the vowel behind it. M3's "rule order is
+  observable" reaching all the way up into the grammar. 728 tests green.
+
+  **Only case erosion is built.** Topic markers becoming articles and serial verbs
+  becoming auxiliaries need an article, an auxiliary and a serial verb in the model,
+  and there are none — see `PROGRESS.md`.
+
+_Phase 5 is complete: a language can describe its grammar (M17), speak with it (M18),
+and change it for a reason on the record (M19)._
 
 ---
 
@@ -348,7 +367,7 @@ _`DESIGN.md` §7.4. The largest remaining gap: today you cannot form a sentence.
 _`DESIGN.md` §7.6. "A glyph should have ancestry just like a word" — which is the
 whole design, and the reason this is a real phase rather than a font picker._
 
-- [ ] **M20 — Glyphs & writing systems.** A script, its glyph inventory, and the
+- [x] **M20 — Glyphs & writing systems.** A script, its glyph inventory, and the
   mapping from phonology or morphology to written form (alphabet, abjad, abugida,
   syllabary, logography). A glyph is an entity with an id and a history, modelled
   the way a phoneme and a morpheme already are.
@@ -356,7 +375,7 @@ whole design, and the reason this is a real phase rather than a font picker._
   is reported where it is lossy (an abjad drops vowels — that is the point, and the
   tool says so rather than pretending round-trip).
 
-- [ ] **M21 — Script evolution.** §7.6's chain: pictogram → logogram → divine
+- [x] **M21 — Script evolution.** §7.6's chain: pictogram → logogram → divine
   determinative → rebus sign → simplified manuscript form → modern marker. Glyph
   descent is traced exactly as word descent is, and the two are **independent** — a
   glyph may outlive the sound it once wrote, which is how real orthographies become
@@ -371,7 +390,7 @@ whole design, and the reason this is a real phase rather than a font picker._
 
 _`DESIGN.md` §6.5, and the phase with the sharpest constraint on it._
 
-- [ ] **M22 — Constrained LLM assistant.** Explain a sound change; propose plausible
+- [x] **M22 — Constrained LLM assistant.** Explain a sound change; propose plausible
   daughter changes; suggest names under constraints; draft a grammar sketch from
   structured data; flag oddities.
   **The hard constraint governs absolutely, and it predates any LLM in the project:

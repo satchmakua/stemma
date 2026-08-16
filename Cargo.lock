@@ -3146,19 +3146,35 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
 
 [[package]]
+name = "stem_assist"
+version = "0.1.0"
+dependencies = [
+ "ron",
+ "serde",
+ "stem_core",
+ "stem_genome",
+ "stem_lexicon",
+ "stem_phonology",
+ "stem_soundchange",
+]
+
+[[package]]
 name = "stem_cli"
 version = "0.1.0"
 dependencies = [
  "anyhow",
  "clap",
+ "ron",
  "serde_json",
  "sha2",
+ "stem_assist",
  "stem_core",
  "stem_export",
  "stem_genome",
  "stem_io",
  "stem_lexicon",
  "stem_phonology",
+ "stem_script",
  "stem_soundchange",
  "stem_syntax",
 ]
@@ -3190,10 +3206,12 @@ dependencies = [
 name = "stem_genome"
 version = "0.1.0"
 dependencies = [
+ "ron",
  "serde",
  "stem_core",
  "stem_lexicon",
  "stem_phonology",
+ "stem_script",
  "stem_soundchange",
  "stem_syntax",
 ]
@@ -3229,6 +3247,17 @@ dependencies = [
  "ron",
  "serde",
  "stem_core",
+]
+
+[[package]]
+name = "stem_script"
+version = "0.1.0"
+dependencies = [
+ "ron",
+ "serde",
+ "stem_core",
+ "stem_lexicon",
+ "stem_phonology",
 ]
 
 [[package]]

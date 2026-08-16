@@ -120,12 +120,51 @@ pub enum VocabularyShaping {
     HeavilyShaped,
 }
 
+/// How far this language's **spelling** has fallen behind its pronunciation (M21) —
+/// §17's script-history row, and the last dimension M7 deferred.
+///
+/// # It measures drift, not quality
+///
+/// A deep orthography is not a worse one. English and French are deep, Finnish and
+/// Turkish are shallow, and none of them is thereby a better language — depth is the
+/// ordinary consequence of a script staying still while speech moves, which is what
+/// scripts do. The band describes; it does not rank, and no value of it is an Error.
+///
+/// Both inputs are **findings**: sounds the script cannot write and signs whose sound
+/// is gone, counted by [`script_drift`](stem_script::script_drift) from the lexicon.
+/// The author writes a glyph's biography; the engine measures the fit.
+///
+/// The threshold between [`Self::Historical`] and [`Self::Deep`] is the shared
+/// [`DEEP_ORTHOGRAPHY`], so this band reads `Deep` exactly when the `deep_orthography`
+/// validation Note fires (`docs/adr/0009`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ScriptHistory {
+    /// This language has no script. A fact, not a low score — most languages that have
+    /// ever existed were unwritten (the [`HistoricalDepth::None`] precedent).
+    Unwritten,
+    /// A script, but no lexicon to hold it against. Nothing can be measured yet, and
+    /// saying so is better than reporting a clean fit nothing checked.
+    Unmeasured,
+    /// Every script this language has writes **meanings**, so there is no pronunciation
+    /// in the spelling for the pronunciation to drift away from.
+    ///
+    /// Not a high score and not a low one — an evasion of the question, and the reason
+    /// logographies are so durable. Reporting it as [`Self::Phonemic`] would claim
+    /// every sound has a sign in a script that has no sound signs at all.
+    SoundIndependent,
+    /// Every sound the language says has a sign, and every sign still has a sound.
+    Phonemic,
+    /// Some mismatch exists: the spelling has begun to be historical.
+    Historical,
+    /// [`DEEP_ORTHOGRAPHY`] mismatches or more — the band the Note is paired to.
+    Deep,
+}
+
 /// A §17 dimension no shipped milestone can measure yet. Carried explicitly so the
 /// profile is transparent about its own coverage rather than silently omitting
 /// four of §17's rows — or, worse, fabricating a number for them.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NotModelled {
-    ScriptHistoryCoherence,
     AlienEmbodimentDependence,
 }
 
@@ -133,7 +172,6 @@ impl NotModelled {
     /// The §17 dimension name.
     pub fn label(self) -> &'static str {
         match self {
-            Self::ScriptHistoryCoherence => "Script-history coherence",
             Self::AlienEmbodimentDependence => "Alien embodiment dependence",
         }
     }
@@ -146,7 +184,6 @@ impl NotModelled {
     /// has not made.
     pub fn milestone(self) -> &'static str {
         match self {
-            Self::ScriptHistoryCoherence => "§7.6",
             Self::AlienEmbodimentDependence => "§18",
         }
     }
@@ -155,14 +192,11 @@ impl NotModelled {
 /// The §17 dimensions still deferred, in §17's listed order — one list the renderer
 /// and future milestones share, so a renumber is a one-line change.
 ///
-/// Morphological irregularity left this list at M8 and **semantic plausibility left
-/// it at M9**; both are scored bands now. Syntax / word order is deliberately
-/// absent: §20.1 forbids a syntax engine, and a "not modelled" line would invite the
-/// build.
-pub const NOT_MODELLED: &[NotModelled] = &[
-    NotModelled::ScriptHistoryCoherence,
-    NotModelled::AlienEmbodimentDependence,
-];
+/// Morphological irregularity left this list at M8, **semantic plausibility at M9**,
+/// and **script-history coherence at M21** ([`ScriptHistory`]); all three are scored
+/// bands now, and one row is left. Syntax / word order is deliberately absent: §20.1
+/// forbids a syntax engine, and a "not modelled" line would invite the build.
+pub const NOT_MODELLED: &[NotModelled] = &[NotModelled::AlienEmbodimentDependence];
 
 /// §17's scored-dimensions block as a value. Never persisted (the `CognateTable`
 /// precedent); grows fields additively as milestones fill dimensions. No serde.
@@ -197,6 +231,13 @@ pub struct PlausibilityProfile {
     /// shown beside the band so the number can be checked rather than trusted — the
     /// `recorded_changes` discipline.
     pub shaping_counts: (usize, usize, usize),
+    /// How far the spelling has fallen behind the pronunciation (M21).
+    pub script_history: ScriptHistory,
+    /// The raw basis for `script_history`: each script's `(id, mismatch count)`, in
+    /// declared order — the `affix_allomorphy` shape, for the same honesty reason. A
+    /// language with several scripts drifts from each at its own rate, and the band is
+    /// the worst of them.
+    pub script_drift: Vec<(String, usize)>,
 }
 
 impl LanguageGenome {
@@ -285,6 +326,38 @@ impl LanguageGenome {
             VocabularyShaping::Shaped
         };
 
+        // M21: how far the spelling has fallen behind the pronunciation. Every script
+        // is measured, because a language may carry several and they drift at their own
+        // rates; the band is the worst of them, and the per-script counts ride along so
+        // the number can be checked. Same shared `DEEP_ORTHOGRAPHY` the
+        // `deep_orthography` Note reads, so band and Note cannot disagree
+        // (`docs/adr/0009`) — the fourth instance of that rule.
+        let script_drift: Vec<(String, usize)> = self
+            .scripts
+            .iter()
+            .map(|s| {
+                let drift = stem_script::script_drift(s, &self.lexicon, &self.phonemes);
+                (s.id.clone(), drift.distance())
+            })
+            .collect();
+        let script_history = if self.scripts.is_empty() {
+            ScriptHistory::Unwritten
+        } else if self.lexicon.is_empty() {
+            // A script with nothing to write. Reporting `Phonemic` here would be a
+            // clean bill of health nothing checked.
+            ScriptHistory::Unmeasured
+        } else if !self.scripts.iter().any(|s| s.writes_sound()) {
+            // Every script writes meanings. There is no spelling here to fall behind a
+            // pronunciation, and calling that `Phonemic` would be the opposite of true.
+            ScriptHistory::SoundIndependent
+        } else {
+            match script_drift.iter().map(|(_, n)| *n).max() {
+                Some(worst) if worst >= stem_script::DEEP_ORTHOGRAPHY => ScriptHistory::Deep,
+                Some(worst) if worst > 0 => ScriptHistory::Historical,
+                _ => ScriptHistory::Phonemic,
+            }
+        };
+
         PlausibilityProfile {
             rarity: self.phonemes.rarity(),
             complexity: self.phonotactics.complexity(),
@@ -297,6 +370,8 @@ impl LanguageGenome {
             sense_chains: chains,
             vocabulary_shaping,
             shaping_counts: counts,
+            script_history,
+            script_drift,
         }
     }
 }
@@ -331,7 +406,8 @@ pub fn render_profile(profile: &PlausibilityProfile, name: &str) -> String {
     const MORPH: &str = "Morphological irregularity";
     const SEMANTIC: &str = "Semantic drift";
     const CULTURE: &str = "Vocabulary shaping";
-    let width = [RARITY, COMPLEXITY, DEPTH, MORPH, SEMANTIC, CULTURE]
+    const SCRIPT: &str = "Script history";
+    let width = [RARITY, COMPLEXITY, DEPTH, MORPH, SEMANTIC, CULTURE, SCRIPT]
         .iter()
         .map(|l| l.chars().count())
         .max()
@@ -421,6 +497,44 @@ pub fn render_profile(profile: &PlausibilityProfile, name: &str) -> String {
         }
     };
 
+    // M21: the band plus its raw basis, the `culture_line` shape. §17's script-history
+    // row, and the last one M7 deferred. `Unwritten` is a fact about a language, not a
+    // low score: most languages that have ever existed were never written down.
+    let script_line = match profile.script_history {
+        ScriptHistory::Unwritten => "unwritten  (no script declared)".to_owned(),
+        ScriptHistory::Unmeasured => {
+            "not yet measurable  (a script, but no lexicon to hold it against)".to_owned()
+        }
+        ScriptHistory::SoundIndependent => {
+            "sound-independent  (writes meanings; no pronunciation to drift from)".to_owned()
+        }
+        band => {
+            let label = match band {
+                ScriptHistory::Phonemic => "phonemic",
+                ScriptHistory::Historical => "historical",
+                ScriptHistory::Deep => "deep",
+                ScriptHistory::Unwritten
+                | ScriptHistory::Unmeasured
+                | ScriptHistory::SoundIndependent => unreachable!(),
+            };
+            let basis: Vec<String> = profile
+                .script_drift
+                .iter()
+                .map(|(id, n)| format!("{id} {n}"))
+                .collect();
+            format!(
+                "{label}  ({} mismatch(es): {})",
+                profile
+                    .script_drift
+                    .iter()
+                    .map(|(_, n)| *n)
+                    .max()
+                    .unwrap_or(0),
+                basis.join(", ")
+            )
+        }
+    };
+
     let mut out = String::new();
     out.push_str(&format!("Plausibility profile — {name}\n\n"));
     out.push_str(&format!(
@@ -437,6 +551,7 @@ pub fn render_profile(profile: &PlausibilityProfile, name: &str) -> String {
     out.push_str(&format!("  {MORPH}{}  {morph_line}\n", pad(MORPH)));
     out.push_str(&format!("  {SEMANTIC}{}  {semantic_line}\n", pad(SEMANTIC)));
     out.push_str(&format!("  {CULTURE}{}  {culture_line}\n", pad(CULTURE)));
+    out.push_str(&format!("  {SCRIPT}{}  {script_line}\n", pad(SCRIPT)));
 
     out.push_str("\n  not yet modelled:\n");
     // The unbuilt §17 dimensions, in NOT_MODELLED order — no fabricated score.
@@ -634,9 +749,8 @@ mod tests {
         // M9 filled the semantic row the same way. Asserted as an ABSENCE, and
         // deliberately: the old `contains("M9")` would have kept passing on
         // `ScriptHistoryCoherence`'s "M9+" long after semantics shipped, so the
-        // test would have gone quietly dishonest. The surviving dimensions name
-        // design sections (`§7.6`, `§18`) because neither sits at a numbered
-        // milestone.
+        // test would have gone quietly dishonest. The one surviving dimension names a
+        // design section (`§18`) because it does not sit at a numbered milestone.
         assert!(
             a.contains("Semantic drift"),
             "the scored semantic dimension appears: {a}"
@@ -645,10 +759,20 @@ mod tests {
             !a.contains("M9"),
             "semantics left the not-yet-modelled block at M9: {a}"
         );
+        // M21 filled the script row, so §7.6 left this block too — asserted as an
+        // absence for the reason M9's is.
+        assert!(
+            a.contains("Script history"),
+            "the scored script dimension appears: {a}"
+        );
         assert!(a.contains("not yet modelled"), "{a}");
         assert!(
-            a.contains("§7.6") && a.contains("§18"),
-            "script history and alien modality remain deferred: {a}"
+            !a.contains("§7.6"),
+            "script history left the not-yet-modelled block at M21: {a}"
+        );
+        assert!(
+            a.contains("§18"),
+            "alien modality is the last deferred dimension: {a}"
         );
         assert!(!a.contains('%'), "no fabricated percentage: {a}");
         assert!(

@@ -153,6 +153,35 @@ pub struct LanguageGenome {
     #[serde(default, skip_serializing_if = "SyntaxProfile::is_empty")]
     pub syntax: SyntaxProfile,
 
+    /// The syntactic changes that produced this language's current grammar (M19).
+    ///
+    /// **Past tense**, exactly as [`Self::applied_rules`] is, and for the same reason:
+    /// this is the record of what happened, not a queue of what to do. Each entry
+    /// names the sound change that caused it — a `RuleId` the *engine* found by
+    /// replaying this language's own derivations, never one the author wrote down.
+    /// That field is the whole point of the milestone (§3.3, for grammar).
+    ///
+    /// Empty for every pre-M19 file, so `skip_serializing_if` keeps them
+    /// byte-identical. `fork` and `evolve` carry it verbatim: a daughter inherits the
+    /// grammatical history of its parent, because that history is what its grammar is.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub applied_shifts: Vec<crate::shift::AppliedShift>,
+
+    /// This language's writing systems (ROADMAP M20, `DESIGN.md` §7.6).
+    ///
+    /// A `Vec`, not an `Option`: a language may be written more than one way at once
+    /// — Japanese is, and so is any language with a liturgical script beside a daily
+    /// one — and modelling that as a list costs nothing while modelling it as a single
+    /// field would need a redesign later. Authored order decides which `stemma write`
+    /// uses by default.
+    ///
+    /// Empty for every pre-M20 file, so `skip_serializing_if` keeps them
+    /// byte-identical. `fork` and `evolve` carry them verbatim: a daughter inherits
+    /// its parent's orthography, which is exactly why spelling drifts out of step with
+    /// pronunciation — the gap M21 is about.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub scripts: Vec<stem_script::WritingSystem>,
+
     /// Meanings **this project declares**, alongside the built-in concept list
     /// (ROADMAP M12).
     ///
@@ -219,6 +248,8 @@ impl LanguageGenome {
             morphology: Morphology::default(),
             environment: EnvironmentProfile::default(),
             syntax: SyntaxProfile::default(),
+            applied_shifts: Vec::new(),
+            scripts: Vec::new(),
             concepts: Vec::new(),
             semantics: SemanticSpace::new(),
             applied_drifts: Vec::new(),
@@ -469,6 +500,27 @@ impl Validate for LanguageGenome {
             check_against_concepts(&self.lexicon, &self.concepts),
         );
 
+        // M20: a script's own structural checks, plus the cross-check that needs the
+        // inventory. Gated on a non-empty list, so a pre-M20 language absorbs nothing.
+        for script in &self.scripts {
+            report.absorb("script", script.validate());
+            report.absorb(
+                "script",
+                stem_script::check_against_inventory(script, &self.phonemes),
+            );
+            // M21: and whether the spelling has kept up with the pronunciation. Needs
+            // the lexicon rather than the inventory — `apply_rules` only ever grows an
+            // inventory, so "this language no longer says /w/" is a question only the
+            // word list can answer. Skipped when there is no lexicon: a script with
+            // nothing to write has not drifted, it is simply unmeasured.
+            if !self.lexicon.is_empty() {
+                report.absorb(
+                    "script",
+                    stem_script::check_against_lexicon(script, &self.lexicon, &self.phonemes),
+                );
+            }
+        }
+
         // M17, the sixth instance of the same pattern — except this one needs no
         // context at all, so it is an ordinary `Validate` impl absorbed under its own
         // scope. Gated on a non-empty profile, so a pre-M17 language absorbs an empty
@@ -577,6 +629,8 @@ impl LanguageGenome {
             morphology: self.morphology.clone(),
             environment: self.environment.clone(),
             syntax: self.syntax.clone(),
+            applied_shifts: self.applied_shifts.clone(),
+            scripts: self.scripts.clone(),
             // A daughter inherits the meanings its parent could express.
             concepts: self.concepts.clone(),
             // Likewise its senses and their recorded history: a daughter means what
@@ -656,6 +710,8 @@ impl LanguageGenome {
             morphology: self.morphology.clone(),
             environment: self.environment.clone(),
             syntax: self.syntax.clone(),
+            applied_shifts: self.applied_shifts.clone(),
+            scripts: self.scripts.clone(),
             concepts: self.concepts.clone(),
             // A sound change moves forms, never meanings. The senses and their
             // history ride along untouched — and each word's `senses` /

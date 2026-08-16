@@ -25,7 +25,9 @@ pub mod lineage;
 pub mod paradigm;
 pub mod profile;
 pub mod say;
+pub mod script_view;
 pub mod semantics_view;
+pub mod shift;
 
 pub use culture::{absences, render_culture};
 pub use edit::{Edit, EditOutcome, apply as apply_edit, move_rule, new_errors, new_issues};
@@ -38,6 +40,11 @@ pub use lineage::{
 };
 pub use paradigm::render_paradigm;
 pub use say::{render_sentence, say};
+pub use script_view::{render_glyph_trace, render_scripts, render_written, write_word};
+pub use shift::{
+    AppliedShift, Consequence, Finding, SyntacticChange, SyntacticChangeSet, Trigger, apply_shifts,
+    check, render_shifts,
+};
 
 /// The spaces needed to pad `text` out to `width` **display characters**.
 ///
@@ -58,7 +65,7 @@ pub(crate) fn pad(text: &str, width: usize) -> String {
 }
 pub use profile::{
     HistoricalDepth, MorphologicalIrregularity, NOT_MODELLED, NotModelled, PlausibilityProfile,
-    SemanticDrift, VocabularyShaping, render_profile,
+    ScriptHistory, SemanticDrift, VocabularyShaping, render_profile,
 };
 pub use semantics_view::{render_sense_history, render_word_history};
 // The phonology bands the profile is built from, re-exported so a consumer needs

@@ -1,0 +1,96 @@
+// A proposal the engine ACCEPTS — the M22 acceptance fixture.
+//
+// PROVENANCE, STATED PLAINLY: this file was written by Claude (Opus 5) against the
+// output of `stemma brief fixtures/proto_asterian.ron --for rules`, in the session
+// that built M22. That is not a dramatisation of what a model might produce — it is
+// what one did produce, working from the briefing, and it is labelled so because a
+// fixture claiming a provenance it does not have would be the exact dishonesty this
+// milestone exists to prevent.
+//
+// AND THE FIRST DRAFT WAS WRONG, which is worth recording. It proposed velar
+// palatalization — /k/ fronting to /t/ before a front vowel — and the rationale argued
+// the case well. The engine accepted it and then reported `unnameable_output` on every
+// site: setting `[-dorsal, +coronal]` on /k/ leaves the dorsal-dependent `+back` and
+// `-round` still specified, and no phoneme and no reference row carries that bundle.
+// The prose was right about the sound change and the formalism did not do it, and
+// nothing but running it through the engine would have shown that.
+//
+// THE SHAPE IS THE POINT. Three parts, kept apart:
+//
+//   provenance  — who wrote it. Nothing in the engine branches on it, ever.
+//   rationale   — the model's own words. Never parsed, never matched, never stored.
+//   artefact    — a RuleSet. Byte-for-byte the same kind of thing a person writes in
+//                 fixtures/rules_asterian.ron, with NO field marking it machine-made,
+//                 because the engine must not be able to tell.
+//
+// `stemma review` runs the artefact through `apply-rules` against a throwaway copy and
+// reports; `stemma accept` runs the same call and keeps the result. There is no third
+// code path, which is the whole of §3.2.
+(
+    id: "raising_and_voicing",
+    target: "proto_asterian",
+
+    provenance: (
+        author: "claude-opus-5",
+        method: "from `stemma brief fixtures/proto_asterian.ron --for rules`",
+    ),
+
+    // PROSE. The engine never reads a character of this. `stemma review` prints it
+    // fenced, above the verdict, attributed to the proposer — so a reader can weigh
+    // the argument separately from the check.
+    rationale: "Two changes: one that destroys a contrast and one that creates one.
+
+§7.2 lists phonemic merger and phonemic split as the two engines of phonological
+history, and a proposal with one of each says more about a language than two of the
+same kind would.
+
+r_p01, mid vowel raising. Asterian's five vowels are the commonest system there is,
+and the commonest thing that happens to it is that the mid vowels move. Raising /e/ to
+/i/ and /o/ to /u/ leaves a three-vowel system, and — this is the part worth being
+plain about — it is a MERGER. Words that differed only in mid versus high become
+homophones. `stemma validate` will report more shared written forms afterwards than
+before, and that is the change doing its job rather than a fault in it.
+
+r_p02, intervocalic voicing. A voiceless stop voices between two vowels. Asterian has
+no voiced obstruents at all, so this innovates /b/, /d/ and /ɡ/ outright: a split, and
+the inventory grows from fifteen to eighteen.
+
+ORDER: raising at 250 years, voicing at 450. I want to be honest that the ordering is
+not load-bearing here — the two rules touch disjoint segment classes, so reversing
+them gives the same forms. I have stated it in chronological order because §11.3 says
+order is always a claim, not because anything turns on it. If you want an ordering
+that matters, the case to build is a rule that feeds or bleeds another.
+
+What I am least sure of: whether a language acquiring its first voiced obstruents
+through intervocalic voicing is typologically ordinary, or whether such systems
+usually get voicing some other way first. The briefing gave me the inventory and the
+phonotactics; it could not settle that, and I would rather say so than imply I checked.",
+
+    artefact: rules((
+        id: "rules_raising",
+        name: "Mid vowel raising and intervocalic voicing",
+        description: "A merger and a split: the mid vowels raise, then voiceless stops voice between vowels.",
+        rules: [
+            (
+                id: "r_p01",
+                name: "Mid vowel raising",
+                description: "A mid vowel raises: /e/ becomes /i/ and /o/ becomes /u/, merging the two series.",
+                chronology_years: 250,
+                target: (features: ["+syllabic", "-high", "-low"]),
+                change: set(["+high"]),
+            ),
+            (
+                id: "r_p02",
+                name: "Intervocalic voicing",
+                description: "A voiceless stop voices between two vowels.",
+                chronology_years: 450,
+                target: (features: ["-sonorant", "-continuant", "-voice"]),
+                environment: (
+                    before: [segment((features: ["+syllabic"]))],
+                    after: [segment((features: ["+syllabic"]))],
+                ),
+                change: set(["+voice"]),
+            ),
+        ],
+    )),
+)
