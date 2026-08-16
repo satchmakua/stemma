@@ -160,20 +160,48 @@ pub enum ScriptHistory {
     Deep,
 }
 
+/// How much this language depends on a body Stemma was not built for (M23) — §17's
+/// alien-embodiment row, and the **last** dimension M7 deferred.
+///
+/// # It measures dependence, not strangeness
+///
+/// A language whose speakers have a vocal tract is not thereby ordinary, and one whose
+/// speakers glow is not thereby better. What this counts is how much of Stemma's
+/// machinery is answering a question this species does not have — which is a fact about
+/// the *tool*, honestly reported, rather than a judgement of the language.
+///
+/// The raw basis is the applicability table: how many subsystems come back as
+/// `does not apply` or `not built yet`. Nothing is fabricated and nothing is scored on
+/// a scale that does not exist.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EmbodimentDependence {
+    /// No profile, or a profile with a vocal tract: every subsystem applies. The state
+    /// of every language in this project, and a fact rather than a high score.
+    Vocal,
+    /// A non-vocal body, and some of Stemma's machinery has nothing to say to it.
+    NonVocal,
+    /// A non-vocal body that has been given vocal machinery anyway — sounds, syllable
+    /// templates or stress it cannot produce. Reported, never refused: converting a
+    /// language a step at a time is a normal thing to be doing.
+    Mismatched,
+}
+
 /// A §17 dimension no shipped milestone can measure yet. Carried explicitly so the
 /// profile is transparent about its own coverage rather than silently omitting
 /// four of §17's rows — or, worse, fabricating a number for them.
+///
+/// **Empty since M23**, and kept rather than deleted: the type and its list are what
+/// let a future milestone name a dimension it cannot yet measure, and deleting them
+/// would make silence the cheapest option next time. `render_profile` says the block
+/// is empty rather than omitting it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum NotModelled {
-    AlienEmbodimentDependence,
-}
+#[non_exhaustive]
+pub enum NotModelled {}
 
 impl NotModelled {
     /// The §17 dimension name.
     pub fn label(self) -> &'static str {
-        match self {
-            Self::AlienEmbodimentDependence => "Alien embodiment dependence",
-        }
+        match self {}
     }
 
     /// The design section that would make it measurable.
@@ -183,20 +211,20 @@ impl NotModelled {
     /// naming a milestone that does not exist would be a schedule claim the project
     /// has not made.
     pub fn milestone(self) -> &'static str {
-        match self {
-            Self::AlienEmbodimentDependence => "§18",
-        }
+        match self {}
     }
 }
 
 /// The §17 dimensions still deferred, in §17's listed order — one list the renderer
 /// and future milestones share, so a renumber is a one-line change.
 ///
-/// Morphological irregularity left this list at M8, **semantic plausibility at M9**,
-/// and **script-history coherence at M21** ([`ScriptHistory`]); all three are scored
-/// bands now, and one row is left. Syntax / word order is deliberately absent: §20.1
-/// forbids a syntax engine, and a "not modelled" line would invite the build.
-pub const NOT_MODELLED: &[NotModelled] = &[NotModelled::AlienEmbodimentDependence];
+/// Morphological irregularity left it at M8, semantic plausibility at M9,
+/// script-history coherence at M21 ([`ScriptHistory`]) and **alien embodiment
+/// dependence at M23** ([`EmbodimentDependence`]). Every dimension §17 names is scored.
+///
+/// Syntax / word order was never on it: §20.1 forbids a syntax engine, and a
+/// "not modelled" line would have invited the build.
+pub const NOT_MODELLED: &[NotModelled] = &[];
 
 /// §17's scored-dimensions block as a value. Never persisted (the `CognateTable`
 /// precedent); grows fields additively as milestones fill dimensions. No serde.
@@ -238,6 +266,11 @@ pub struct PlausibilityProfile {
     /// language with several scripts drifts from each at its own rate, and the band is
     /// the worst of them.
     pub script_drift: Vec<(String, usize)>,
+    /// How much this language depends on a body Stemma was not built for (M23).
+    pub embodiment_dependence: EmbodimentDependence,
+    /// The raw basis: the subsystems that do not apply to this body, in the order
+    /// `Subsystem::ALL` lists them. Empty for an ordinary speaker.
+    pub unavailable: Vec<&'static str>,
 }
 
 impl LanguageGenome {
@@ -314,11 +347,9 @@ impl LanguageGenome {
         // (`docs/adr/0009`). `Unshaped` is "no profile declared", which is a
         // different fact from "a profile that removes nothing" — the latter is a
         // deliberate decision to keep everything, and reads as `Shaped`.
-        let counts = stem_lexicon::shaping_counts(
-            &self.environment,
-            &stem_lexicon::meanings(&self.concepts),
-        );
-        let vocabulary_shaping = if self.environment.is_empty() {
+        let counts =
+            stem_lexicon::shaping_counts(self.ecology(), &stem_lexicon::meanings(&self.concepts));
+        let vocabulary_shaping = if self.ecology().is_empty() {
             VocabularyShaping::Unshaped
         } else if counts.0 >= LARGE_VOCABULARY_GAP {
             VocabularyShaping::HeavilyShaped
@@ -358,6 +389,26 @@ impl LanguageGenome {
             }
         };
 
+        // M23: §17's last row. The applicability table is the raw basis, and the band
+        // separates "this body has no use for some of Stemma" from "this body has been
+        // given machinery it has no use for anyway" — the second is a finding about the
+        // file rather than about the species, and reads differently.
+        let unavailable: Vec<&'static str> = crate::embodiment_view::unavailable(&self.embodiment)
+            .into_iter()
+            .map(|s| s.label())
+            .collect();
+        let embodiment_dependence = if unavailable.is_empty() {
+            EmbodimentDependence::Vocal
+        } else if crate::embodiment_view::check_against_language(self)
+            .warnings()
+            .next()
+            .is_some()
+        {
+            EmbodimentDependence::Mismatched
+        } else {
+            EmbodimentDependence::NonVocal
+        };
+
         PlausibilityProfile {
             rarity: self.phonemes.rarity(),
             complexity: self.phonotactics.complexity(),
@@ -372,6 +423,8 @@ impl LanguageGenome {
             shaping_counts: counts,
             script_history,
             script_drift,
+            embodiment_dependence,
+            unavailable,
         }
     }
 }
@@ -407,11 +460,14 @@ pub fn render_profile(profile: &PlausibilityProfile, name: &str) -> String {
     const SEMANTIC: &str = "Semantic drift";
     const CULTURE: &str = "Vocabulary shaping";
     const SCRIPT: &str = "Script history";
-    let width = [RARITY, COMPLEXITY, DEPTH, MORPH, SEMANTIC, CULTURE, SCRIPT]
-        .iter()
-        .map(|l| l.chars().count())
-        .max()
-        .unwrap_or(0);
+    const BODY: &str = "Embodiment";
+    let width = [
+        RARITY, COMPLEXITY, DEPTH, MORPH, SEMANTIC, CULTURE, SCRIPT, BODY,
+    ]
+    .iter()
+    .map(|l| l.chars().count())
+    .max()
+    .unwrap_or(0);
     let pad = |label: &str| crate::pad(label, width);
 
     let depth_line = match profile.historical_depth {
@@ -535,6 +591,27 @@ pub fn render_profile(profile: &PlausibilityProfile, name: &str) -> String {
         }
     };
 
+    // M23: §17's last row. `Vocal` is a fact about a language rather than a score —
+    // every fixture in this project is one — so it says what it is rather than
+    // reporting a zero.
+    let body_line = match profile.embodiment_dependence {
+        EmbodimentDependence::Vocal => {
+            "vocal  (every subsystem applies to these speakers)".to_owned()
+        }
+        band => {
+            let label = match band {
+                EmbodimentDependence::NonVocal => "non-vocal",
+                EmbodimentDependence::Mismatched => "non-vocal, and mismatched",
+                EmbodimentDependence::Vocal => unreachable!(),
+            };
+            format!(
+                "{label}  ({} do not apply: {})",
+                profile.unavailable.len(),
+                profile.unavailable.join(", ")
+            )
+        }
+    };
+
     let mut out = String::new();
     out.push_str(&format!("Plausibility profile — {name}\n\n"));
     out.push_str(&format!(
@@ -552,9 +629,17 @@ pub fn render_profile(profile: &PlausibilityProfile, name: &str) -> String {
     out.push_str(&format!("  {SEMANTIC}{}  {semantic_line}\n", pad(SEMANTIC)));
     out.push_str(&format!("  {CULTURE}{}  {culture_line}\n", pad(CULTURE)));
     out.push_str(&format!("  {SCRIPT}{}  {script_line}\n", pad(SCRIPT)));
+    out.push_str(&format!("  {BODY}{}  {body_line}\n", pad(BODY)));
 
     out.push_str("\n  not yet modelled:\n");
     // The unbuilt §17 dimensions, in NOT_MODELLED order — no fabricated score.
+    //
+    // **Empty since M23**, and the block is kept rather than dropped: it is the place
+    // this profile admits what it cannot measure, and a heading that disappears when
+    // the list empties is one nobody notices going missing when the list refills.
+    if NOT_MODELLED.is_empty() {
+        out.push_str("    (none — every dimension §17 names is scored above)\n");
+    }
     let nm_width = NOT_MODELLED
         .iter()
         .map(|d| d.label().chars().count())
@@ -765,14 +850,21 @@ mod tests {
             a.contains("Script history"),
             "the scored script dimension appears: {a}"
         );
+        // M23 filled the last row, so the block is EMPTY — and still printed. It is
+        // where this profile admits what it cannot measure, and a heading that vanishes
+        // when the list empties is one nobody notices going missing when it refills.
+        assert!(
+            a.contains("Embodiment"),
+            "the scored embodiment dimension appears: {a}"
+        );
         assert!(a.contains("not yet modelled"), "{a}");
         assert!(
-            !a.contains("§7.6"),
-            "script history left the not-yet-modelled block at M21: {a}"
+            !a.contains("§7.6") && !a.contains("§18"),
+            "every §17 dimension is scored, so none is named as deferred: {a}"
         );
         assert!(
-            a.contains("§18"),
-            "alien modality is the last deferred dimension: {a}"
+            a.contains("every dimension §17 names is scored"),
+            "and the empty block says it is empty: {a}"
         );
         assert!(!a.contains('%'), "no fabricated percentage: {a}");
         assert!(

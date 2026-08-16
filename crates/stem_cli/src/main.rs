@@ -417,6 +417,17 @@ enum Command {
         path: PathBuf,
     },
 
+    /// Describe this language's speakers, and what Stemma can do with them (M23).
+    ///
+    /// Prints the body, its channels with §18.2's constraints, and — the part that
+    /// matters — which of Stemma's subsystems apply to it and which do not, with
+    /// reasons. A language that says nothing about its speakers is told that Stemma
+    /// assumes a vocal tract, because that is what every layer of it is built for.
+    Embodiment {
+        /// Path to a language file (`.ron` or `.json`).
+        path: PathBuf,
+    },
+
     /// Write the briefing a model needs before proposing anything (M22).
     ///
     /// Everything in it is generated from the language file, so it cannot be out of
@@ -734,6 +745,7 @@ fn run() -> Result<ExitCode> {
             glyph,
             script,
         } => glyph_trace(&path, &glyph, script.as_deref()),
+        Command::Embodiment { path } => embodiment(&path),
         Command::Brief { path, r#for } => brief(&path, &r#for),
         Command::Review { path, proposal } => review(&path, &proposal),
         Command::Accept {
@@ -1072,14 +1084,14 @@ fn new_lexicon(
         &genome.phonemes,
         &genome.phonotactics,
         &available[..count],
-        &genome.environment,
+        genome.ecology(),
         seed,
     )
     .with_context(|| format!("seeding a lexicon for `{}`", genome.name))?;
 
-    if !genome.environment.is_empty() {
+    if !genome.ecology().is_empty() {
         let (absent, elaborated, extra) =
-            stem_lexicon::shaping_counts(&genome.environment, &available[..count]);
+            stem_lexicon::shaping_counts(genome.ecology(), &available[..count]);
         eprintln!(
             "note: culture profile — {absent} meaning(s) uncoined, {elaborated} elaborated              into {extra} extra word(s); `stemma culture` explains each"
         );
@@ -1501,6 +1513,13 @@ fn scripts(path: &std::path::Path) -> Result<ExitCode> {
     Ok(ExitCode::SUCCESS)
 }
 
+/// `stemma embodiment` — what these speakers are, and what applies to them.
+fn embodiment(path: &std::path::Path) -> Result<ExitCode> {
+    let genome = load_genome(path)?;
+    print!("{}", stem_genome::render_embodiment(&genome)?);
+    Ok(ExitCode::SUCCESS)
+}
+
 /// `stemma brief` — what a model is told before it proposes anything.
 fn brief(path: &std::path::Path, kind: &str) -> Result<ExitCode> {
     let genome = load_genome(path)?;
@@ -1663,7 +1682,7 @@ fn culture(path: &std::path::Path) -> Result<ExitCode> {
     print!("{}", stem_genome::render_culture(&genome)?);
 
     let report = stem_lexicon::check_against_environment(
-        &genome.environment,
+        genome.ecology(),
         &genome.concepts,
         &stem_lexicon::meanings(&genome.concepts),
     );

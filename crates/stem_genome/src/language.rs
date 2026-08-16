@@ -182,6 +182,23 @@ pub struct LanguageGenome {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub scripts: Vec<stem_script::WritingSystem>,
 
+    /// What this language's **speakers are** (ROADMAP M23, `DESIGN.md` §18.1).
+    ///
+    /// Empty for every language written before M23, and an empty profile means an
+    /// ordinary speaker with an ordinary vocal tract — **silence is not a claim to be
+    /// alien**. `EmbodimentProfile::has_vocal_tract` answers `true` for it, which is
+    /// what keeps every existing fixture behaving exactly as it did.
+    ///
+    /// §18.1 makes `environment: EnvironmentProfile` a field *of* this profile, so
+    /// M15's ecology work is nested here rather than duplicated. [`Self::environment`]
+    /// stays where it is for files that predate M23; the two are reconciled by
+    /// [`Self::ecology`], which is the one place either is read.
+    #[serde(
+        default,
+        skip_serializing_if = "stem_embodiment::EmbodimentProfile::is_empty"
+    )]
+    pub embodiment: stem_embodiment::EmbodimentProfile,
+
     /// Meanings **this project declares**, alongside the built-in concept list
     /// (ROADMAP M12).
     ///
@@ -232,6 +249,26 @@ pub struct LanguageGenome {
 }
 
 impl LanguageGenome {
+    /// This language's ecology, from wherever it is declared.
+    ///
+    /// **The one place either field is read**, and it exists because M23 gave the same
+    /// type two homes. §18.1 makes `environment` a field of the embodiment profile,
+    /// and M15 put it on the genome two milestones before there was an embodiment
+    /// profile to put it in. Both files are somebody's work, so both keep loading — and
+    /// the alternative to this function is that following the design document silently
+    /// gets your ecology ignored, which is the failure mode this project spends most of
+    /// its comments guarding against.
+    ///
+    /// The nested one wins when both are declared, and `two_ecologies_declared` reports
+    /// the collision so it is never resolved silently.
+    pub fn ecology(&self) -> &EnvironmentProfile {
+        if self.embodiment.environment.is_empty() {
+            &self.environment
+        } else {
+            &self.embodiment.environment
+        }
+    }
+
     /// Builds a proto-language: no parent, zero lineage depth.
     pub fn proto(id: impl Into<LanguageId>, name: impl Into<String>) -> Self {
         Self {
@@ -250,6 +287,7 @@ impl LanguageGenome {
             syntax: SyntaxProfile::default(),
             applied_shifts: Vec::new(),
             scripts: Vec::new(),
+            embodiment: stem_embodiment::EmbodimentProfile::default(),
             concepts: Vec::new(),
             semantics: SemanticSpace::new(),
             applied_drifts: Vec::new(),
@@ -462,16 +500,80 @@ impl Validate for LanguageGenome {
             );
         }
 
-        report.absorb("phonology", self.phonemes.validate());
-        report.absorb("phonotactics", self.phonotactics.validate());
+        // M23: the inventory's checks are about a vocal tract, and this speaker may
+        // not have one. `PhonemeInventory::validate` takes no context and cannot know,
+        // so the genome — which knows both halves — sets aside exactly the checks whose
+        // meaning depends on the consonant/vowel distinction, and says that it did.
+        //
+        // This is the ONLY place anything is ever filtered out of a sub-report, it is
+        // one short named list (`VOCAL_TRACT_CHECKS`), and the reason is printed. It is
+        // not a mechanism for silencing inconvenient errors.
+        let vocal = self.embodiment.has_vocal_tract();
+        let mut set_aside: Vec<&'static str> = Vec::new();
+        let mut absorb =
+            |report: &mut ValidationReport, scope: &'static str, sub: ValidationReport| {
+                if vocal {
+                    report.absorb(scope, sub);
+                    return;
+                }
+                let mut kept = ValidationReport::new();
+                for issue in sub.issues {
+                    if let Some(known) = stem_embodiment::VOCAL_TRACT_CHECKS
+                        .iter()
+                        .find(|c| **c == issue.code.as_str())
+                        .copied()
+                    {
+                        if !set_aside.contains(&known) {
+                            set_aside.push(known);
+                        }
+                        continue;
+                    }
+                    kept.push(issue);
+                }
+                report.absorb(scope, kept);
+            };
+        absorb(&mut report, "phonology", self.phonemes.validate());
+        absorb(&mut report, "phonotactics", self.phonotactics.validate());
         // Needs both halves of the language, so it cannot live in either type's
         // own `validate` — `Validate::validate(&self)` takes no context.
-        report.absorb(
+        absorb(
+            &mut report,
             "phonotactics",
             stem_phonology::phonotactics::check_against_inventory(
                 &self.phonotactics,
                 &self.phonemes,
             ),
+        );
+        drop(absorb);
+        if !set_aside.is_empty() {
+            let names: Vec<String> = set_aside.iter().map(|c| format!("`{c}`")).collect();
+            report.note(
+                "embodiment.vocal_checks_set_aside",
+                format!(
+                    "these speakers have no vocal tract, so {} {} not apply and {} set \
+                     aside; `stemma embodiment` says what does and does not work for \
+                     this body",
+                    names.join(", "),
+                    if names.len() == 1 { "does" } else { "do" },
+                    if names.len() == 1 { "was" } else { "were" },
+                ),
+            );
+        }
+        // M23 gave `EnvironmentProfile` two homes (see `ecology`). Declaring both is
+        // legal and resolvable, but it must never be resolved *silently* — an author
+        // who edits the one that loses would watch their change do nothing.
+        if !self.environment.is_empty() && !self.embodiment.environment.is_empty() {
+            report.warn(
+                "embodiment.two_ecologies_declared",
+                "this language declares an environment profile at the top level and                  another inside `embodiment`; the nested one is used, and the top-level                  one is ignored",
+            );
+        }
+        report.absorb("embodiment", self.embodiment.validate());
+        // And whether this language has used machinery its speakers' bodies cannot
+        // account for. The profile proposes; the engine observes — M19's discipline.
+        report.absorb(
+            "embodiment",
+            crate::embodiment_view::check_against_language(self),
         );
 
         report.absorb("lexicon", self.lexicon.validate());
@@ -532,11 +634,11 @@ impl Validate for LanguageGenome {
         // M15, the fifth instance: a culture trait names concepts that may be
         // built-in or project-declared, so the check needs both lists. Gated on a
         // non-empty profile, so a pre-M15 language absorbs an empty report.
-        if !self.environment.is_empty() {
+        if !self.ecology().is_empty() {
             report.absorb(
                 "culture",
                 stem_lexicon::check_against_environment(
-                    &self.environment,
+                    self.ecology(),
                     &self.concepts,
                     &stem_lexicon::meanings(&self.concepts),
                 ),
@@ -631,6 +733,8 @@ impl LanguageGenome {
             syntax: self.syntax.clone(),
             applied_shifts: self.applied_shifts.clone(),
             scripts: self.scripts.clone(),
+            // Carried verbatim: a daughter species has its parents' body.
+            embodiment: self.embodiment.clone(),
             // A daughter inherits the meanings its parent could express.
             concepts: self.concepts.clone(),
             // Likewise its senses and their recorded history: a daughter means what
@@ -712,6 +816,8 @@ impl LanguageGenome {
             syntax: self.syntax.clone(),
             applied_shifts: self.applied_shifts.clone(),
             scripts: self.scripts.clone(),
+            // Carried verbatim: a daughter species has its parents' body.
+            embodiment: self.embodiment.clone(),
             concepts: self.concepts.clone(),
             // A sound change moves forms, never meanings. The senses and their
             // history ride along untouched — and each word's `senses` /
