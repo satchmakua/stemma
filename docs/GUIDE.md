@@ -1182,6 +1182,150 @@ one nobody can reason about.
 
 ---
 
+## Say what the speakers are
+
+Everything above assumes a mouth. A phoneme is something a vocal tract does; a `CVC`
+template describes a syllable; stress is a property of a syllable. That is fine — it is
+what almost every language you will ever build is — but it is an *assumption*, and
+Stemma should say so rather than apply it to a creature it does not fit.
+
+`fixtures/luminous_kethi.ron` is a colonial cephalopod with no vocal tract that
+communicates in light and ink:
+
+```bash
+stemma embodiment fixtures/luminous_kethi.ron
+```
+
+```
+Embodiment — Kethi
+
+  A colonial cephalopod of the lightless shelf. It has no lungs, no larynx and no
+  mouth it can shape; it speaks by lighting up.
+
+  Vocal tract: none
+  Speakers: collective
+  Manipulators: 8 × the feeding arms  (dexterity high)
+
+  Channels
+    The mantle bands  (mantle, bioluminescent)
+      persistence fleeting   simultaneity simultaneous   direction omnidirectional …
+    Ink marks  (ink, chemical)
+      persistence persistent   simultaneity sequential   direction omnidirectional …
+
+  What Stemma can do with this body
+    Phonology     does not apply  a phoneme inventory is a set of things a vocal tract
+                                  can do, and these speakers have no vocal tract…
+    Phonotactics  does not apply  a `CVC` template describes a syllable…
+    Prosody       does not apply  stress is a property of a syllable
+    Sound change  not built yet   signal change over this channel's own contrastive
+                                  dimensions is M24's work
+    Morphology    applies         composing meaningful parts is about structure, not a
+                                  mouth
+    Semantics     applies         meaning and its history are independent of the channel
+    Syntax        applies         …though a non-vocal channel is expected to solve it
+                                  differently
+    Script        partly          a sign may map from a meaning; one that maps from a
+                                  phoneme has nothing to map from here
+```
+
+That table is the point of the milestone. A blanket "nothing applies" would be as
+useless as saying nothing — meaning, structure and descent do not care what carries
+them, and the honest answer differs row by row.
+
+### It validates
+
+```bash
+stemma validate fixtures/luminous_kethi.ron
+```
+
+```
+· embodiment.vocal_checks_set_aside: these speakers have no vocal tract, so `empty`,
+  `no_templates`, `no_syllable_counts` do not apply and were set aside
+…
+✓ valid — 0 warning(s), nothing blocking
+```
+
+The Kethi have **no phonemes at all**, and that is the honest state of the file rather
+than a hole in it. Normally an empty inventory is an error; for a creature with no
+mouth it is simply true, so Stemma sets that check aside and *names it*.
+
+The set-aside is narrow on purpose. Checks about a well-formed **record** — a duplicate
+id, an empty IPA form, a zero weight — still apply to everyone, because those are broken
+data rather than claims about anatomy. Declaring `embodiment:` is not a way to silence
+things.
+
+> **Silence is not a claim to be alien.** A language that says nothing about its
+> speakers is assumed to have ordinary ones, and behaves exactly as it always did. Every
+> file you have written so far is in that category, and nothing about it changed.
+
+### Declaring a body
+
+```
+embodiment: (
+    note: "A colonial cephalopod of the lightless shelf.",
+    // No `vocal_tract:` field at all — that absence is the whole alien case.
+
+    channels: [
+        (
+            id: "mantle",
+            name: "The mantle bands",
+            kind: bioluminescent,          // vocal · ultrasonic · bioluminescent ·
+                                           // chromatophore · gesture · chemical ·
+                                           // field_pulse · pressure_wave · hive_harmonic
+            persistence: fleeting,         // fleeting · lingering · persistent
+            simultaneity: simultaneous,    // sequential · simultaneous
+            directionality: omnidirectional,
+            privacy: broadcast,
+
+            bandwidth: high, range: moderate, energy_cost: high,
+            learnability: moderate, noise: low, cultural_salience: high,
+        ),
+    ],
+
+    manipulators: [ (name: "the feeding arms", count: 8, dexterity: high) ],
+    social_cognition: (structure: collective, speakers_per_utterance: 1),
+    environment: ( traits: [ … ] ),        // M15's ecology, nested where §18.1 puts it
+)
+```
+
+The first four channel constraints drive a **reported consequence**; the other six are
+printed and nothing else, and the sketch says which are which so you never fill one in
+expecting it to do something.
+
+A persistent channel gets told that a message on it can be found later by someone who
+was not there, so evidential marking and source tracking are worth having. A
+simultaneous one gets told morphology need not be laid out in a line. Eight independent
+limbs get told to expect classifiers.
+
+All of it is **reported, never enforced** — the same rule as the typological harmony in
+`stemma grammar`. Stemma does not go looking for simultaneous morphology in the Kethi's
+grammar, and does not mark its absence. They are allowed to be strange in ways their
+body does not predict.
+
+### If you give a body the wrong machinery
+
+Put a Kethi-style profile on a language that already has vowels and Stemma will tell you:
+
+```
+  But this language has used it anyway:
+    warning: these speakers have no vocal tract, and this language declares 10
+    consonant(s) and 5 vowel(s) — sounds made by an anatomy the profile says they do
+    not have
+```
+
+A warning, not a refusal: converting a language a step at a time is a normal thing to
+be doing, and you give a species a body before you rewrite its inventory.
+
+> **The ecology can go in either place.** §18.1 makes `environment` a field of the
+> embodiment profile; M15 put it on the genome. Both load, the nested one wins, and
+> declaring both is reported so it is never resolved silently.
+>
+> **Signals are M24.** The Kethi have two channels and nothing to say on either. Giving
+> them a signal system — and an ordered signal change through the same engine — is the
+> next and last milestone.
+
+---
+
 ## The one-command showcase
 
 ```bash
@@ -1217,6 +1361,7 @@ stemma <cmd> --help    # its options
 | `scripts` `write` | writing systems, and what a spelling does and does not carry |
 | `glyph-trace` | a sign's biography, and whether the sound it writes is still spoken |
 | `brief` `review` `accept` | let a model propose an artefact, and gate it through the engine |
+| `embodiment` | what the speakers are, and which of Stemma's machinery applies to them |
 | `set-gloss` `add-word` `remove-word` `declare-concept` `reorder-rule` | edit a language |
 | `drift` `drifts` | meaning change |
 | `rules` | validate a rule file (`.ron`, `.json`, or `.sc`) |
@@ -1243,7 +1388,7 @@ exclusion — see [ROADMAP.md](../ROADMAP.md).
 | **Grammaticalization beyond case** — a topic marker cannot become an article, a serial verb cannot become an auxiliary, because none of those categories exists in the model. | case erosion forcing word order, with the causal chain checked (M19) | a later milestone, once there is a category to become |
 | **Cross-script ancestry** — a sign descending from a sign in *another* script (Latin `A` from Phoenician *aleph*). | a sign's own chain, pictogram to present (M21) | a later milestone, once a donor script can be named in the file |
 | **Morphographic writing** — a sign for a morpheme (Chinese radicals, Egyptian determinatives). | signs map from sounds, or from meanings | a milestone with shared morpheme components to point at |
-| **Alien modality** — §7.7's pulse/scent/gesture languages. | the data model assumes a vocal tract throughout | **M23** embodiment profile → **M24** non-vocal signal systems |
+| **Non-vocal signals** — a species can have a bioluminescent channel (M23) but nothing to say on it. | the body, its channels, and an honest account of which machinery does not apply | **M24** — a phoneme generalised to a channel signal, and signal change through the same engine |
 | **A model inside Stemma** — no HTTP client, no API key, no `--model` flag. | a briefing out and a proposal in; the model runs wherever you run it (M22) | not planned: the out-of-process boundary *is* how the constraint is enforced, and an in-process client would make the test suite network-dependent |
 | **Free translation** (§6.5's last bullet). | `say` puts a proposition through the formal grammar | a later milestone, if it can be done without inventing surface forms the engine never made |
 

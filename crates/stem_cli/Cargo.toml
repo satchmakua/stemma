@@ -25,6 +25,7 @@ stem_soundchange.workspace = true
 stem_syntax.workspace = true
 stem_script.workspace = true
 stem_assist.workspace = true
+stem_embodiment.workspace = true
 
 [dev-dependencies]
 sha2.workspace = true
