@@ -12,7 +12,7 @@ The name comes from textual criticism: a *stemma* is the reconstructed family tr
 showing how surviving manuscripts descend from a lost original. That is exactly
 this program's core data structure.
 
-**Status:** **Phases 0–7 complete (M0–M22)** — the diachronic kernel runs end to
+**Status:** **Phases 0–7 complete, Phase 8 begun (M0–M23)** — the diachronic kernel runs end to
 end. Languages get a feature-based phonology,
 generate seeded roots, undergo ordered sound change, fork into daughters with their
 own histories, and line up in a comparative cognate table; `stemma demo` tells the
@@ -65,10 +65,15 @@ in the same format a person writes, which the engine applies or refuses by the o
 code path. There is no model in the process, no API key, no network; the boundary *is*
 the enforcement. A proposal whose prose is impeccable and whose formalism is incoherent
 gets refused whole, and the reasoning that argued for it is printed as prose and never
-stored in the language. 799 tests pass, and every step is deterministic and traced.
+stored in the language. And **M23 opened the last phase** by asking what a speaker
+actually *is*: a species with no vocal tract and a bioluminescent channel is a valid
+language, and Stemma says — subsystem by subsystem, with reasons — which of its own
+machinery has nothing to offer it, instead of handing a creature that speaks in light a
+five-vowel system. §17's last deferred dimension finally scores. 833 tests pass, and
+every step is deterministic and traced.
 
-Two milestones remain, both about alien modality — §7.7's pulse, scent and gesture
-languages. See
+One milestone remains: generalising a phoneme to a **channel signal**, so a pulse
+language can undergo an ordered signal change through the same engine. See
 [ROADMAP.md](ROADMAP.md) for the plan,
 [docs/GUIDE.md](docs/GUIDE.md) for how to use what exists, and
 [PROGRESS.md](PROGRESS.md) for what has shipped.
@@ -423,6 +428,7 @@ Phase 1 capstone. (The exact bytes are pinned as a snapshot at
 | `stemma profile <file>` | Print the §17 plausibility profile: scored typological dimensions plus the report |
 | `stemma grammar <file>` | Print §7.4's parameters as a sketch, with the typological harmony of the combination (M17) |
 | `stemma culture <file>` | Say *why* this language has the vocabulary it has — its elaborations, and every gap with its reason (M15) |
+| `stemma embodiment <file>` | Describe the speakers' body and channels, and which of Stemma's machinery applies to them (M23) |
 | `stemma scripts <file>` | List its writing systems, what each carries, and how far each has fallen behind the language (M20, M21) |
 
 **Make words**

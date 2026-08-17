@@ -510,41 +510,43 @@ impl Validate for LanguageGenome {
         // not a mechanism for silencing inconvenient errors.
         let vocal = self.embodiment.has_vocal_tract();
         let mut set_aside: Vec<&'static str> = Vec::new();
-        let mut absorb =
-            |report: &mut ValidationReport, scope: &'static str, sub: ValidationReport| {
-                if vocal {
-                    report.absorb(scope, sub);
-                    return;
-                }
-                let mut kept = ValidationReport::new();
-                for issue in sub.issues {
-                    if let Some(known) = stem_embodiment::VOCAL_TRACT_CHECKS
-                        .iter()
-                        .find(|c| **c == issue.code.as_str())
-                        .copied()
-                    {
-                        if !set_aside.contains(&known) {
-                            set_aside.push(known);
-                        }
-                        continue;
+        {
+            let mut absorb =
+                |report: &mut ValidationReport, scope: &'static str, sub: ValidationReport| {
+                    if vocal {
+                        report.absorb(scope, sub);
+                        return;
                     }
-                    kept.push(issue);
-                }
-                report.absorb(scope, kept);
-            };
-        absorb(&mut report, "phonology", self.phonemes.validate());
-        absorb(&mut report, "phonotactics", self.phonotactics.validate());
-        // Needs both halves of the language, so it cannot live in either type's
-        // own `validate` — `Validate::validate(&self)` takes no context.
-        absorb(
-            &mut report,
-            "phonotactics",
-            stem_phonology::phonotactics::check_against_inventory(
-                &self.phonotactics,
-                &self.phonemes,
-            ),
-        );
-        drop(absorb);
+                    let mut kept = ValidationReport::new();
+                    for issue in sub.issues {
+                        if let Some(known) = stem_embodiment::VOCAL_TRACT_CHECKS
+                            .iter()
+                            .find(|c| **c == issue.code.as_str())
+                            .copied()
+                        {
+                            if !set_aside.contains(&known) {
+                                set_aside.push(known);
+                            }
+                            continue;
+                        }
+                        kept.push(issue);
+                    }
+                    report.absorb(scope, kept);
+                };
+            absorb(&mut report, "phonology", self.phonemes.validate());
+            absorb(&mut report, "phonotactics", self.phonotactics.validate());
+            // Needs both halves of the language, so it cannot live in either type's
+            // own `validate` — `Validate::validate(&self)` takes no context.
+            absorb(
+                &mut report,
+                "phonotactics",
+                stem_phonology::phonotactics::check_against_inventory(
+                    &self.phonotactics,
+                    &self.phonemes,
+                ),
+            );
+            // The block ends the closure's borrow of `set_aside`, which is read below.
+        }
         if !set_aside.is_empty() {
             let names: Vec<String> = set_aside.iter().map(|c| format!("`{c}`")).collect();
             report.note(

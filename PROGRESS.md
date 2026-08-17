@@ -5,10 +5,10 @@ A build log of what shipped and the notable decisions behind it. **Keep it hones
 acceptance tests live in [ROADMAP.md](ROADMAP.md); this is the backward-looking
 "what got done and why" companion.
 
-**Current phase:** **Phase 7 is complete** (M22) — a model can propose the same
-artefacts a person writes, and the engine applies or refuses them by the ordinary code
-path. Next milestone: **M23 — the embodiment profile**, which opens Phase 8 (alien
-modality). Phases 0–6 (M0–M21) are complete.
+**Current phase:** **Phase 8 has begun** — M23 gives a language's speakers a body, and
+Stemma an honest account of which of its own machinery applies to that body. Next
+milestone: **M24 — non-vocal signal systems**, the last one on the roadmap. Phases 0–7
+(M0–M22) are complete.
 
 ## State of the tree
 
@@ -21,11 +21,167 @@ modality). Phases 0–6 (M0–M21) are complete.
 | `stem_syntax` | §7.4's parameters, derived headedness, typological harmony, **propositions / `generate` / constructions** | working (M17, M18) |
 | `stem_script` | glyphs, `ScriptKind`, sound/meaning→sign mappings, `write`, lossiness, **glyph biographies / `script_drift`** | working (M20, M21) |
 | `stem_assist` | briefings out, proposals in, and one gate between them — no network, no key, no model in the process | working (M22) |
+| `stem_embodiment` | §18.1's profile, §18.2's channel constraints, and which subsystems apply to a given body | working (M23) |
 | `stem_genome` | `LanguageGenome`, `fork`, `LineageGraph`, family validation, renderers, `apply_edit`, `say`, **`apply_shifts` / syntactic history** | working |
 | `stem_io` | RON/JSON load & save | working — **untouched since M0** |
 | `stem_export` | Markdown dictionaries, CLDF CSV, cognate table, family demo | working |
 | `stem_cli` | the `stemma` binary | …plus `profile`, `inflect`, `paradigm`, `drift`, `drifts`; rule files may be `.sc` |
 | `stem_ui` | the `stemma-ui` desktop explorer — native egui; **edits through `apply_edit`** | working (M11, M16) |
+
+---
+
+## M23 — Embodiment profile · built 2026-08-16 · ✓ verified
+
+Phase 8 opens, and it is the one that touches every layer: the data model has assumed a
+vocal tract since M0. **833 tests pass** (up from 799); clippy clean; fmt clean.
+
+```
+$ stemma validate fixtures/luminous_kethi.ron
+
+Kethi (luminous_kethi) — 0 phonemes (0C/0V), proto, seed 108
+
+· embodiment.vocal_checks_set_aside: these speakers have no vocal tract, so `empty`,
+  `no_templates`, `no_syllable_counts` do not apply and were set aside
+· embodiment.simultaneous_channel: `mantle` can carry several parameters at once…
+· embodiment.persistent_channel: `ink` persists after it is made…
+
+✓ valid — 0 warning(s), nothing blocking
+```
+
+```
+$ stemma embodiment fixtures/luminous_kethi.ron
+
+  What Stemma can do with this body
+    Phonology     does not apply  a phoneme inventory is a set of things a vocal tract
+                                  can do, and these speakers have no vocal tract…
+    Phonotactics  does not apply  a `CVC` template describes a syllable…
+    Prosody       does not apply  stress is a property of a syllable
+    Sound change  not built yet   signal change over this channel's own contrastive
+                                  dimensions is M24's work
+    Morphology    applies         composing meaningful parts is about structure, not
+                                  about a mouth
+    Semantics     applies         meaning and its history are independent of the channel
+    Syntax        applies         …though §18.3 expects a non-vocal channel to solve it
+                                  differently
+    Script        partly          a sign may map from a meaning; a sign that maps from a
+                                  phoneme has nothing to map from here
+```
+
+### What M0 already knew
+
+`PhonemeInventory::validate` has errored on a vowelless inventory since the first
+commit, and that error's message has always ended *"(a non-vocal language will need the
+alien modality model of §7.7)"*. M23 is where the parenthesis comes due.
+
+The Error that actually blocked the Kethi turned out to be `empty` rather than
+`no_nucleus` — an inventory with no phonemes returns early — and that widened the rule.
+`VOCAL_TRACT_CHECKS` is now *"a check that is only meaningful if the speaker produces
+sound at all"*, which covers `empty` and the phonotactics pair as well as the C/V ones.
+
+**What stays** is everything about a well-formed *record*: `duplicate_id`, `empty_ipa`,
+`bad_weight`. `a_broken_record_cannot_hide_behind_a_claim_to_be_alien` is the test that
+stops `embodiment:` becoming a way to silence anything inconvenient, and it is the
+reason this is one short named list with a printed reason rather than a suppression
+mechanism.
+
+### Silence is not a claim to be alien
+
+`EmbodimentProfile::has_vocal_tract` returns **`true` for an empty profile**, and that
+one line is what keeps the whole project working. Every language written before M23 says
+nothing about its speakers, and every one of them has speakers with mouths. Had silence
+read as alien, M23 would have set aside the inventory checks for the entire corpus —
+including the `no_nucleus` Error that catches a genuinely broken human language.
+`silence_is_not_a_claim_to_be_alien` sweeps three fixtures, `invalid_no_vowels.ron`
+among them, and asserts it is *still invalid for the reason it always was*.
+
+### "rather than silently producing vowels"
+
+The applicability table says what *should* apply. The half that needs the genome is what
+*did*: `check_against_language` compares the two and reports the overlap — a non-vocal
+species carrying five vowels, syllable templates, a stress policy, a lexicon coined from
+machinery that does not apply to it. M19's discipline in its fourth outing: the profile
+proposes, the engine observes.
+
+Reported, never refused. An author converting a language gives it a body before
+rewriting its inventory, and refusing to load the intermediate state would make the
+conversion impossible to do a step at a time.
+
+### One `Vec<Channel>`, not five
+
+§18.1 sketches four parallel `Vec`s — visual, chemical, tactile, electric/magnetic. This
+crate carries one `Vec<Channel>` whose members name their own `ChannelKind`, and the
+deviation is recorded in the module docs:
+
+- §18.2 gives every channel the *same* ten constraints, so the four structs would have
+  been identical but for the pile they sat in;
+- the medium is a property of the channel, not a filing decision;
+- four parallel lists is the shape that guarantees a renderer eventually iterates three
+  of them.
+
+Four of §18.2's constraints drive a reported §18.3 consequence (persistence,
+simultaneity, directionality, privacy); the other six are bands that are **printed and
+nothing else**, and the sketch says so rather than letting an author think a value they
+filled in drives something it does not.
+
+`VocalTractProfile` is deliberately almost empty. A language with a vocal tract already
+describes it in exhaustive detail — that is what `PhonemeInventory` *is* — and a second
+description would be two sources of truth about one anatomy. What matters is that the
+field is an `Option`, and `None` is the whole alien case.
+
+### The bug the nesting created, and the fix
+
+§18.1 makes `environment: EnvironmentProfile` a field **of** the embodiment profile, and
+M15 put it on the genome two milestones before there was an embodiment profile to put it
+in. Nesting it gave the same type two homes — and the Kethi fixture, which follows §18.1,
+had its ecology **silently ignored**: `stemma profile` read "unshaped (no culture
+profile)" for a species with two declared absences.
+
+`LanguageGenome::ecology()` is now the one place either field is read, every caller
+routes through it, the nested one wins, and declaring both is a Warning
+(`two_ecologies_declared`) so it is never resolved silently. That failure — following the
+design document and watching your work do nothing — is the class this project spends
+most of its comments guarding against, and it was worth catching before the fixture
+shipped.
+
+### §17's last row
+
+`AlienEmbodimentDependence` left `NOT_MODELLED`, which is now **empty**. Every dimension
+§17 names has a band, for the first time since M7 deferred four of them.
+
+The block is *kept rather than deleted*, and prints `(none — every dimension §17 names
+is scored above)`. It is where the profile admits what it cannot measure, and a heading
+that vanishes when the list empties is one nobody notices going missing when it refills.
+`NotModelled` survives as an uninhabited enum for the same reason.
+
+The band separates `NonVocal` from `Mismatched`: a body Stemma has no machinery for, and
+a body that has been given machinery it has no use for anyway. The second is a finding
+about the *file* rather than about the species, and reads differently.
+
+### Invariants worth carrying to M24
+
+- **An empty profile is a vocal speaker.** Everything else follows from it.
+- **`VOCAL_TRACT_CHECKS` is a short named list with a printed reason**, and the only
+  place anything is filtered out of a sub-report. Record-level checks are never on it.
+- **§18.3's consequences are Notes, argued from physics, never counted.**
+  `no_consequence_message_claims_a_statistic` strips `§N.N` citations and then scans for
+  digits — the citations `CLAUDE.md` asks for are not statistics, and M17's bare sweep
+  would have banned them.
+- **`ecology()` is the one reader.** Do not add a second.
+- **`stem_embodiment` names no signal type.** It models the body; generalising a phoneme
+  to a channel signal is M24, and doing it here would have been building the interesting
+  half before the boring half was honest.
+
+### What is deliberately unbuilt
+
+**Signals.** The Kethi have two channels and nothing to say on either — `phonemes: []`,
+no lexicon, no rules. Filling the inventory with fifteen sounds so `new-lexicon` would
+run is precisely the failure the acceptance is written against. M24 generalises a phoneme
+to a channel signal and gives them something to say.
+
+**Inferring grammar from a body.** §18.3's consequences are *reported*. Stemma does not
+go looking for simultaneous morphology in a language with a simultaneous channel, and
+does not mark its absence — the Kethi are allowed to be strange in ways their body does
+not predict, exactly as M17's languages are allowed to be typologically disharmonic.
 
 ---
 

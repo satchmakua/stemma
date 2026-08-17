@@ -413,7 +413,7 @@ _`DESIGN.md` §6.5, and the phase with the sharpest constraint on it._
 _`DESIGN.md` §7.7 and §18. The furthest out, and the one that touches every layer:
 the data model currently assumes a vocal tract throughout._
 
-- [ ] **M23 — Embodiment profile.** §18.1's profile — auditory range, visual,
+- [x] **M23 — Embodiment profile.** §18.1's profile — auditory range, visual,
   chemical, tactile and field channels, manipulators, social cognition,
   environment — plus §18.2's channel constraints. **M15's environment work is the
   precursor**, not a detour: §18.1 names `environment: EnvironmentProfile` as a
