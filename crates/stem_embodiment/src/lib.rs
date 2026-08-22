@@ -551,30 +551,43 @@ pub fn applicability(profile: &EmbodimentProfile) -> Vec<Applicability> {
     }
 
     vec![
+        // M24 rewrote these three verdicts, and the rewrite is the milestone. At M23
+        // the honest answer was "does not apply, because this machinery is about a
+        // mouth". It turned out not to be about a mouth: an inventory is a set of
+        // contrastive units, a template is how they combine, and neither ever asked
+        // what produced them. What is genuinely vocal is the *feature set* — and that
+        // is a matter of which dimensions a unit values, not of the machinery.
         row(
             Subsystem::Phonology,
-            Applies::No,
-            "a phoneme inventory is a set of things a vocal tract can do, and these \
-             speakers have no vocal tract; M24 generalises a phoneme to a channel \
-             signal, and until then this language has no inventory to speak of",
+            Applies::Partly,
+            "an inventory is a set of contrastive units, and a vocal tract is one \
+             channel among several — declare these speakers' signals with \
+             `kind: signal` and the whole of it works. What does NOT carry over is the \
+             articulatory feature set: `[+syllabic]` means nothing here, and this \
+             channel's own dimensions are separate",
         ),
         row(
             Subsystem::Phonotactics,
-            Applies::No,
-            "a `CVC` template describes a syllable, and a signal on a non-vocal channel \
-             has no syllables to shape",
+            Applies::Partly,
+            "a template says how units combine, which every channel needs; the `C`/`V` \
+             slots are syllable structure and do not apply, and `S` is the slot for a \
+             channel signal",
         ),
         row(
             Subsystem::Prosody,
             Applies::No,
-            "stress is a property of a syllable",
+            "stress is a property of a syllable, and no generalisation of it to another \
+             channel has been built — rhythm on a pulse train is a real question and an \
+             unanswered one",
         ),
         row(
             Subsystem::SoundChange,
-            Applies::Unbuilt,
-            "the engine transforms feature bundles over segments; signal change over \
-             this channel's own contrastive dimensions is M24's work, and the engine \
-             itself needs no other change to do it",
+            Applies::Yes,
+            "the engine matches and rewrites feature bundles and never asks what \
+             produced them, so a signal change runs through it unaltered — ordered, \
+             traced and reproducible, exactly as a sound change is. It cannot INNOVATE \
+             a signal: minting needs a reviewed reference table, and there is none for \
+             a channel nobody has studied",
         ),
         row(
             Subsystem::Morphology,
@@ -915,10 +928,18 @@ mod tests {
                 .verdict
         };
 
-        assert_eq!(verdict(Subsystem::Phonology), Applies::No);
-        assert_eq!(verdict(Subsystem::Phonotactics), Applies::No);
+        // **M24 moved three of these.** At M23 the honest answer for phonology was
+        // "does not apply, because an inventory is a set of things a mouth does". M24
+        // declared a bioluminescent inventory and ran an ordered signal change over it
+        // through the untouched engine, which showed the machinery was never about a
+        // mouth — what is vocal is the *feature set*.
+        //
+        // Prosody is the one that did not move: stress really is a property of a
+        // syllable, and nothing has generalised rhythm to another channel.
+        assert_eq!(verdict(Subsystem::Phonology), Applies::Partly);
+        assert_eq!(verdict(Subsystem::Phonotactics), Applies::Partly);
         assert_eq!(verdict(Subsystem::Prosody), Applies::No);
-        assert_eq!(verdict(Subsystem::SoundChange), Applies::Unbuilt);
+        assert_eq!(verdict(Subsystem::SoundChange), Applies::Yes);
 
         // And the parts that are about meaning rather than anatomy still work — the
         // report is a description, not a blanket refusal.

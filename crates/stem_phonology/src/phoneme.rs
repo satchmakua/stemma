@@ -29,6 +29,18 @@ pub enum SegmentKind {
     Consonant,
     /// A vowel — a syllable nucleus.
     Vowel,
+    /// A **channel signal** — a unit of a non-vocal system: a pulse, a scent packet,
+    /// a limb position, a field modulation (M24, §7.7).
+    ///
+    /// It is one slot rather than two because the consonant/vowel split is not a
+    /// general fact about communication — it is a fact about *syllables*, which are a
+    /// fact about lungs. A pulse train has no nucleus to organise itself around, so
+    /// [`Self::is_nucleus`] is `false` here and the `no_nucleus` check is set aside for
+    /// a speaker with no vocal tract (M23'''s `VOCAL_TRACT_CHECKS`).
+    ///
+    /// **Appended, so no saved file changes.** `SegmentKind` serialises by name, and
+    /// no language written before M24 says `signal`.
+    Signal,
 }
 
 impl SegmentKind {
@@ -40,11 +52,12 @@ impl SegmentKind {
         matches!(self, Self::Vowel)
     }
 
-    /// The single-letter code used in phonotactic templates: `C` or `V`.
+    /// The single-letter code used in phonotactic templates: `C`, `V` or `S`.
     pub fn template_symbol(self) -> char {
         match self {
             Self::Consonant => 'C',
             Self::Vowel => 'V',
+            Self::Signal => 'S',
         }
     }
 }
@@ -54,6 +67,7 @@ impl fmt::Display for SegmentKind {
         let s = match self {
             Self::Consonant => "consonant",
             Self::Vowel => "vowel",
+            Self::Signal => "signal",
         };
         f.write_str(s)
     }
@@ -184,6 +198,30 @@ impl fmt::Display for Phoneme {
         write!(f, "/{}/", self.ipa)
     }
 }
+
+// ---------------------------------------------------------- the general names
+
+/// A **channel signal**: one contrastive unit of any communication system (M24, §7.7).
+///
+/// # Why this is an alias and not a rename
+///
+/// ROADMAP M24 says this is *"the milestone that would rename `stem_phonology`'s
+/// central abstraction, so it needs that abstraction to have earned the rename."* It
+/// earned it — and the way to say so is an alias, not a rename.
+///
+/// A [`Phoneme`] is an id, a rendering, a slot class, a weight, and a bundle of
+/// contrastive dimensions. **Not one of those is about a mouth.** The vocal tract lives
+/// entirely in *which* dimensions a particular unit values, and a bioluminescent pulse
+/// with `[+luminous, +bright, -long_wave]` goes through the same struct, the same
+/// inventory, the same generator and the same sound-change engine as /p/ does. That is
+/// the demonstration, and it is worth more than a new name would be.
+///
+/// Renaming the type would rename the field, and `phonemes:` appears in every language
+/// file ever written with this program. M24's own acceptance is that *every existing
+/// vocal fixture produces byte-identical output afterwards*, and a rename is the one
+/// change that could not satisfy it. So: the general name exists, points at the same
+/// type, and costs nothing.
+pub type Signal = Phoneme;
 
 #[cfg(test)]
 mod tests {

@@ -8,10 +8,15 @@ use stem_core::{Issue, PhonemeId, Severity, Validate, ValidationReport};
 use crate::features::Feature;
 use crate::phoneme::{Phoneme, SegmentKind};
 
-/// Questions that always have an answer for a spoken segment. A segment that ducks
+/// Questions that always have an answer for a **spoken** segment. A segment that ducks
 /// one cannot be matched reliably by any M3 rule, so leaving one out is an error
 /// rather than a stylistic choice.
-const REQUIRED_OF_ALL: &[Feature] = &[
+///
+/// Renamed from `REQUIRED_OF_ALL` at M24 with no change of contents: the doc comment
+/// already said *spoken*, and until M24 there was nothing else for a unit to be. It is
+/// now one of two top-level sets, chosen by the same conditional geometry that already
+/// picks `REQUIRED_OF_DORSAL`.
+const REQUIRED_OF_SPOKEN: &[Feature] = &[
     Feature::Syllabic,
     Feature::Consonantal,
     Feature::Sonorant,
@@ -35,10 +40,27 @@ const REQUIRED_OF_DORSAL: &[Feature] =
 /// Rounding is a labial gesture, so a labial segment always answers it.
 const REQUIRED_OF_LABIAL: &[Feature] = &[Feature::Round];
 
+/// Questions that always have an answer for a **light signal** (M24) — the luminous
+/// channel's counterpart of [`REQUIRED_OF_SPOKEN`].
+///
+/// A signal that did not say whether it was bright could not be matched by any rule
+/// about brightness, which is the identical failure the spoken set exists to prevent.
+/// `rapid` is not here: a steady glow has no pulse rate, so it is required only of
+/// `[+pulsed]` — the `round`-on-labials pattern exactly.
+const REQUIRED_OF_LUMINOUS: &[Feature] = &[
+    Feature::Bright,
+    Feature::LongWave,
+    Feature::Saturated,
+    Feature::Pulsed,
+];
+
+/// Pulse rate is contrastive only where there are pulses.
+const REQUIRED_OF_PULSED: &[Feature] = &[Feature::Rapid];
+
 /// Which required features this bundle fails to value, in frozen [`Feature::ALL`]
 /// order.
 ///
-/// **The single implementation of the `REQUIRED_OF_ALL` / `REQUIRED_OF_DORSAL` /
+/// **The single implementation of the `REQUIRED_OF_SPOKEN` / `REQUIRED_OF_LUMINOUS` /
 /// `REQUIRED_OF_LABIAL` geometry**, extracted from `check_features` at M3 so it
 /// has exactly three callers:
 ///
@@ -52,15 +74,30 @@ const REQUIRED_OF_LABIAL: &[Feature] = &[Feature::Round];
 /// by.
 pub fn required_features_missing(bundle: crate::FeatureBundle) -> Vec<Feature> {
     use crate::Sign;
+    // M24: WHICH CHANNEL is this unit on? `[+luminous]` is the luminous channel's
+    // major-class dimension, exactly as `[+consonantal]` is speech's, and asking the
+    // bundle rather than the phoneme is deliberate — the rule engine calls this on an
+    // *output* bundle that has no phoneme attached yet, and that is the call that keeps
+    // the validator and the engine from disagreeing.
+    //
+    // A vocal segment values none of the luminous dimensions, so it takes the spoken
+    // branch and behaves exactly as it did before M24. That is the acceptance clause
+    // "every existing vocal fixture produces byte-identical output afterwards", here.
+    let luminous = bundle.is(Feature::Luminous, Sign::Plus);
     let dorsal = bundle.is(Feature::Dorsal, Sign::Plus);
     let labial = bundle.is(Feature::Labial, Sign::Plus);
+    let pulsed = bundle.is(Feature::Pulsed, Sign::Plus);
     Feature::ALL
         .iter()
         .copied()
         .filter(|f| {
-            let required = REQUIRED_OF_ALL.contains(f)
-                || (dorsal && REQUIRED_OF_DORSAL.contains(f))
-                || (labial && REQUIRED_OF_LABIAL.contains(f));
+            let required = if luminous {
+                REQUIRED_OF_LUMINOUS.contains(f) || (pulsed && REQUIRED_OF_PULSED.contains(f))
+            } else {
+                REQUIRED_OF_SPOKEN.contains(f)
+                    || (dorsal && REQUIRED_OF_DORSAL.contains(f))
+                    || (labial && REQUIRED_OF_LABIAL.contains(f))
+            };
             required && !bundle.is_specified(*f)
         })
         .collect()
@@ -73,8 +110,17 @@ pub fn required_features_missing(bundle: crate::FeatureBundle) -> Vec<Feature> {
 /// the dorsal rule there would send the author looking at the wrong articulator.
 fn requirement_reason(feature: Feature, bundle: crate::FeatureBundle) -> &'static str {
     use crate::Sign;
-    if REQUIRED_OF_ALL.contains(&feature) {
-        "required of every segment"
+    if bundle.is(Feature::Luminous, Sign::Plus) {
+        // M24's channel branch. The order matters for the same reason `round` does:
+        // naming the wrong rule sends an author looking at the wrong dimension.
+        return if REQUIRED_OF_PULSED.contains(&feature) {
+            "required of every [+pulsed] signal"
+        } else {
+            "required of every [+luminous] signal"
+        };
+    }
+    if REQUIRED_OF_SPOKEN.contains(&feature) {
+        "required of every spoken segment"
     } else if bundle.is(Feature::Dorsal, Sign::Plus) && REQUIRED_OF_DORSAL.contains(&feature) {
         "required of every [+dorsal] segment"
     } else {
@@ -184,6 +230,16 @@ impl PhonemeInventory {
     /// The consonants.
     pub fn consonants(&self) -> impl Iterator<Item = &Phoneme> {
         self.of_kind(SegmentKind::Consonant)
+    }
+
+    /// The channel signals — units of a non-vocal system (M24).
+    ///
+    /// Separate from [`Self::consonants`] and [`Self::vowels`] rather than folded into
+    /// either, because every check that reads those two is asking a question about a
+    /// syllable and a signal has none. A vocal inventory returns nothing here and is
+    /// completely unaffected.
+    pub fn signals(&self) -> impl Iterator<Item = &Phoneme> {
+        self.iter().filter(|p| p.kind == SegmentKind::Signal)
     }
 
     /// The vowels.
@@ -405,11 +461,20 @@ impl Validate for PhonemeInventory {
         let vowels = self.vowels().count();
         let consonants = self.consonants().count();
 
-        if vowels == 0 {
+        // M24: the nucleus question is a question about SYLLABLES, and an inventory
+        // made entirely of channel signals has none. Decided intrinsically — this
+        // function takes no context and `stem_phonology` cannot see an embodiment
+        // profile — and the test is exact: *every* unit is a signal.
+        //
+        // A MIXED inventory still answers the vocal question, because a language with
+        // even one vowel is making a claim about syllables. An empty one is caught by
+        // `empty` above. So no vocal inventory anywhere is affected.
+        let all_signals = self.signals().count() == self.phonemes.len();
+
+        if vowels == 0 && !all_signals {
             report.error(
                 "no_nucleus",
-                "no phoneme can be a syllable nucleus, so no syllable can be formed \
-                 (a non-vocal language will need the alien modality model of §7.7)",
+                "no phoneme can be a syllable nucleus, so no syllable can be formed                  (a non-vocal language will need the alien modality model of §7.7)",
             );
         }
 
@@ -417,7 +482,9 @@ impl Validate for PhonemeInventory {
         // here is a Warning or Note — a weird-but-well-formed language stays
         // valid (`is_ok()`), because §17 reports, it does not police. Each rarity
         // trigger reads a shared threshold constant so the rarity *band* agrees. ---
-        if consonants == 0 {
+        // Likewise: "all vowels" is only remarkable if there are vowels. An inventory
+        // of channel signals is not a vowel system with the consonants missing.
+        if consonants == 0 && !all_signals {
             report.warn(
                 "no_consonants",
                 "the inventory is all vowels; this is typologically unattested",

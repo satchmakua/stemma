@@ -206,10 +206,13 @@ impl NotModelled {
 
     /// The design section that would make it measurable.
     ///
-    /// A **section** reference, not a milestone number: both remaining dimensions
-    /// sit in ROADMAP's "Beyond" list rather than at a numbered milestone, and
-    /// naming a milestone that does not exist would be a schedule claim the project
-    /// has not made.
+    /// A **section** reference, not a milestone number: a dimension nothing can measure
+    /// yet has, by definition, no milestone scheduled, and naming one would be a
+    /// schedule claim the project has not made. `ROADMAP.md`'s **Beyond** section is
+    /// where such things are listed, precisely because it is not a plan.
+    ///
+    /// Uninhabited since M23 filled the last row. Kept for the reason [`NotModelled`]
+    /// itself is kept.
     pub fn milestone(self) -> &'static str {
         match self {}
     }

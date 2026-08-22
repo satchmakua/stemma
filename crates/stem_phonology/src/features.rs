@@ -134,12 +134,73 @@ features! {
     // --- Labial dependent: §7.1's "rounding" ---
     /// Lips rounded. Shared by rounded vowels and labialised consonants /kʷ/.
     Round => "round",
+
+    // ================= CHANNEL DIMENSIONS (M24, §7.7) =================
+    //
+    // Everything above this line is a distinctive feature of *speech*, and comes from
+    // the standard articulatory feature systems. Everything below it is a contrastive
+    // dimension of a **non-vocal channel**, and is INVENTED — there is no attested
+    // feature geometry for a bioluminescent pulse, because no such language exists.
+    //
+    // That difference is real and the comment is here so nobody mistakes one for the
+    // other. The vocal features are a claim about human languages that can be checked;
+    // these are a design for a fictional channel, offered on the same terms as the
+    // fictional languages that use them.
+    //
+    // APPENDED, NEVER INTERLEAVED. Declaration order is the canonical rendering order
+    // and is frozen by `feature_names_and_order_are_frozen`. Because a bundle is stored
+    // on disk as NAMES, a vocal phoneme that values none of these renders exactly as it
+    // did before M24 — which is the acceptance clause "every existing vocal fixture
+    // produces byte-identical output afterwards", made structural.
+    //
+    // And they interlock with the vocal set the way absence already works (ADR-0004): a
+    // phoneme leaves every dimension below UNVALUED, and a signal leaves every feature
+    // above unvalued. Neither is `-` on the other s dimensions, because the question
+    // does not arise.
+
+    // --- Major class: is this a light signal at all? ---
+    /// Emits light. The counterpart of [`Feature::Consonantal`] for a luminous
+    /// channel: the dimension that says what *kind* of thing this unit is, and the one
+    /// every other dimension below is only defined on.
+    Luminous => "luminous",
+
+    // --- Intensity and hue ---
+    /// High intensity. A dim signal carries further in clear water and is lost in silt;
+    /// a bright one is the reverse, which is why the contrast is worth having.
+    Bright => "bright",
+    /// Toward the long-wave (red) end of the band. `[-long_wave]` is the short-wave
+    /// (blue) end. Binary rather than scalar for the reason every feature here is:
+    /// contrast is what a language encodes, and a continuum is what it encodes it on.
+    LongWave => "long_wave",
+    /// A narrow band rather than a broad wash.
+    Saturated => "saturated",
+
+    // --- Rhythm ---
+    /// Flickering rather than steady.
+    Pulsed => "pulsed",
+    /// **A dependent of [`Feature::Pulsed`]**, exactly as [`Feature::Round`] is a
+    /// dependent of [`Feature::Labial`]: a steady glow has no pulse rate, so the
+    /// question does not arise and the cell is *absent* rather than `-`. Encoding a
+    /// steady signal as `[-rapid]` would swell the class `[-rapid]` from the slow
+    /// pulses to every steady signal in the language, and nothing would report it.
+    Rapid => "rapid",
 }
 
 /// The bitsets are `u64`, so the feature set may never exceed 64 members without a
 /// deliberate widening. Nothing on disk refers to a bit, so the width is free;
 /// making the ceiling a build error rather than a runtime hazard is not.
 const _: () = assert!(Feature::COUNT <= 64);
+
+/// How many features there were before M24 appended the first channel dimensions —
+/// the line between *speech* and *everything else*.
+///
+/// The same device as `stem_lexicon`'s `PRE_M13_CONCEPT_COUNT`, and for the same
+/// reason: an append-only list needs a named point that a test can freeze, or the
+/// freeze quietly becomes "whatever the list is today". Everything below this index is
+/// an articulatory feature of human speech; everything at or above it is a contrastive
+/// dimension of some other channel.
+pub const PRE_M24_FEATURE_COUNT: usize = 16;
+const _: () = assert!(Feature::COUNT >= PRE_M24_FEATURE_COUNT);
 
 /// The value a segment gives a feature.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -564,8 +625,14 @@ mod tests {
     #[test]
     fn feature_names_and_order_are_frozen() {
         let names: Vec<&str> = Feature::ALL.iter().map(|f| f.name()).collect();
+
+        // The VOCAL PREFIX is frozen, exactly as `PRE_M13_CONCEPT_COUNT` freezes the
+        // first hundred and three concepts. M24 appended six channel dimensions after
+        // it; a future channel appends more. What must never move is a name already in
+        // this list, because declaration order is the rendering order and reordering
+        // rewrites every bundle in every export ever produced.
         assert_eq!(
-            names,
+            names[..PRE_M24_FEATURE_COUNT],
             [
                 "syllabic",
                 "consonantal",
@@ -585,14 +652,36 @@ mod tests {
                 "round",
             ]
         );
+
+        // And the appended ones are appended, not interleaved.
+        assert_eq!(
+            &names[PRE_M24_FEATURE_COUNT..],
+            [
+                "luminous",
+                "bright",
+                "long_wave",
+                "saturated",
+                "pulsed",
+                "rapid"
+            ],
+            "channel dimensions come after the vocal ones and in their own order"
+        );
     }
 
     /// The guard against the silent-data-loss mode: a variant added to the enum
     /// but not to `ALL` would be dropped from every save.
     #[test]
     fn the_all_table_is_complete_and_positionally_aligned() {
-        assert_eq!(Feature::ALL.len(), 16);
-        assert_eq!(Feature::COUNT, 16);
+        // Not a frozen number — the list is append-only and grows with each channel.
+        // What this guards is that `ALL` and the enum agree, which is the silent
+        // data-loss mode; `feature_names_and_order_are_frozen` guards the order.
+        assert_eq!(Feature::ALL.len(), Feature::COUNT);
+        // The channel dimensions are appended, and `feature_names_and_order_are_frozen`
+        // names them. Here it is enough that the list has grown past the vocal prefix.
+        assert_eq!(
+            &Feature::ALL[..PRE_M24_FEATURE_COUNT].len(),
+            &PRE_M24_FEATURE_COUNT
+        );
         for (i, &feature) in Feature::ALL.iter().enumerate() {
             assert_eq!(feature as usize, i, "{} is out of position", feature.name());
         }

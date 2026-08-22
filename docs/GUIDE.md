@@ -1326,6 +1326,110 @@ be doing, and you give a species a body before you rewrite its inventory.
 
 ---
 
+## Give it a language with no sound in it
+
+The Kethi speak in light. Six pulses, no consonants, no vowels — and they go through
+every part of Stemma you have used so far.
+
+```bash
+stemma new-lexicon fixtures/luminous_kethi.ron --out out/kethi.ron
+stemma apply-rules out/kethi.ron --rules fixtures/rules_kethi_dimming.sc \
+    --id kethi_late --name "Late Kethi" --years 700 --out out/kethi_late.ron
+stemma trace out/kethi_late.ron w_0016
+```
+
+```
+*QCSP  "come"  cog_luminous_kethi_0016
+
+  proto      QCSP          /✶◆✵○/
+  │
+  0  r_k01  Rapid merger
+  │    S > Q  [2,3)   environment  C _ P
+  │    → QCQP        /✶◆✶○/
+  │
+  1  r_k02  Interglow dimming
+  │    Q > M  [2,3)   environment  C _ P
+  │    → QCMP        /✶◆✴○/
+  │
+  modern     QCMP          /✶◆✴○/
+```
+
+An ordered signal change, traced, replayable. **Nothing in the engine was changed to
+allow it.** The function that produced that derivation is the one that turned `*takala`
+into `taɣal` in the very first example of this guide.
+
+### Why it works
+
+The engine never asked what produced a segment. It matches feature bundles, rewrites
+feature bundles, and resolves the result back to a symbol — and *a vocal tract lives
+entirely in which dimensions a unit values*.
+
+So a signal is declared exactly as a phoneme is:
+
+```
+(id: "sg_quick", ipa: "✶", romanization: "Q", kind: signal, frequency_weight: 25,
+ features: ["+luminous", "+bright", "+long_wave", "+saturated", "+pulsed", "+rapid"]),
+```
+
+- **`kind: signal`** — not consonant, not vowel. The onset/nucleus split is a fact about
+  syllables, and syllables are a fact about lungs.
+- **`+luminous` and the five dimensions under it** are this channel's contrastive
+  vocabulary. A phoneme values none of them; a signal values none of the articulatory
+  features. Neither is `-` on the other's dimensions, because the question does not
+  arise.
+- **`rapid` is only declared on `+pulsed` signals.** A steady glow has no pulse rate,
+  exactly as a non-labial has no rounding.
+
+A template uses `S` slots:
+
+```
+phonotactics: (
+    templates: [(pattern: "SS", weight: 40), (pattern: "SSS", weight: 35)],
+    syllables_per_root: [(count: 1, weight: 100)],
+),
+```
+
+Mixing `C`/`V` with `S` in one template is an error — nothing in the model can say what
+a syllable made partly of light would be.
+
+### And rules are just rules
+
+```
+rule r_k02 "Interglow dimming":
+  at: 700
+  target: [+luminous, +pulsed, +rapid, +bright]
+  environment: [+luminous, -pulsed] _ [+luminous, -pulsed]
+  change: set [-bright, -long_wave]
+```
+
+That is the luminous analogue of intervocalic voicing, and deliberately so: the
+environment is a feature bundle on either side, and the adjacency window does not care
+whether the neighbours are vowels or light. Order is chronology here too — `r_k01` makes
+the slow flickers rapid, and only then can this rule catch them.
+
+> **A signal change can merge, but never invent.** Minting a new sound works because
+> there is a compiled-in table of reviewed IPA rows to mint from. There is no such table
+> for light — no attested inventory of bioluminescent signals exists to review, and
+> writing one would be inventing a canon for a channel nobody has studied. So a rule
+> whose output is not a signal you declared reports `unnameable_output` and leaves the
+> site alone.
+>
+> **The luminous dimensions are invented, and the file says so.** The articulatory
+> features come from standard feature systems and are a checkable claim about human
+> languages. `[+long_wave]` is a design for a fictional channel, offered on the same
+> terms as the fictional languages that use it.
+>
+> **Simultaneous grammar is unbuilt.** The Kethi's mantle carries four bands at once —
+> `stemma embodiment` reports what that implies — but a lexical root is a sequence, and
+> that is what Stemma models. The bands carry grammatical parameters in the profile; the
+> word rides the pulse train.
+>
+> **The other eight channels of §7.7** — scent, gesture, field pulse, hive harmonics —
+> are named in `ChannelKind` and have no contrastive dimensions yet. Adding a set is the
+> same short process this one went through.
+
+---
+
 ## The one-command showcase
 
 ```bash
@@ -1388,7 +1492,8 @@ exclusion — see [ROADMAP.md](../ROADMAP.md).
 | **Grammaticalization beyond case** — a topic marker cannot become an article, a serial verb cannot become an auxiliary, because none of those categories exists in the model. | case erosion forcing word order, with the causal chain checked (M19) | a later milestone, once there is a category to become |
 | **Cross-script ancestry** — a sign descending from a sign in *another* script (Latin `A` from Phoenician *aleph*). | a sign's own chain, pictogram to present (M21) | a later milestone, once a donor script can be named in the file |
 | **Morphographic writing** — a sign for a morpheme (Chinese radicals, Egyptian determinatives). | signs map from sounds, or from meanings | a milestone with shared morpheme components to point at |
-| **Non-vocal signals** — a species can have a bioluminescent channel (M23) but nothing to say on it. | the body, its channels, and an honest account of which machinery does not apply | **M24** — a phoneme generalised to a channel signal, and signal change through the same engine |
+| **Simultaneous grammar** — a channel that carries four parameters at once still gets a sequential root. | the simultaneity is declared and its consequences reported (M23); the signal string is a sequence (M24) | a later milestone, once there is something for parallel tracks to hold |
+| **Rhythm on a non-vocal channel** — stress is a syllable property, and no generalisation of it exists. | prosody is reported as not applying to a signal language | a later milestone; nobody has said yet what stress generalises to |
 | **A model inside Stemma** — no HTTP client, no API key, no `--model` flag. | a briefing out and a proposal in; the model runs wherever you run it (M22) | not planned: the out-of-process boundary *is* how the constraint is enforced, and an in-process client would make the test suite network-dependent |
 | **Free translation** (§6.5's last bullet). | `say` puts a proposition through the formal grammar | a later milestone, if it can be done without inventing surface forms the engine never made |
 

@@ -14,9 +14,11 @@
 //! So this milestone has two halves and the tests attack both:
 //!
 //! - **It validates.** `PhonemeInventory::validate` errors with `empty` on a language
-//!   with no phonemes, and that Error is what stands between the Kethi and a valid
-//!   file. `LanguageGenome::validate` sets aside exactly the checks that assume a
+//!   with no phonemes, and that Error is what stood between the Kethi and a valid file
+//!   at M23. `LanguageGenome::validate` sets aside exactly the checks that assume a
 //!   speaker makes sound, and **says which** — `the_set_aside_is_named_and_narrow`.
+//!   (M24 gave the Kethi a signal inventory, so they no longer need the set-aside
+//!   themselves; that test now builds the half-converted state it is about.)
 //! - **The set-aside is not a loophole.** A duplicate phoneme id is still an Error for
 //!   a bioluminescent species, because that is a broken *record* rather than a claim
 //!   about anatomy. `a_broken_record_cannot_hide_behind_a_claim_to_be_alien` is the
@@ -107,11 +109,20 @@ fn the_engine_says_which_machinery_does_not_apply() {
     ]));
 
     assert!(out.contains("What Stemma can do with this body"), "{out}");
+    // **These verdicts changed at M24, and the change is that milestone's whole
+    // point.** At M23 the honest answer for phonology was "does not apply, because an
+    // inventory is a set of things a mouth does". M24 declared the Kethi's signals and
+    // ran a signal change over them through the untouched engine, which proved the
+    // machinery was never about a mouth: what is vocal is the *feature set*, not the
+    // inventory, the templates or the engine.
+    //
+    // Prosody is the one that did not move. Stress really is a property of a syllable,
+    // and nothing has generalised rhythm to another channel.
     for (subsystem, verdict) in [
-        ("Phonology", "does not apply"),
-        ("Phonotactics", "does not apply"),
+        ("Phonology", "partly"),
+        ("Phonotactics", "partly"),
         ("Prosody", "does not apply"),
-        ("Sound change", "not built yet"),
+        ("Sound change", "applies"),
     ] {
         let line = out
             .lines()
@@ -142,7 +153,18 @@ fn the_engine_says_which_machinery_does_not_apply() {
 /// of a sub-report, and the reason is printed rather than left to be discovered.
 #[test]
 fn the_set_aside_is_named_and_narrow() {
-    let report = kethi().validate();
+    // A language in the state the Kethi were in AT M23: a non-vocal body and an empty
+    // inventory, because it has not been given a signal system yet.
+    //
+    // Pointed at a constructed genome rather than at the fixture, and deliberately.
+    // M24 gave the Kethi signals and made the inventory checks *intrinsically* correct
+    // for them — `no_nucleus` no longer fires on an all-signal inventory, so there is
+    // nothing left to set aside. The set-aside still matters for the half-converted
+    // state above, which is the thing this test is actually about, so it builds one.
+    let mut genome = kethi();
+    genome.phonemes = stem_phonology::PhonemeInventory::default();
+    genome.phonotactics = stem_phonology::Phonotactics::default();
+    let report = genome.validate();
     let note = report
         .issues
         .iter()
@@ -417,9 +439,16 @@ fn the_last_deferred_dimension_finally_scores() {
 
     assert!(out.contains("Embodiment"), "{out}");
     assert!(out.contains("non-vocal"), "{out}");
+    // The raw basis rides along so the band can be checked. **M24 shortened it to one
+    // row**: phonology, phonotactics and the engine all turned out to apply to a
+    // luminous body, and only prosody genuinely does not.
     assert!(
-        out.contains("Phonology, Phonotactics, Prosody, Sound change"),
+        out.contains("Prosody"),
         "the raw basis rides along so the band can be checked: {out}"
+    );
+    assert!(
+        !out.contains("Phonology, Phonotactics"),
+        "M24 made the first two apply; the basis must not still claim otherwise: {out}"
     );
     assert!(
         out.contains("every dimension §17 names is scored"),

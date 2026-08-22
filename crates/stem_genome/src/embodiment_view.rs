@@ -216,11 +216,18 @@ pub fn check_against_language(genome: &LanguageGenome) -> ValidationReport {
         );
     }
 
-    if !genome.phonotactics.is_empty() {
+    // M24: templates made of `S` slots are a signal string, not a syllable — the whole
+    // point of the milestone — so only *vocal* slots are reported here. Before M24 this
+    // fired on any template at all, which was right when `S` did not exist.
+    let vocal_templates = genome
+        .phonotactics
+        .templates
+        .iter()
+        .any(|t| t.pattern.chars().any(|c| c == 'C' || c == 'V'));
+    if vocal_templates {
         report.warn(
             "syllable_templates_without_syllables",
-            "this language declares root templates, which describe syllables; a signal \
-             on a non-vocal channel has none",
+            "this language declares root templates with `C`/`V` slots, which describe              syllables; a signal on a non-vocal channel has none",
         );
     }
     if !genome.prosody.is_unspecified() {
@@ -230,23 +237,27 @@ pub fn check_against_language(genome: &LanguageGenome) -> ValidationReport {
              syllable",
         );
     }
-    if !genome.lexicon.is_empty() {
+    // M24: a word made of SIGNALS is a word these speakers can say, and a sound change
+    // over signals is a signal change. Both of these fired on the Kethi before M24 and
+    // were true then; afterwards they are true only of a language whose units are
+    // still vocal, so both now read the inventory rather than merely counting rows.
+    if !genome.lexicon.is_empty() && vowels + consonants > 0 {
         report.note(
             "lexicon_built_from_vocal_machinery",
             format!(
-                "this language's {} word(s) were coined from a phoneme inventory and \
-                 syllable templates; they are placeholders for signals M24 will model, \
-                 not things these speakers can say",
+                "this language's {} word(s) are built from consonants and vowels, which \
+                 these speakers cannot produce; declare their signals with \
+                 `kind: signal` and re-coin",
                 genome.lexicon.len()
             ),
         );
     }
-    if !genome.applied_rules.is_empty() {
+    if !genome.applied_rules.is_empty() && vowels + consonants > 0 {
         report.note(
             "sound_changes_over_a_silent_channel",
             format!(
-                "{} sound change(s) are recorded; the engine transformed segments that \
-                 stand for nothing these speakers produce",
+                "{} recorded change(s) transformed segments that stand for nothing these \
+                 speakers produce",
                 genome.applied_rules.len()
             ),
         );

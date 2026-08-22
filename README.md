@@ -12,7 +12,7 @@ The name comes from textual criticism: a *stemma* is the reconstructed family tr
 showing how surviving manuscripts descend from a lost original. That is exactly
 this program's core data structure.
 
-**Status:** **Phases 0–7 complete, Phase 8 begun (M0–M23)** — the diachronic kernel runs end to
+**Status:** **every planned milestone is complete (M0–M24)** — the diachronic kernel runs end to
 end. Languages get a feature-based phonology,
 generate seeded roots, undergo ordered sound change, fork into daughters with their
 own histories, and line up in a comparative cognate table; `stemma demo` tells the
@@ -69,11 +69,15 @@ stored in the language. And **M23 opened the last phase** by asking what a speak
 actually *is*: a species with no vocal tract and a bioluminescent channel is a valid
 language, and Stemma says — subsystem by subsystem, with reasons — which of its own
 machinery has nothing to offer it, instead of handing a creature that speaks in light a
-five-vowel system. §17's last deferred dimension finally scores. 833 tests pass, and
-every step is deterministic and traced.
+five-vowel system. §17's last deferred dimension finally scores. And **M24 closed the
+roadmap** by generalising a phoneme to a **channel signal**: the Kethi got six pulses of
+light, an ordered signal change ran over them, and `stemma trace` printed the derivation
+— *through the untouched engine*. `apply_rules` never learned that light exists, because
+it never asked what produced a segment; a vocal tract lives entirely in which contrastive
+dimensions a unit values. Every vocal fixture is byte-identical afterwards. 845 tests
+pass, and every step is deterministic and traced.
 
-One milestone remains: generalising a phoneme to a **channel signal**, so a pulse
-language can undergo an ordered signal change through the same engine. See
+The roadmap is finished; its "Beyond" list is what remains. See
 [ROADMAP.md](ROADMAP.md) for the plan and
 [docs/GUIDE.md](docs/GUIDE.md) for how to use what exists.
 

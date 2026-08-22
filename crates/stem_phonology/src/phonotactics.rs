@@ -14,6 +14,10 @@ pub enum Slot {
     Consonant,
     /// A `V` slot: filled by any [`SegmentKind::Vowel`] in the inventory.
     Vowel,
+    /// An `S` slot: filled by any [`SegmentKind::Signal`] — a unit of a non-vocal
+    /// channel (M24). One slot, because the onset/nucleus split is a fact about
+    /// syllables and a pulse train has none.
+    Signal,
 }
 
 impl Slot {
@@ -22,6 +26,7 @@ impl Slot {
         match self {
             Self::Consonant => SegmentKind::Consonant,
             Self::Vowel => SegmentKind::Vowel,
+            Self::Signal => SegmentKind::Signal,
         }
     }
 
@@ -30,6 +35,7 @@ impl Slot {
         match c {
             'C' => Some(Self::Consonant),
             'V' => Some(Self::Vowel),
+            'S' => Some(Self::Signal),
             _ => None,
         }
     }
@@ -102,6 +108,21 @@ impl WeightedTemplate {
                 None => return Err(TemplateError::BadSymbol { c, position }),
             }
         }
+        // M24: a template is EITHER a syllable or a signal string, and the nucleus
+        // question only arises for the first. A pulse train has no nucleus to organise
+        // itself around, so requiring one of `SSS` would be demanding a vowel of a
+        // creature with no mouth — the failure M23 exists to prevent, one layer down.
+        //
+        // Mixing the two IS an error, and a new one. `CVS` claims a unit is both a
+        // syllable and a signal string; nothing in the model can say what that means,
+        // and guessing would be worse than refusing.
+        let signals = slots.iter().filter(|s| **s == Slot::Signal).count();
+        if signals == slots.len() {
+            return Ok(slots);
+        }
+        if signals > 0 {
+            return Err(TemplateError::MixedChannels);
+        }
         if !slots.contains(&Slot::Vowel) {
             return Err(TemplateError::NoNucleus);
         }
@@ -126,6 +147,11 @@ impl WeightedTemplate {
                     best = best.max(run);
                 }
                 Slot::Vowel => run = 0,
+                // A cluster is a run of consonants BETWEEN NUCLEI, and a channel with
+                // no nuclei has no clusters — counting a pulse train as one long
+                // cluster would report every signal language as phonotactically
+                // extreme, which is a fact about the measure rather than the language.
+                Slot::Signal => run = 0,
             }
         }
         best
@@ -146,11 +172,16 @@ pub enum TemplateError {
     },
     /// No `V` slot — that is not a syllable.
     NoNucleus,
+    /// `C`/`V` slots mixed with `S` slots in one template (M24).
+    MixedChannels,
 }
 
 impl std::fmt::Display for TemplateError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            Self::MixedChannels => f.write_str(
+                "this template mixes syllable slots (`C`, `V`) with channel-signal slots                  (`S`); a unit is on one channel or the other, and nothing in the model                  can say what a syllable made partly of light would be",
+            ),
             Self::Empty => f.write_str("the template is empty"),
             // Parentheses are the mistake an author is most likely to make, since
             // the design doc itself writes `(C)V(C)`. Point at the fix.

@@ -423,7 +423,7 @@ the data model currently assumes a vocal tract throughout._
   and the engine reports which existing machinery does *not* apply to it rather
   than silently producing vowels.
 
-- [ ] **M24 — Non-vocal signal systems.** Generalise "phoneme" to a **channel
+- [x] **M24 — Non-vocal signal systems.** Generalise "phoneme" to a **channel
   signal**: a pulse, a scent, a gesture, a field modulation. Sound change becomes
   *signal* change over the channel's own contrastive dimensions. This is the
   milestone that would rename `stem_phonology`'s central abstraction, so it needs
@@ -432,6 +432,74 @@ the data model currently assumes a vocal tract throughout._
   **Test:** a bioluminescent pulse language undergoes an ordered signal change and
   traces it, through the same engine; every existing vocal fixture produces
   byte-identical output afterwards.
+
+---
+
+## Beyond
+
+Every milestone above is built. What follows is **not a plan** — nothing here is
+scheduled, sized, or promised — it is the standing list of things Stemma deliberately
+does not do, each with the reason it was left out.
+
+The list is maintained rather than aspirational: every entry was written by the
+milestone that decided *not* to build it, and each says what would have to be true
+first. `docs/GUIDE.md`'s "What Stemma does not do yet" table is the user-facing view of
+the same material.
+
+**Because a category does not exist in the model yet**
+
+- **Grammaticalization beyond case** (M19). A topic marker cannot become an article and
+  a serial verb cannot become an auxiliary, because none of those categories exists. A
+  `Consequence` that changed nothing observable would be scaffolding.
+- **Topic and focus** (M17). No agreed closed typology; shipping an enum would be
+  inventing one.
+- **Simultaneous grammar** (M23, M24). A channel that carries four parameters at once
+  still gets a sequential root, because a `Root` *is* a sequence. The simultaneity is
+  declared and its consequences reported; faking parallel tracks would be claiming a
+  capability.
+- **Rhythm on a non-vocal channel** (M24). Prosody is reported as not applying to a
+  signal language, and stays that way until somebody says what stress generalises to.
+- **Morphographic writing** (M20). A sign for a morpheme needs shared morpheme
+  components to point at; this project's morphemes are language-scoped citation forms.
+
+**Because it is a claim the tool cannot support**
+
+- **Borrowed-looking vocabulary** (M15). A loanword is a contact fact, and faking one
+  without a donor language in the file is the unsupported claim M15 exists to remove.
+- **Cross-script ancestry** (M21). Latin `A` from Phoenician *aleph* is a contact fact
+  between two writing systems, and needs a donor script named in the file.
+- **Minting a channel signal** (M24). A minted phoneme comes from a compiled-in table of
+  *reviewed* IPA rows. There is no attested inventory of bioluminescent signals to
+  review, and writing one would be fabricating a canon for a channel nobody has studied.
+- **An ecology→vocabulary inference table** (M15). Compiling "desert ⇒ no word for sea"
+  into Stemma would be the tool asserting claims about human cultures it cannot support.
+  A `CultureTrait` carries its own declared consequences instead.
+- **A logogram whose meaning the language lost** (M21). A real kind of fossil, but it
+  arrives through semantic drift rather than the sound change `script_drift` measures.
+
+**Because building it would break a constraint**
+
+- **A model inside Stemma** (M22). No HTTP client, no API key, no `--model` flag. The
+  out-of-process boundary *is* how §3.2 is enforced, and an in-process client would make
+  the test suite network-dependent and non-deterministic.
+- **Free translation** (§6.5's last bullet, M22). `stemma say` puts a proposition through
+  the formal grammar; a model translating free text would invent surface forms the engine
+  never made.
+- **A `proposed_by` field on the genome** (M22). An accepted rule set is the same
+  artefact whichever hand wrote it. Recording otherwise gives the engine a distinction
+  §3.2 forbids it to make.
+- **Inferring grammar from a body** (M23). §18.3's consequences are reported, never
+  sought. A species is allowed to be strange in ways its channel does not predict.
+
+**Left because nothing needs it yet**
+
+- **`WordEntry.ancestor`** (M4). A daughter word's ancestor is the same-id parent entry —
+  a tautology until something writes a non-identity value.
+- **§8.5's `HistoricalEvent`** (M4). A union with one inhabited variant is scaffolding;
+  §10.4's timeline is a derived merge of two ordered logs.
+- **The other eight channels of §7.7** (M24). `ChannelKind` names scent, gesture, field
+  pulse and the rest; only the luminous one has contrastive dimensions. Each would want
+  its own appended dimension set, by the process M24 established.
 
 ---
 

@@ -391,6 +391,10 @@ pub struct RootGenerator<'a> {
     consonants: Option<Candidates>,
     /// The vowel candidates, or `None` when no template has a `V` slot.
     vowels: Option<Candidates>,
+    /// The channel-signal candidates, or `None` when no template has an `S` slot
+    /// (M24). A third table rather than a map keyed on `Slot`: authored order is part
+    /// of the determinism contract, and a map on this path is forbidden (§9.4).
+    signals: Option<Candidates>,
 }
 
 /// The draw table for one slot class: ids in **authored inventory order** and the
@@ -515,6 +519,7 @@ impl<'a> RootGenerator<'a> {
             )?,
             consonants: candidates(Slot::Consonant, "consonant weights")?,
             vowels: candidates(Slot::Vowel, "vowel weights")?,
+            signals: candidates(Slot::Signal, "signal weights")?,
             templates,
         })
     }
@@ -524,6 +529,7 @@ impl<'a> RootGenerator<'a> {
         let table = match slot {
             Slot::Consonant => self.consonants.as_ref(),
             Slot::Vowel => self.vowels.as_ref(),
+            Slot::Signal => self.signals.as_ref(),
         };
         table.expect(
             "unreachable: `new` prepares a slot class iff some template uses it, and \

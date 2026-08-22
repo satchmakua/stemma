@@ -6,23 +6,33 @@
 //   stemma validate fixtures/luminous_kethi.ron     # valid, and says what it set aside
 //   stemma embodiment fixtures/luminous_kethi.ron   # the body, and what applies to it
 //
-// THIS LANGUAGE HAS NO PHONEMES, AND THAT IS THE POINT.
+// THIS LANGUAGE HAS NO CONSONANTS AND NO VOWELS. It has SIGNALS.
 //
-// A creature with no vocal tract has no consonants and no vowels, and the honest thing
-// for `phonemes:` to hold is nothing at all. Filling it with fifteen sounds so that
-// `new-lexicon` would run is exactly the failure the acceptance is written against —
-// the tool handing a species that communicates in light a five-vowel system because
-// its machinery had nowhere else to go.
+// At M23 this file had `phonemes: []` — a creature with no vocal tract has no sounds,
+// and filling the inventory with fifteen of them so `new-lexicon` would run was exactly
+// the failure that acceptance was written against.
 //
-// So there is nothing here to say words with, and `stemma embodiment` explains that in
-// eight lines rather than leaving it to be discovered. §18.1 IS THE MILESTONE; giving
-// the Kethi a signal system is M24, which generalises a phoneme to a channel signal.
+// M24 gave it something to say instead. The six units below are pulses of light, and
+// they go through the SAME struct, the same inventory, the same generator and the same
+// sound-change engine that /p/ does — because not one of those was ever about a mouth.
+// The vocal tract lives entirely in *which contrastive dimensions a unit values*, and
+// these value `[+luminous]` and the five dimensions that depend on it.
+//
+// `stemma apply-rules` runs a signal change over them and traces it. NOTHING IN THE
+// ENGINE WAS CHANGED to allow that.
 //
 // WHAT M0 ALREADY KNEW. `PhonemeInventory::validate` errors with `no_nucleus` on an
 // inventory with no vowels, and that error's message has ended with
 // "(a non-vocal language will need the alien modality model of §7.6)" since the first
 // commit. M23 is where that parenthesis comes due: the genome sets `no_nucleus` aside
 // for a speaker with no mouth, names it as set aside, and says why.
+//
+// THE SIGNAL STRING IS SEQUENTIAL, AND THE BANDS ARE NOT. The mantle carries four
+// bands at once, which is why `simultaneity: simultaneous` below earns §18.3's note
+// about simultaneous morphology. But a lexical root is a PULSE TRAIN — one flash after
+// another — and that is what `Root` models. Grammatical parameters ride the parallel
+// bands; the word rides the sequence. Pretending `Root` could hold four parallel tracks
+// would be faking a capability, so it does not.
 //
 // EVERY CONSEQUENCE BELOW IS REPORTED, NEVER ENFORCED. §18.3 says a simultaneous
 // channel encourages simultaneous morphology; Stemma prints that as a Note and does
@@ -34,8 +44,40 @@
     name: "Kethi",
     seed: 108,
 
-    // Nothing. Not an oversight — see the header.
-    phonemes: [],
+    // SIX SIGNALS. `kind: signal` — not consonant, not vowel: the onset/nucleus split
+    // is a fact about syllables, and syllables are a fact about lungs.
+    //
+    // Every one values `[+luminous]` and nothing above it in the feature list. A vocal
+    // phoneme is the mirror image: it values the articulatory features and leaves every
+    // dimension here ABSENT. Neither is `-` on the other's dimensions, because the
+    // question does not arise (ADR-0004).
+    //
+    // `rapid` is declared only on `[+pulsed]` signals — a steady glow has no pulse rate
+    // — exactly as `round` is declared only on labials.
+    phonemes: [
+        // --- Steady glows. No pulse, so no rate. ---
+        (id: "sg_deep", ipa: "\u{25cf}", romanization: "D", kind: signal, frequency_weight: 40,
+         features: ["+luminous", "+bright", "+long_wave", "+saturated", "-pulsed"]),
+        (id: "sg_pale", ipa: "\u{25cb}", romanization: "P", kind: signal, frequency_weight: 35,
+         features: ["+luminous", "-bright", "+long_wave", "-saturated", "-pulsed"]),
+        (id: "sg_cold", ipa: "\u{25c6}", romanization: "C", kind: signal, frequency_weight: 30,
+         features: ["+luminous", "+bright", "-long_wave", "+saturated", "-pulsed"]),
+
+        // --- Flickers. Pulsed, so the rate is contrastive. ---
+        (id: "sg_quick", ipa: "\u{2736}", romanization: "Q", kind: signal, frequency_weight: 25,
+         features: ["+luminous", "+bright", "+long_wave", "+saturated", "+pulsed", "+rapid"]),
+        (id: "sg_slow", ipa: "\u{2735}", romanization: "S", kind: signal, frequency_weight: 20,
+         features: ["+luminous", "+bright", "+long_wave", "+saturated", "+pulsed", "-rapid"]),
+        (id: "sg_dim", ipa: "\u{2734}", romanization: "M", kind: signal, frequency_weight: 15,
+         features: ["+luminous", "-bright", "-long_wave", "+saturated", "+pulsed", "+rapid"]),
+    ],
+
+    // A word is two to four pulses. `S` is the general slot — one class, because a
+    // pulse train has no nucleus to organise itself around.
+    phonotactics: (
+        templates: [(pattern: "SS", weight: 40), (pattern: "SSS", weight: 35), (pattern: "SSSS", weight: 25)],
+        syllables_per_root: [(count: 1, weight: 100)],
+    ),
 
     embodiment: (
         note: "A colonial cephalopod of the lightless shelf. It has no lungs, no larynx and no mouth it can shape; it speaks by lighting up.",
